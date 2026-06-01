@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Build
+dist/
+build/
+.next/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python (for fine-tuning scripts)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Models (large files)
+models/
+*.bin
+*.gguf
+
+# Ollama
+ollama_data/
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+logs/
+*.log
+
+# Vector store local data
+chroma_data/
