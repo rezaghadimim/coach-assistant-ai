@@ -1,5 +1,7 @@
 """Chat endpoint — POST /chat."""
 
+import json
+
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
@@ -17,11 +19,12 @@ _sessions: dict[str, list[dict[str, str]]] = {}
 store = MemoryStore(settings.memory_db_path)
 session_manager = SessionManager(store)
 
+
 def reset_runtime_state() -> None:
     """Reset in-memory and persisted runtime state (for tests)."""
     _sessions.clear()
     session_manager.reset()
-    store.clear_all()
+    store.clear_all_data()
 
 
 def _build_system_prompt(user_id: str, message: str) -> str:
@@ -39,7 +42,10 @@ def _build_system_prompt(user_id: str, message: str) -> str:
 
     user = store.get_user(user_id)
     if user:
-        sections.append(f"## Client Profile\n{user['profile']}")
+        sections.append(
+            "## Client Profile\n"
+            + json.dumps(user["profile"], ensure_ascii=False, indent=2)
+        )
 
     last_summary = store.get_last_closed_summary(user_id)
     if last_summary:

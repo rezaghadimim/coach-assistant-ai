@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.api.chat import reset_runtime_state
+from app.core.config import settings
 from app.rag.retriever import clear_index, ingest_and_index_directory, retrieve
 from main import app
 
@@ -48,10 +49,15 @@ class Phase2RagIntegrationTests(unittest.TestCase):
             root = Path(temp_dir)
             (root / "method.md").write_text("Values and accountability coaching", encoding="utf-8")
 
-            response = self.client.post(
-                "/api/ingest",
-                json={"docs_dir": temp_dir, "chunk_size": 20, "chunk_overlap": 2},
-            )
+            original_docs_dir = settings.rag_docs_dir
+            settings.rag_docs_dir = temp_dir
+            try:
+                response = self.client.post(
+                    "/api/ingest",
+                    json={"chunk_size": 20, "chunk_overlap": 2},
+                )
+            finally:
+                settings.rag_docs_dir = original_docs_dir
 
         self.assertEqual(response.status_code, 200)
         body = response.json()

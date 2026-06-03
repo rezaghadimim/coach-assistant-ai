@@ -2,7 +2,7 @@
 
 
 def summarize_session(messages: list[dict[str, str]]) -> str:
-    """Generate a lightweight summary of a coaching session."""
+    """Generate a deterministic summary with up to the first 3 user messages and latest assistant guidance."""
     user_messages = [m["content"].strip() for m in messages if m["role"] == "user" and m["content"].strip()]
     assistant_messages = [
         m["content"].strip() for m in messages if m["role"] == "assistant" and m["content"].strip()

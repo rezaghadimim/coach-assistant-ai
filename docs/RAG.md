@@ -18,7 +18,7 @@ Or via API:
 ```bash
 curl -X POST http://localhost:8000/api/ingest \
   -H "Content-Type: application/json" \
-  -d '{"docs_dir":"docs/knowledge","chunk_size":512,"chunk_overlap":50}'
+  -d '{"chunk_size":512,"chunk_overlap":50}'
 ```
 
 ## Retrieval

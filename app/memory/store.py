@@ -20,6 +20,7 @@ class MemoryStore:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def _init_schema(self) -> None:
@@ -171,18 +172,20 @@ class MemoryStore:
 
     def end_session(self, session_id: str, summary: str | None = None) -> None:
         with self._connect() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE sessions
                 SET ended_at = CURRENT_TIMESTAMP,
                     summary = COALESCE(?, summary)
-                WHERE session_id = ?
+                WHERE session_id = ? AND ended_at IS NULL
                 """,
                 (summary, session_id),
             )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Session does not exist or is already ended: {session_id}")
 
 
-    def clear_all(self) -> None:
+    def clear_all_data(self) -> None:
         """Delete all persisted users, sessions, and messages."""
         with self._connect() as conn:
             conn.execute("DELETE FROM messages")

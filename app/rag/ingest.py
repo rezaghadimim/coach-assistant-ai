@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+import tempfile
 from typing import List
 
 DEFAULT_CHUNK_SIZE = 512
@@ -23,6 +24,14 @@ class DocumentChunk:
 def discover_documents(docs_dir: str) -> List[Path]:
     """Return all supported document files under a directory (recursive)."""
     root = Path(docs_dir).expanduser().resolve()
+    workspace_root = Path.cwd().resolve()
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    allowed_roots = (workspace_root, temp_root)
+    if not any(root.is_relative_to(allowed_root) for allowed_root in allowed_roots):
+        allowed_display = ", ".join(str(path) for path in allowed_roots)
+        raise PermissionError(
+            f"Documents directory must be inside allowed roots: {allowed_display}"
+        )
     if not root.exists():
         raise FileNotFoundError(f"Documents directory does not exist: {root}")
     if not root.is_dir():

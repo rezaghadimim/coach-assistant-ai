@@ -21,9 +21,8 @@ class ChatResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    """Request payload for ingesting local documents."""
+    """Request payload for ingesting from configured document directory."""
 
-    docs_dir: str | None = None
     chunk_size: int | None = Field(default=None, gt=0)
     chunk_overlap: int | None = Field(default=None, ge=0)
 

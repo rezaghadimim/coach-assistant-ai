@@ -10,7 +10,7 @@ from typing import Iterable
 
 from app.rag.ingest import DocumentChunk, ingest_documents_from_dir
 
-_TOKEN_RE = re.compile(r"[a-zA-Z0-9']+")
+_TOKEN_RE = re.compile(r"[\w’']+", re.UNICODE)
 
 
 @dataclass(frozen=True)
