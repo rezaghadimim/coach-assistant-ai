@@ -48,6 +48,13 @@ python main.py
 - [Memory System](./docs/MEMORY.md) — Long-term user memory design
 - [Fine-tuning Guide](./docs/FINETUNE.md) — Future model customization
 
+## Testing
+
+```bash
+# Testing is required for every implementation step/phase
+python3 -m unittest discover -s tests -p "test_*.py"
+```
+
 ## Project Structure
 
 See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for full details.

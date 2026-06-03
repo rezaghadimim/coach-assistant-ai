@@ -1,6 +1,8 @@
 # Implementation Plan
 
 > Step-by-step guide to building the Life Coach AI. Each phase is independent and testable.
+>
+> **Testing policy:** Testing is required for every phase. Each phase must include automated tests plus relevant manual smoke checks before it is considered complete.
 
 ## Phase 1: Core Chat (Week 1)
 
@@ -11,12 +13,19 @@
 2. Create `app/core/config.py` with settings
 3. Create `app/core/llm.py` — Ollama client wrapper
 4. Create `app/core/prompts.py` — Life coaching system prompt
-5. Create `app/api/chat.py` — POST /chat endpoint
+5. Create `app/api/chat.py` — POST /api/chat endpoint
 6. Create `main.py` — FastAPI app entry point
-7. Test: Send message → get coaching response
+7. Create `app/models/schemas.py` — Chat request/response models
+8. Implement `tests/test_phase1_core_chat.py` automated tests:
+   - `GET /health` responds with app health + model
+   - `POST /api/chat` returns coaching response payload
+   - Per-user in-memory session history is preserved across turns
+   - LLM failures are surfaced as `502`
+9. Manual smoke test: Send message → get coaching response
 
 **Success Criteria:**
-- `curl POST /chat` returns a coaching-style response
+- `python3 -m unittest discover -s tests -p "test_*.py"` passes
+- `curl POST /api/chat` returns a coaching-style response
 - Response uses GROW model or other coaching frameworks
 
 ---
@@ -30,10 +39,12 @@
 2. Create `app/rag/ingest.py` — Core chunking logic
 3. Create `app/rag/retriever.py` — Query ChromaDB
 4. Integrate RAG context into chat endpoint
-5. Add `POST /ingest` endpoint for uploading new docs
-6. Test: Ask question → response references coach's material
+5. Add `POST /api/ingest` endpoint for uploading new docs
+6. Implement automated tests for ingestion and retrieval behavior
+7. Manual smoke test: Ask question → response references coach's material
 
 **Success Criteria:**
+- Automated RAG tests pass
 - Ingesting a PDF/text file works
 - Chat responses include information from ingested docs
 
@@ -50,9 +61,11 @@
 4. Create `app/memory/summarizer.py` — Auto-summarize
 5. Create `app/api/users.py` — User management endpoints
 6. Integrate memory into chat flow
-7. Test: Multi-turn conversation remembers context
+7. Implement automated tests for memory CRUD and session context restoration
+8. Manual smoke test: Multi-turn conversation remembers context
 
 **Success Criteria:**
+- Automated memory tests pass
 - New session can reference previous session summary
 - Client profile (goals, challenges) persists
 
@@ -68,9 +81,11 @@
 3. Add client selector (dropdown of registered clients)
 4. Add session history view
 5. Style it professionally
-6. Test: Full coaching session through browser
+6. Implement UI tests for core chat flow and client/session navigation
+7. Manual smoke test: Full coaching session through browser
 
 **Success Criteria:**
+- Automated UI tests pass
 - Coach can select client, chat, and see history
 - Looks professional enough for client-facing use
 
@@ -86,8 +101,13 @@
 1. Export conversation data in training format
 2. Rent GPU (RunPod/Lambda, ~$10)
 3. Fine-tune with LoRA (see docs/FINETUNE.md)
-4. Test fine-tuned model vs base model
-5. Deploy fine-tuned model to Ollama
+4. Implement evaluation tests comparing fine-tuned model vs base model
+5. Manual smoke test: Run prompt set and review quality/safety outputs
+6. Deploy fine-tuned model to Ollama
+
+**Success Criteria:**
+- Evaluation tests show fine-tuned model quality improvement on target prompts
+- Safety behavior remains acceptable on sensitive prompts
 
 ---
 

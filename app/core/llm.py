@@ -1,7 +1,7 @@
 """Ollama LLM client wrapper."""
 
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Union
 
 import httpx
 
@@ -13,7 +13,7 @@ async def generate_response(
     messages: list[dict[str, str]],
     system_prompt: str = LIFE_COACH_SYSTEM_PROMPT,
     stream: bool = False,
-) -> str | AsyncGenerator[str, None]:
+) -> Union[str, AsyncGenerator[str, None]]:
     """Send messages to Ollama and return the assistant response.
 
     Args:

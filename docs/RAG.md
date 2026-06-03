@@ -100,6 +100,12 @@ docs/knowledge/
 
 ## Usage
 
+Testing is required for this phase as well; run the project tests:
+
+```bash
+python3 -m unittest discover -s tests -p "test_*.py"
+```
+
 ```bash
 # Ingest all documents
 python scripts/ingest.py --docs-dir ./docs/knowledge/
