@@ -3,10 +3,10 @@
 ## Overview
 
 ```text
-Web/API Client -> FastAPI -> Ollama
-                     | \
-                     |  -> Local RAG Index (in-memory)
-                     -> SQLite Memory Store
+Open WebUI (browser) → FastAPI → Ollama
+                           | \
+                           |  → Local RAG Index (in-memory)
+                           → SQLite Memory Store
 ```
 
 ## Implemented Components
@@ -28,6 +28,12 @@ Web/API Client -> FastAPI -> Ollama
 - `summarizer.py`: deterministic session summary generation
 - `app/api/users.py`: user/session endpoints
 
+### 4) Open WebUI Integration (`app/api/openai_compat.py`)
+- `GET /v1/models`: list available coaching models
+- `POST /v1/chat/completions`: OpenAI-compatible chat completion with streaming
+- User identification via `user` field or `X-User-Id` header
+- `Dockerfile` + `docker-compose.yml` for full-stack deployment
+
 ## Data Flow
 
 1. Client sends `POST /api/chat {user_id, message}`
@@ -47,6 +53,7 @@ app/
 ├── api/
 │   ├── chat.py
 │   ├── ingest.py
+│   ├── openai_compat.py
 │   └── users.py
 ├── core/
 │   ├── config.py

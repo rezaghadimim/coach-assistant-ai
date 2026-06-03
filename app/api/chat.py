@@ -27,7 +27,7 @@ def reset_runtime_state() -> None:
     store.clear_all_data()
 
 
-def _build_system_prompt(user_id: str, message: str) -> str:
+def build_system_prompt(user_id: str, message: str) -> str:
     sections = [LIFE_COACH_SYSTEM_PROMPT]
 
     if settings.rag_enabled:
@@ -65,7 +65,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         reply = await generate_response(
             messages=history,
-            system_prompt=_build_system_prompt(request.user_id, request.message),
+            system_prompt=build_system_prompt(request.user_id, request.message),
         )
         store.add_message(session_id, "assistant", reply)
 
