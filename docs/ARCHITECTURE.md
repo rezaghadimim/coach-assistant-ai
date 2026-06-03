@@ -32,10 +32,10 @@
 ### 2. FastAPI Backend (`app/`)
 - **Role:** Orchestrates RAG, memory, and LLM calls
 - **Endpoints:**
-  - `POST /chat` — Main conversation endpoint
-  - `POST /ingest` — Upload new coaching documents
-  - `GET /sessions/{user_id}` — Retrieve past sessions
-  - `POST /users` — Create new client profile
+  - `POST /api/chat` — Main conversation endpoint
+  - `POST /api/ingest` — Upload new coaching documents
+  - `GET /api/sessions/{user_id}` — Retrieve past sessions
+  - `POST /api/users` — Create new client profile
 
 ### 3. RAG Pipeline (`app/rag/`)
 - **Role:** Retrieve relevant coaching knowledge before generating response
@@ -59,7 +59,7 @@
 
 ```
 1. Coach types message in Web UI
-2. Frontend sends POST /chat {user_id, message}
+2. Frontend sends POST /api/chat {user_id, message}
 3. Backend retrieves:
    a. Relevant docs from ChromaDB (RAG)
    b. Client profile + last session summary from SQLite
@@ -90,8 +90,8 @@
 app/
 ├── api/
 │   ├── __init__.py
-│   ├── chat.py          # POST /chat endpoint
-│   ├── ingest.py        # POST /ingest endpoint
+│   ├── chat.py          # POST /api/chat endpoint
+│   ├── ingest.py        # POST /api/ingest endpoint
 │   └── users.py         # User/session management
 ├── core/
 │   ├── __init__.py
