@@ -1,113 +1,64 @@
 # Architecture
 
-> This document describes the system architecture. It is written for humans, GitHub Copilot, and Cursor AI to understand how components connect.
-
 ## Overview
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Coach's Machine                     │
-│                                                       │
-│  ┌──────────┐    ┌──────────┐    ┌───────────────┐  │
-│  │  Web UI  │───▶│ FastAPI  │───▶│  Ollama       │  │
-│  │ (browser)│◀───│ Backend  │◀───│  (Llama 3.1)  │  │
-│  └──────────┘    └────┬─────┘    └─────���─────────┘  │
-│                       │                               │
-│              ┌────────┼────────┐                      │
-│              ▼        ▼        ▼                      │
-│       ┌──────────┐ ┌──────┐ ┌──────────┐            │
-│       │ ChromaDB │ │SQLite│ │ Prompts  │            │
-│       │ (vectors)│ │(memory)│ │ (config) │            │
-│       └──────────┘ └──────┘ └──────────┘            │
-└─────────────────────────────────────────────────────┘
+```text
+Web/API Client -> FastAPI -> Ollama
+                     | \
+                     |  -> Local RAG Index (in-memory)
+                     -> SQLite Memory Store
 ```
 
-## Components
+## Implemented Components
 
-### 1. Ollama + Llama 3.1 8B
-- **Role:** Generate coaching responses
-- **Why local:** Zero cost, full privacy, no internet needed
-- **Config:** Quantized 4-bit (Q4_K_M) for speed on consumer GPUs
+### 1) Chat API (`app/api/chat.py`)
+- Main endpoint: `POST /api/chat`
+- Loads active session history from SQLite
+- Injects optional RAG context and client profile into system prompt
+- Persists user/assistant messages
 
-### 2. FastAPI Backend (`app/`)
-- **Role:** Orchestrates RAG, memory, and LLM calls
-- **Endpoints:**
-  - `POST /api/chat` — Main conversation endpoint
-  - `POST /api/ingest` — Upload new coaching documents
-  - `GET /api/sessions/{user_id}` — Retrieve past sessions
-  - `POST /api/users` — Create new client profile
+### 2) RAG Ingestion + Retrieval (`app/rag/`)
+- `ingest.py`: document discovery + chunking (`.txt`, `.md`, `.pdf`)
+- `retriever.py`: token-based similarity index/query
+- `POST /api/ingest`: reindex local document directory
 
-### 3. RAG Pipeline (`app/rag/`)
-- **Role:** Retrieve relevant coaching knowledge before generating response
-- **Vector Store:** ChromaDB (local, file-based, no server needed)
-- **Embedding Model:** `nomic-embed-text` via Ollama (local, free)
-- **Chunk Strategy:** 512 tokens, 50 token overlap
+### 3) Memory System (`app/memory/`)
+- `store.py`: SQLite schema + CRUD for users/sessions/messages
+- `session.py`: active session lifecycle and rollover
+- `summarizer.py`: deterministic session summary generation
+- `app/api/users.py`: user/session endpoints
 
-### 4. Memory System (`app/memory/`)
-- **Role:** Remember client history across sessions
-- **Storage:** SQLite
-- **Two layers:**
-  - **Short-term:** Current session messages (in-memory list)
-  - **Long-term:** Session summaries + client profile (DB)
+## Data Flow
 
-### 5. Web UI
-- **Option A:** [Open WebUI](https://github.com/open-webui/open-webui) (pre-built, full-featured)
-- **Option B:** Custom minimal UI (Jinja2 templates or React)
-- **Served by:** FastAPI static files or separate process
+1. Client sends `POST /api/chat {user_id, message}`
+2. Backend gets/creates active session for `user_id`
+3. Backend retrieves top matching chunks from local RAG index
+4. Backend composes system prompt with:
+   - base coaching prompt
+   - RAG context (if available)
+   - user profile
+   - previous session summary
+5. Backend calls Ollama and stores reply in SQLite
 
-## Data Flow (Single Request)
+## Current File Map
 
-```
-1. Coach types message in Web UI
-2. Frontend sends POST /api/chat {user_id, message}
-3. Backend retrieves:
-   a. Relevant docs from ChromaDB (RAG)
-   b. Client profile + last session summary from SQLite
-   c. Current session messages from memory
-4. Backend builds prompt:
-   [system_prompt] + [rag_context] + [client_profile] + [history] + [user_message]
-5. Backend calls Ollama API (localhost:11434)
-6. Ollama returns generated response
-7. Backend saves message to session history
-8. Backend returns response to frontend
-9. If session > 20 messages: auto-summarize and store
-```
-
-## Tech Decisions
-
-| Decision | Choice | Reason |
-|----------|--------|--------|
-| Language | Python | Best ML/AI ecosystem |
-| Framework | FastAPI | Async, fast, easy |
-| LLM Runtime | Ollama | Simple, one command |
-| Vector DB | ChromaDB | No server, pip install |
-| Database | SQLite | Zero config, single user |
-| Embeddings | nomic-embed-text | Local, free, good quality |
-
-## File Map
-
-```
+```text
 app/
 ├── api/
-│   ├── __init__.py
-│   ├── chat.py          # POST /api/chat endpoint
-│   ├── ingest.py        # POST /api/ingest endpoint
-│   └── users.py         # User/session management
+│   ├── chat.py
+│   ├── ingest.py
+│   └── users.py
 ├── core/
-│   ├── __init__.py
-│   ├── config.py        # Settings (model name, chunk size, etc.)
-│   ├── llm.py           # Ollama client wrapper
-│   └── prompts.py       # System prompts for coaching
+│   ├── config.py
+│   ├── llm.py
+│   └── prompts.py
 ├── rag/
-│   ├── __init__.py
-│   ├── ingest.py        # Document chunking & embedding
-│   └── retriever.py     # Query ChromaDB for relevant chunks
+│   ├── ingest.py
+│   └── retriever.py
 ├── memory/
-│   ├── __init__.py
-│   ├── session.py       # Current session message buffer
-│   ├── store.py         # SQLite operations
-│   └── summarizer.py    # Auto-summarize long sessions
+│   ├── session.py
+│   ├── store.py
+│   └── summarizer.py
 └── models/
-    ├── __init__.py
-    └── schemas.py       # Pydantic models (User, Message, Session)
+    └── schemas.py
 ```

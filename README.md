@@ -1,83 +1,53 @@
 # Life Coach AI
 
-An AI-powered life coaching assistant that runs locally using open-source LLMs. Designed for a single coach to use with their clients (10-20/day).
+An AI-powered life coaching assistant that runs locally using open-source LLMs.
 
 ## Quick Summary
 
 | Item | Detail |
 |------|--------|
 | LLM | Llama 3.1 8B (via Ollama) |
-| RAG | ChromaDB (local vector store) |
+| RAG | Local chunk index + similarity retrieval |
 | Backend | FastAPI (Python) |
-| Frontend | Open WebUI or custom web UI |
-| Database | SQLite (user memory) |
-| Hosting | Local machine (coach's PC/laptop) |
-| Cost | $0/month after setup |
+| Database | SQLite (user memory + sessions) |
+| Hosting | Local machine |
 
 ## Prerequisites
 
-- PC/Laptop with **NVIDIA GPU (8GB+ VRAM)** or Apple Silicon Mac (M1+)
 - Python 3.11+
 - [Ollama](https://ollama.com) installed
+- `ollama pull llama3.1:8b`
 
 ## Getting Started
 
 ```bash
-# 1. Clone
-git clone https://github.com/rezaghadimim/life-coach-ai.git
-cd life-coach-ai
-
-# 2. Install Ollama & pull model
-ollama pull llama3.1:8b
-
-# 3. Install dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# 4. Ingest coach's documents
+# 2. Ingest coaching documents
 python scripts/ingest.py --docs-dir ./docs/knowledge/
 
-# 5. Run
+# 3. Run API
 python main.py
-```
 
-## Documentation
-
-- [Architecture](./docs/ARCHITECTURE.md) — System design and component overview
-- [Implementation Plan](./docs/IMPLEMENTATION.md) — Step-by-step build plan
-- [RAG Pipeline](./docs/RAG.md) — How knowledge retrieval works
-- [Memory System](./docs/MEMORY.md) — Long-term user memory design
-- [Fine-tuning Guide](./docs/FINETUNE.md) — Future model customization
-
-## Testing
-
-```bash
-# Testing is required for every implementation step/phase
+# 4. Run tests
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-## Project Structure
+## API Endpoints
 
-See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for full details.
+- `GET /health`
+- `POST /api/chat`
+- `POST /api/ingest`
+- `POST /api/users`
+- `GET /api/users/{user_id}`
+- `GET /api/sessions/{user_id}`
+- `POST /api/sessions/{user_id}/new`
 
-```
-life-coach-ai/
-├── main.py                 # App entrypoint
-├── app/
-│   ├── api/               # FastAPI routes
-│   ├── core/              # Config, prompts, LLM client
-│   ├── rag/               # Document ingestion & retrieval
-│   ├── memory/            # User session & long-term memory
-│   └── models/            # Pydantic schemas
-├── docs/
-│   ├── knowledge/         # Coach's materials (PDFs, text)
-│   ├── ARCHITECTURE.md
-│   ├── IMPLEMENTATION.md
-│   ├── RAG.md
-│   ├── MEMORY.md
-│   └── FINETUNE.md
-├── scripts/
-│   ├── ingest.py          # Ingest docs into vector store
-│   └── finetune.py        # Fine-tune script (future)
-├── tests/
-└── requirements.txt
-```
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Implementation Plan](./docs/IMPLEMENTATION.md)
+- [RAG Pipeline](./docs/RAG.md)
+- [Memory System](./docs/MEMORY.md)
+- [Fine-tuning Guide](./docs/FINETUNE.md)

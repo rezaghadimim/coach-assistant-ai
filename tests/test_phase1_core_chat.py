@@ -5,12 +5,15 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.api.chat import _sessions
+from app.api.chat import _sessions, reset_runtime_state
+from app.rag.retriever import clear_index
 from main import app
 
 
 class Phase1CoreChatTests(unittest.TestCase):
     def setUp(self) -> None:
+        reset_runtime_state()
+        clear_index()
         _sessions.clear()
         self.client = TestClient(app)
 
@@ -51,7 +54,7 @@ class Phase1CoreChatTests(unittest.TestCase):
     def test_chat_preserves_per_user_history(self) -> None:
         captured_messages = []
 
-        async def _fake_generate(messages):
+        async def _fake_generate(messages, **_kwargs):
             captured_messages.append([message.copy() for message in messages])
             return (
                 "First coach reply."

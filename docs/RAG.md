@@ -1,118 +1,34 @@
 # RAG Pipeline
 
-> Retrieval-Augmented Generation: How we ground the AI's responses in the coach's actual methodology.
+## What is implemented
 
-## Why RAG?
+- Local ingestion of `.txt`, `.md`, and `.pdf` documents (`app/rag/ingest.py`)
+- In-memory token-similarity retrieval index (`app/rag/retriever.py`)
+- API endpoint to reindex documents (`POST /api/ingest`)
+- Chat integration that injects retrieved chunks into system prompt
 
-Without RAG, the model gives generic coaching advice. With RAG, it references the coach's specific frameworks, exercises, and terminology.
+## Ingestion
 
-## How It Works
-
-```
-┌─────────────────────────────────────────┐
-│             INGESTION (once)             │
-│                                          │
-│  PDF/TXT ──▶ Chunk ──▶ Embed ──▶ Store  │
-│                                ChromaDB  │
-└─────────────────────────────────────────┘
-
-┌─────────────────────────────────────────┐
-│           RETRIEVAL (per query)          │
-│                                          │
-│  User Msg ──▶ Embed ──▶ Search ──▶ Top K │
-│                          ChromaDB        │
-└─────────────────────────────────────────┘
+```bash
+python scripts/ingest.py --docs-dir ./docs/knowledge/
 ```
 
-## Ingestion Details
+Or via API:
 
-### Supported Formats
-- `.txt` — Plain text files
-- `.md` — Markdown files
-- `.pdf` — PDF documents (via pypdf)
-
-### Chunking Strategy
-
-```python
-CHUNK_SIZE = 512       # tokens per chunk
-CHUNK_OVERLAP = 50     # overlap between chunks
-SEPARATORS = ["\n\n", "\n", ". ", " "]  # split priority
+```bash
+curl -X POST http://localhost:8000/api/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"chunk_size":512,"chunk_overlap":50}'
 ```
 
-**Why 512 tokens?**
-- Small enough to be specific/relevant
-- Large enough to contain a complete thought
-- Fits well in context window alongside other components
+## Retrieval
 
-### Embedding Model
+- Query is tokenized and matched against indexed chunks
+- Scores are cosine similarity over token frequency vectors
+- Top-k chunks are added to the coaching system prompt
 
-```
-Model: nomic-embed-text (via Ollama)
-Dimensions: 768
-Speed: ~100 chunks/second on CPU
-Quality: Competitive with OpenAI ada-002
-```
-
-## Retrieval Details
-
-### Query Flow
-1. User message is embedded using same model
-2. ChromaDB finds top-K most similar chunks
-3. Chunks are formatted and injected into prompt
-
-### Parameters
-
-```python
-TOP_K = 3              # number of chunks to retrieve
-MIN_SIMILARITY = 0.7   # ignore chunks below this score
-```
-
-### Prompt Integration
-
-```
-## Relevant Coaching Knowledge:
-
-[Chunk 1: From "GROW Model Guide", page 3]
-The Reality phase involves asking the client to describe their current situation
-without judgment. Key questions: "What is happening now?" "What have you tried?"
-
-[Chunk 2: From "Powerful Questions", page 7]
-Avoid "why" questions as they trigger defensiveness. Use "what" and "how" instead.
-
-[Chunk 3: ...]
-```
-
-## What to Ingest
-
-Place coaching materials in `docs/knowledge/`:
-
-```
-docs/knowledge/
-├── grow-model.pdf
-├── powerful-questions.txt
-├── tony-robbins-notes.md
-├── motivational-interviewing.pdf
-├── client-exercises/
-│   ├── wheel-of-life.txt
-│   └── values-clarification.txt
-└── coach-methodology.md      # Coach's own approach
-```
-
-## Usage
-
-Testing is required for this phase as well; run the project tests:
+## Testing
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py"
-```
-
-```bash
-# Ingest all documents
-python scripts/ingest.py --docs-dir ./docs/knowledge/
-
-# Ingest a single file
-python scripts/ingest.py --file ./docs/knowledge/new-book.pdf
-
-# Check what's ingested
-python scripts/ingest.py --status
 ```
