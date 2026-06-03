@@ -2,6 +2,47 @@
 
 > How to customize the base model to match the coach's voice and methodology. This is Phase 5 — do this AFTER collecting real conversation data.
 
+---
+
+## RAG vs Fine-tuning (LoRA) — Decision Rule
+
+> **Ask yourself: "Am I teaching the model WHAT to know, or HOW to behave?"**
+>
+> - **WHAT to know → RAG**
+> - **HOW to behave → Fine-tuning (LoRA)**
+
+### Use RAG for Knowledge
+
+Store information in RAG when:
+- The content may change over time
+- The content is large (books, documents, articles, manuals)
+- The content must be retrieved accurately
+- The source of the answer should be traceable
+- New information should become available without retraining
+
+**Examples:** books, articles, company documentation, product manuals, policies and procedures, user-uploaded documents, knowledge bases
+
+### Use Fine-tuning (LoRA) for Behavior
+
+Use fine-tuning when the goal is to change **how the model responds**, not what it knows.
+
+**Examples:** coaching style, communication tone, questioning strategy, response structure, domain-specific reasoning patterns, output formatting, agent personality
+
+### Do NOT Fine-tune Large Knowledge Sources
+
+Avoid fine-tuning books, documentation, or knowledge repositories to inject information into the model weights.
+
+> **Knowledge belongs in RAG. Behavior belongs in Fine-tuning.**
+
+| Signal | Where it belongs |
+|--------|-----------------|
+| Content changes or grows | RAG |
+| Needs accurate retrieval with a traceable source | RAG |
+| Consistent response style, tone, or workflow | Fine-tuning |
+| Reasoning patterns and coaching frameworks | Fine-tuning |
+
+---
+
 ## When to Fine-tune
 
 **Do NOT fine-tune until you have:**

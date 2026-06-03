@@ -1,5 +1,16 @@
 # RAG Pipeline
 
+## Purpose
+
+RAG is the system's **knowledge layer** — it stores what the model knows, not how it behaves.
+
+Use RAG for any content that:
+- May change or grow over time
+- Is too large to fit in a prompt or model weights
+- Requires accurate, traceable retrieval (books, articles, documentation, manuals)
+
+For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](FINETUNE.md).
+
 ## What is implemented
 
 - Local ingestion of `.txt`, `.md`, and `.pdf` documents (`app/rag/ingest.py`)
