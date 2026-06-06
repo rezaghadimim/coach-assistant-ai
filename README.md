@@ -35,6 +35,9 @@ python main.py
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
+`docs/knowledge/` is a local-only ingest folder. Keep your real source documents there
+outside git; only a sample file is tracked in the repository.
+
 ## Docker / Open WebUI
 
 ```bash

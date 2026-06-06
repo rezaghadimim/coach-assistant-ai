@@ -24,6 +24,9 @@ For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](F
 python scripts/ingest.py --docs-dir ./docs/knowledge/
 ```
 
+`docs/knowledge/` is treated as a local-only ingest directory. Add your real source
+documents there on your machine or in a mounted volume; the repo only tracks a sample file.
+
 Or via API:
 
 ```bash

@@ -39,6 +39,9 @@ ollama pull llama3.1:8b
 # 2. (Optional) seed the knowledge base
 python scripts/ingest.py --docs-dir ./docs/knowledge/
 
+`docs/knowledge/` is intended for local-only source documents. Keep private knowledge
+outside git and use the tracked sample file as a template.
+
 # 3. Start the stack
 docker compose up --build
 
