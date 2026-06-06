@@ -24,11 +24,14 @@
 - `GET /api/sessions/{user_id}`, `POST /api/sessions/{user_id}/new`
 - Phase 3 tests
 
-## Remaining
+### Phase 4: Web UI — Open WebUI Integration
+- OpenAI-compatible API layer (`GET /v1/models`, `POST /v1/chat/completions`)
+- Streaming response support via SSE
+- Per-user session routing through `user` field or `X-User-Id` header
+- `Dockerfile` and `docker-compose.yml` for running the full stack
+- Phase 4 tests
 
-### Phase 4: Web UI
-- Build coach-facing UI (custom or Open WebUI integration)
-- Add UI tests for end-to-end chat workflow
+## Remaining
 
 ### Phase 5: Fine-tuning (LoRA) — Behavior Adaptation
 > Fine-tuning is for **how the model behaves**, not what it knows. Use this to teach the model the coach's tone, questioning style, and response patterns — not to inject knowledge that belongs in RAG.

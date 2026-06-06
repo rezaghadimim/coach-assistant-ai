@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  # ─────────────────────────────────────────────
+  # Life Coach AI — FastAPI backend
+  # ─────────────────────────────────────────────
+  life-coach-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Point at the host's Ollama instance (or change to a containerised one)
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:8b}"
+    volumes:
+      - coach_data:/app/data
+      - ./docs/knowledge:/app/docs/knowledge:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Open WebUI — browser-based chat front-end
+  # ─────────────────────────────────────────────
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "3000:8080"
+    environment:
+      # Disable the built-in Ollama connection; use our backend instead.
+      ENABLE_OLLAMA_API: "false"
+      # Tell Open WebUI where our OpenAI-compatible endpoint lives.
+      OPENAI_API_BASE_URL: "http://life-coach-api:8000/v1"
+      OPENAI_API_KEY: "not-needed"
+    volumes:
+      - webui_data:/app/backend/data
+    depends_on:
+      life-coach-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  coach_data:
+  webui_data:
