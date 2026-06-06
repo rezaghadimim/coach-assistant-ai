@@ -1,6 +1,10 @@
 """CLI helper to ingest coaching documents into the local retriever index."""
 
 import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
 from app.rag.retriever import ingest_and_index_directory
