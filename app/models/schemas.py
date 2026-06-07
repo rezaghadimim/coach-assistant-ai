@@ -73,3 +73,49 @@ class NewSessionResponse(BaseModel):
 
     user_id: str
     session_id: str
+
+
+# ------------------------------------------------------------------
+# Client notes (per-client documentation, stories, decisions)
+# ------------------------------------------------------------------
+
+
+class ClientNoteCreate(BaseModel):
+    """Payload for creating a note about a client."""
+
+    user_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    note_type: str = Field(
+        default="general",
+        description="Type of note: general, story, decision, goal, progress",
+    )
+    title: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class ClientNoteUpdate(BaseModel):
+    """Payload for updating an existing client note."""
+
+    content: str = Field(..., min_length=1)
+    title: Optional[str] = None
+    note_type: Optional[str] = None
+
+
+class ClientNoteResponse(BaseModel):
+    """Single client note response."""
+
+    id: int
+    user_id: str
+    session_id: Optional[str]
+    note_type: str
+    title: Optional[str]
+    content: str
+    created_at: str
+    updated_at: str
+
+
+class ClientNoteListResponse(BaseModel):
+    """Response payload for listing client notes."""
+
+    user_id: str
+    notes: list[ClientNoteResponse]

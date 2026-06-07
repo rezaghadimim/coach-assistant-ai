@@ -47,9 +47,21 @@ def build_system_prompt(user_id: str, message: str) -> str:
             + json.dumps(user["profile"], ensure_ascii=False, indent=2)
         )
 
+    # Inject client notes/stories/decisions as documentation context
+    client_notes = store.get_client_notes(user_id)
+    if client_notes:
+        notes_text = "## Client Documentation\n"
+        for note in client_notes[:10]:  # Limit to 10 most recently updated notes
+            note_header = f"**[{note['note_type'].upper()}]**"
+            if note.get("title"):
+                note_header += f" {note['title']}"
+            note_header += f" ({note['updated_at']})"
+            notes_text += f"- {note_header}: {note['content']}\n"
+        sections.append(notes_text)
+
     last_summary = store.get_last_closed_summary(user_id)
     if last_summary:
-        sections.append(f"## Last Session Summary\n{last_summary}")
+        sections.append(f"## Previous Session Record\n{last_summary}")
 
     return "\n\n".join(sections)
 

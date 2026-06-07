@@ -1,9 +1,15 @@
-"""User and session management endpoints."""
+"""User, session, and client-notes management endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.chat import session_manager, store
 from app.models.schemas import (
+    ClientNoteCreate,
+    ClientNoteListResponse,
+    ClientNoteResponse,
+    ClientNoteUpdate,
     NewSessionResponse,
     SessionListResponse,
     SessionSummary,
@@ -45,3 +51,73 @@ async def start_new_session(user_id: str) -> NewSessionResponse:
     """Close previous session (with summary) and start a fresh one."""
     session_id = session_manager.start_new_session(user_id)
     return NewSessionResponse(user_id=user_id, session_id=session_id)
+
+
+# ------------------------------------------------------------------
+# Client notes — per-client documentation, stories, decisions
+# ------------------------------------------------------------------
+
+
+@router.post("/clients/{user_id}/notes", response_model=ClientNoteResponse)
+async def create_client_note(
+    user_id: str, request: ClientNoteCreate
+) -> ClientNoteResponse:
+    """Add a note (story, decision, progress, etc.) to a client's file."""
+    user = store.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    note_id = store.add_client_note(
+        user_id,
+        request.content,
+        note_type=request.note_type,
+        title=request.title,
+        session_id=request.session_id,
+    )
+    notes = store.get_client_notes(user_id)
+    note = next((n for n in notes if n["id"] == note_id), None)
+    if note is None:
+        raise HTTPException(status_code=500, detail="Failed to save note")
+    return ClientNoteResponse(**note)
+
+
+@router.get("/clients/{user_id}/notes", response_model=ClientNoteListResponse)
+async def list_client_notes(
+    user_id: str,
+    note_type: Optional[str] = Query(default=None),
+) -> ClientNoteListResponse:
+    """List all notes for a client, optionally filtered by type."""
+    notes = store.get_client_notes(user_id, note_type=note_type)
+    return ClientNoteListResponse(
+        user_id=user_id,
+        notes=[ClientNoteResponse(**n) for n in notes],
+    )
+
+
+@router.put("/clients/{user_id}/notes/{note_id}", response_model=ClientNoteResponse)
+async def update_client_note(
+    user_id: str, note_id: int, request: ClientNoteUpdate
+) -> ClientNoteResponse:
+    """Update an existing client note (e.g. add a decision update)."""
+    ok = store.update_client_note(
+        note_id,
+        request.content,
+        title=request.title,
+        note_type=request.note_type,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Note not found")
+    notes = store.get_client_notes(user_id)
+    note = next((n for n in notes if n["id"] == note_id), None)
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return ClientNoteResponse(**note)
+
+
+@router.delete("/clients/{user_id}/notes/{note_id}")
+async def delete_client_note(user_id: str, note_id: int):
+    """Delete a client note."""
+    ok = store.delete_client_note(note_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"detail": "Note deleted"}
