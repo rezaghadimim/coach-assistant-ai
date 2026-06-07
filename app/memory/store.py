@@ -6,7 +6,7 @@ import json
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
 class MemoryStore:
@@ -64,8 +64,8 @@ class MemoryStore:
         self,
         user_id: str,
         *,
-        name: str | None = None,
-        profile: dict[str, Any] | None = None,
+        name: Optional[str] = None,
+        profile: Optional[Dict[str, Any]] = None,
     ) -> None:
         profile_json = json.dumps(profile or {}, ensure_ascii=False)
         with self._connect() as conn:
@@ -80,7 +80,7 @@ class MemoryStore:
                 (user_id, name, profile_json),
             )
 
-    def get_user(self, user_id: str) -> dict[str, Any] | None:
+    def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT user_id, name, profile_json FROM users WHERE user_id = ?",
@@ -104,7 +104,7 @@ class MemoryStore:
             )
         return session_id
 
-    def get_latest_open_session(self, user_id: str) -> str | None:
+    def get_latest_open_session(self, user_id: str) -> Optional[str]:
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -118,7 +118,7 @@ class MemoryStore:
             ).fetchone()
         return row["session_id"] if row else None
 
-    def get_last_closed_summary(self, user_id: str) -> str | None:
+    def get_last_closed_summary(self, user_id: str) -> Optional[str]:
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -170,7 +170,7 @@ class MemoryStore:
                 (summary, session_id),
             )
 
-    def end_session(self, session_id: str, summary: str | None = None) -> None:
+    def end_session(self, session_id: str, summary: Optional[str] = None) -> None:
         with self._connect() as conn:
             cursor = conn.execute(
                 """

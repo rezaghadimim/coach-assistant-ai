@@ -1,6 +1,6 @@
 """API request/response schemas."""
 
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,8 +23,8 @@ class ChatResponse(BaseModel):
 class IngestRequest(BaseModel):
     """Request payload for ingesting from configured document directory."""
 
-    chunk_size: int | None = Field(default=None, gt=0)
-    chunk_overlap: int | None = Field(default=None, ge=0)
+    chunk_size: Optional[int] = Field(default=None, gt=0)
+    chunk_overlap: Optional[int] = Field(default=None, ge=0)
 
 
 class IngestResponse(BaseModel):
@@ -39,7 +39,7 @@ class UserCreateRequest(BaseModel):
     """Payload for creating or updating a user."""
 
     user_id: str = Field(..., min_length=1)
-    name: str | None = None
+    name: Optional[str] = None
     profile: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -47,7 +47,7 @@ class UserResponse(BaseModel):
     """User profile response."""
 
     user_id: str
-    name: str | None
+    name: Optional[str]
     profile: dict[str, Any]
 
 
@@ -57,8 +57,8 @@ class SessionSummary(BaseModel):
     session_id: str
     user_id: str
     started_at: str
-    ended_at: str | None
-    summary: str | None
+    ended_at: Optional[str]
+    summary: Optional[str]
 
 
 class SessionListResponse(BaseModel):
