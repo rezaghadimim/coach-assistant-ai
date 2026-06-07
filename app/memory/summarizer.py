@@ -19,7 +19,7 @@ def summarize_session(messages: list[dict[str, str]]) -> str:
     ]
 
     # Key topics from client messages (up to first 5 for more coverage)
-    topics = "; ".join(user_messages[:5]) if user_messages else "No client topics captured."
+    discussed_topics = "; ".join(user_messages[:5]) if user_messages else "No client topics captured."
 
     # Latest coaching guidance
     coach_focus = assistant_messages[-1] if assistant_messages else "No coach guidance yet."
@@ -29,7 +29,7 @@ def summarize_session(messages: list[dict[str, str]]) -> str:
 
     return (
         "## Coaching Session Record\n"
-        f"- **Topics Discussed**: {topics}\n"
+        f"- **Topics Discussed**: {discussed_topics}\n"
         f"- **Total Exchanges**: {total_exchanges}\n"
         f"- **Latest Coach Focus**: {coach_focus}\n"
         f"- **Messages from Client**: {len(user_messages)}\n"

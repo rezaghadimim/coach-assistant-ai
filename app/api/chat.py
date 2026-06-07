@@ -51,7 +51,7 @@ def build_system_prompt(user_id: str, message: str) -> str:
     client_notes = store.get_client_notes(user_id)
     if client_notes:
         notes_text = "## Client Documentation\n"
-        for note in client_notes[:10]:  # Limit to most recent 10 notes
+        for note in client_notes[:10]:  # Limit to 10 most recently updated notes
             note_header = f"**[{note['note_type'].upper()}]**"
             if note.get("title"):
                 note_header += f" {note['title']}"
