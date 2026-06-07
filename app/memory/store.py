@@ -59,6 +59,22 @@ class MemoryStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS client_notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    session_id TEXT,
+                    note_type TEXT NOT NULL DEFAULT 'general',
+                    title TEXT,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(user_id),
+                    FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+                )
+                """
+            )
 
     def upsert_user(
         self,
@@ -188,6 +204,7 @@ class MemoryStore:
     def clear_all_data(self) -> None:
         """Delete all persisted users, sessions, and messages."""
         with self._connect() as conn:
+            conn.execute("DELETE FROM client_notes")
             conn.execute("DELETE FROM messages")
             conn.execute("DELETE FROM sessions")
             conn.execute("DELETE FROM users")
@@ -214,3 +231,95 @@ class MemoryStore:
             }
             for row in rows
         ]
+
+    # ------------------------------------------------------------------
+    # Client notes (per-client documentation, stories, decisions)
+    # ------------------------------------------------------------------
+
+    def add_client_note(
+        self,
+        user_id: str,
+        content: str,
+        *,
+        note_type: str = "general",
+        title: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> int:
+        """Add a note for a client. Returns the note id."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO client_notes (user_id, session_id, note_type, title, content)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (user_id, session_id, note_type, title, content),
+            )
+            return cursor.lastrowid  # type: ignore[return-value]
+
+    def update_client_note(
+        self,
+        note_id: int,
+        content: str,
+        *,
+        title: Optional[str] = None,
+        note_type: Optional[str] = None,
+    ) -> bool:
+        """Update an existing note. Returns True if the note was found."""
+        parts = ["content = ?", "updated_at = CURRENT_TIMESTAMP"]
+        params: list[Any] = [content]
+        if title is not None:
+            parts.append("title = ?")
+            params.append(title)
+        if note_type is not None:
+            parts.append("note_type = ?")
+            params.append(note_type)
+        params.append(note_id)
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"UPDATE client_notes SET {', '.join(parts)} WHERE id = ?",
+                params,
+            )
+            return cursor.rowcount > 0
+
+    def get_client_notes(
+        self,
+        user_id: str,
+        note_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return all notes for a client, optionally filtered by type."""
+        query = """
+            SELECT id, user_id, session_id, note_type, title, content,
+                   created_at, updated_at
+            FROM client_notes
+            WHERE user_id = ?
+        """
+        params: list[Any] = [user_id]
+        if note_type:
+            query += " AND note_type = ?"
+            params.append(note_type)
+        query += " ORDER BY updated_at DESC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        return [
+            {
+                "id": row["id"],
+                "user_id": row["user_id"],
+                "session_id": row["session_id"],
+                "note_type": row["note_type"],
+                "title": row["title"],
+                "content": row["content"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+
+    def delete_client_note(self, note_id: int) -> bool:
+        """Delete a note by id. Returns True if the note existed."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM client_notes WHERE id = ?", (note_id,)
+            )
+            return cursor.rowcount > 0

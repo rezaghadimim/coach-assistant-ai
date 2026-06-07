@@ -1,9 +1,9 @@
 """OpenAI-compatible API endpoints for Open WebUI integration.
 
 Exposes /v1/models and /v1/chat/completions so that Open WebUI (or any
-OpenAI-API-compatible client) can connect to this Life Coach AI backend
-while still using all coaching features: RAG context, SQLite memory, and
-session summaries.
+OpenAI-API-compatible client) can connect to this Coach Assistant AI backend
+while still using all coaching features: RAG context, SQLite memory, client
+notes, and session summaries.
 
 User identification
 -------------------
@@ -29,7 +29,7 @@ from app.core.llm import generate_response
 
 router = APIRouter()
 
-_MODEL_ID = "life-coach-ai"
+_MODEL_ID = "coach-assistant-ai"
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ async def _stream_and_persist(
 
 @router.get("/v1/models")
 async def list_models():
-    """Return the single life-coach-ai model entry."""
+    """Return the single coach-assistant-ai model entry."""
     return {
         "object": "list",
         "data": [

@@ -25,7 +25,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["object"], "list")
         ids = [m["id"] for m in body["data"]]
-        self.assertIn("life-coach-ai", ids)
+        self.assertIn("coach-assistant-ai", ids)
 
     # ------------------------------------------------------------------
     # /v1/chat/completions — non-streaming
@@ -39,7 +39,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "life-coach-ai",
+                    "model": "coach-assistant-ai",
                     "messages": [{"role": "user", "content": "I need help with focus."}],
                     "stream": False,
                     "user": "test-user",
@@ -48,7 +48,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["object"], "chat.completion")
-        self.assertEqual(body["model"], "life-coach-ai")
+        self.assertEqual(body["model"], "coach-assistant-ai")
         self.assertEqual(len(body["choices"]), 1)
         choice = body["choices"][0]
         self.assertEqual(choice["message"]["role"], "assistant")
@@ -66,7 +66,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "life-coach-ai",
+                    "model": "coach-assistant-ai",
                     "messages": [{"role": "user", "content": "Help me plan my week."}],
                 },
                 headers={"X-User-Id": "header-user"},
@@ -81,7 +81,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "life-coach-ai",
+                    "model": "coach-assistant-ai",
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
@@ -97,7 +97,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "life-coach-ai",
+                    "model": "coach-assistant-ai",
                     "messages": [
                         {"role": "user", "content": "I want to improve my productivity."}
                     ],
@@ -127,7 +127,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "life-coach-ai",
+                    "model": "coach-assistant-ai",
                     "messages": [{"role": "user", "content": "Hi"}],
                     "stream": True,
                     "user": "stream-user",
@@ -152,7 +152,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "life-coach-ai",
+                    "model": "coach-assistant-ai",
                     "messages": [{"role": "user", "content": "What should I do?"}],
                     "stream": True,
                     "user": "chunk-user",

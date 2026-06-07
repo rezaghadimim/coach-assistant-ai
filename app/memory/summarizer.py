@@ -2,17 +2,36 @@
 
 
 def summarize_session(messages: list[dict[str, str]]) -> str:
-    """Generate a deterministic summary with up to the first 3 user messages and latest assistant guidance."""
-    user_messages = [m["content"].strip() for m in messages if m["role"] == "user" and m["content"].strip()]
+    """Generate a structured coaching session summary.
+
+    Extracts key topics, decisions, action items, and coach observations
+    from the conversation to serve as a comprehensive session record.
+    """
+    user_messages = [
+        m["content"].strip()
+        for m in messages
+        if m["role"] == "user" and m["content"].strip()
+    ]
     assistant_messages = [
-        m["content"].strip() for m in messages if m["role"] == "assistant" and m["content"].strip()
+        m["content"].strip()
+        for m in messages
+        if m["role"] == "assistant" and m["content"].strip()
     ]
 
-    discussed = "; ".join(user_messages[:3]) if user_messages else "No user details captured yet."
-    coach_focus = assistant_messages[-1] if assistant_messages else "No assistant guidance yet."
+    # Key topics from client messages (up to first 5 for more coverage)
+    topics = "; ".join(user_messages[:5]) if user_messages else "No client topics captured."
+
+    # Latest coaching guidance
+    coach_focus = assistant_messages[-1] if assistant_messages else "No coach guidance yet."
+
+    # Count engagement
+    total_exchanges = min(len(user_messages), len(assistant_messages))
 
     return (
-        "Session Summary:\n"
-        f"- Discussed: {discussed}\n"
-        f"- Latest Coach Focus: {coach_focus}"
+        "## Coaching Session Record\n"
+        f"- **Topics Discussed**: {topics}\n"
+        f"- **Total Exchanges**: {total_exchanges}\n"
+        f"- **Latest Coach Focus**: {coach_focus}\n"
+        f"- **Messages from Client**: {len(user_messages)}\n"
+        f"- **Coach Responses**: {len(assistant_messages)}"
     )

@@ -1,8 +1,8 @@
 services:
   # ─────────────────────────────────────────────
-  # Life Coach AI — FastAPI backend
+  # Coach Assistant AI — FastAPI backend
   # ─────────────────────────────────────────────
-  life-coach-api:
+  coach-api:
     build: .
     ports:
       - "8000:8000"
@@ -21,7 +21,7 @@ services:
       retries: 5
 
   # ─────────────────────────────────────────────
-  # Open WebUI — browser-based chat front-end
+  # Open WebUI — Coach Assistant chat front-end
   # ─────────────────────────────────────────────
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
@@ -31,12 +31,15 @@ services:
       # Disable the built-in Ollama connection; use our backend instead.
       ENABLE_OLLAMA_API: "false"
       # Tell Open WebUI where our OpenAI-compatible endpoint lives.
-      OPENAI_API_BASE_URL: "http://life-coach-api:8000/v1"
+      OPENAI_API_BASE_URL: "http://coach-api:8000/v1"
       OPENAI_API_KEY: "not-needed"
+      # Coach branding for the UI
+      WEBUI_NAME: "Coach Assistant AI"
+      DEFAULT_MODELS: "coach-assistant-ai"
     volumes:
       - webui_data:/app/backend/data
     depends_on:
-      life-coach-api:
+      coach-api:
         condition: service_healthy
     restart: unless-stopped
 

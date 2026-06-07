@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    app_name: str = "Life Coach AI"
-    app_version: str = "0.2.0"
+    app_name: str = "Coach Assistant AI"
+    app_version: str = "0.3.0"
 
     # Ollama
     ollama_base_url: str = "http://localhost:11434"

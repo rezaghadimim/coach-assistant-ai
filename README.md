@@ -1,6 +1,8 @@
-# Life Coach AI
+# Coach Assistant AI
 
-An AI-powered life coaching assistant that runs locally using open-source LLMs.
+An AI-powered coaching assistant that helps coaches manage their clients,
+document each client's journey, and deliver actionable coaching guidance.
+Runs locally using open-source LLMs.
 
 ## Quick Summary
 
@@ -9,9 +11,17 @@ An AI-powered life coaching assistant that runs locally using open-source LLMs.
 | LLM | Llama 3.1 8B (via Ollama) |
 | RAG | Local chunk index + similarity retrieval |
 | Backend | FastAPI (Python) |
-| Database | SQLite (user memory + sessions) |
+| Database | SQLite (client notes, sessions, memory) |
 | UI | Open WebUI (via OpenAI-compatible API) |
 | Hosting | Local machine / Docker |
+
+## Key Features
+
+- **Client Documentation**: Each conversation serves as a living record for each client
+- **Story & Decision Tracking**: Add notes, stories, and decisions per client — always accessible
+- **Session Continuity**: Coach references past sessions, notes, and decisions automatically
+- **Actionable Coaching**: Direct coaching advice using GROW model and other frameworks
+- **Progress Monitoring**: Track goals, action items, and outcomes across sessions
 
 ## Prerequisites
 
@@ -59,6 +69,12 @@ See [Open WebUI Integration](./docs/OPENWEBUI.md) for details.
 - `GET /api/users/{user_id}`
 - `GET /api/sessions/{user_id}`
 - `POST /api/sessions/{user_id}/new`
+
+### Client Notes (Documentation per client)
+- `POST /api/clients/{user_id}/notes` — Add a note (story, decision, goal, progress)
+- `GET /api/clients/{user_id}/notes` — List all notes (filterable by type)
+- `PUT /api/clients/{user_id}/notes/{note_id}` — Update a note
+- `DELETE /api/clients/{user_id}/notes/{note_id}` — Delete a note
 
 ### OpenAI-Compatible (Open WebUI)
 - `GET /v1/models`

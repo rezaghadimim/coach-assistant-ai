@@ -2,14 +2,16 @@
 
 ## Overview
 
-Phase 4 adds an **OpenAI-compatible API layer** to the Life Coach AI backend.
+Phase 4 adds an **OpenAI-compatible API layer** to the Coach Assistant AI backend.
 This allows [Open WebUI](https://github.com/open-webui/open-webui) — or any
 client that speaks the OpenAI Chat Completions protocol — to connect to the
 backend while retaining all coaching features:
 
 - RAG context injection (Phase 2)
-- Per-user SQLite session memory and summaries (Phase 3)
+- Per-user SQLite session memory, client notes, and summaries (Phase 3)
 - Streaming and non-streaming responses
+
+The UI is branded as **Coach Assistant AI** with `WEBUI_NAME` set in docker-compose.
 
 ## New Endpoints
 
@@ -49,7 +51,7 @@ docker compose up --build
 # Life Coach API docs at http://localhost:8000/docs
 ```
 
-Open WebUI will automatically list `life-coach-ai` as an available model.
+Open WebUI will automatically list `coach-assistant-ai` as an available model.
 
 ## Manual / curl Test
 
@@ -59,7 +61,7 @@ curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-User-Id: alice" \
   -d '{
-    "model": "life-coach-ai",
+    "model": "coach-assistant-ai",
     "messages": [{"role": "user", "content": "I want to improve my focus."}]
   }'
 
@@ -68,7 +70,7 @@ curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-User-Id: alice" \
   -d '{
-    "model": "life-coach-ai",
+    "model": "coach-assistant-ai",
     "messages": [{"role": "user", "content": "Help me plan my week."}],
     "stream": true
   }'
@@ -77,12 +79,12 @@ curl http://localhost:8000/v1/chat/completions \
 ## Architecture
 
 ```text
-Browser → Open WebUI (port 3000)
+Browser → Open WebUI "Coach Assistant AI" (port 3000)
               ↓  OpenAI API protocol
-          Life Coach API (port 8000)
-              ├─ /v1/chat/completions  ← new (Phase 4)
+          Coach Assistant API (port 8000)
+              ├─ /v1/chat/completions  ← OpenAI-compat
               ├─ RAG retrieval
-              ├─ SQLite memory
+              ├─ SQLite memory + client notes
               └─ Ollama LLM
 ```
 
