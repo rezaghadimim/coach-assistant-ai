@@ -5,6 +5,7 @@ import unittest
 from app.api.chat import reset_runtime_state, store
 from app.core.client_intents import (
     detect_client_lookup,
+    detect_client_mention,
     detect_list_clients,
     try_direct_client_query,
 )
@@ -56,12 +57,38 @@ class ClientIntentTests(unittest.TestCase):
         assert result is not None
         self.assertIn("Email: ali@example.com", result)
 
-    def test_sanitize_strips_follow_up_json(self) -> None:
+    def test_sanitize_formats_follow_up_json_as_text(self) -> None:
         raw = (
             '{"follow_ups": ["What are the next steps?", '
             '"How can I help Ali overcome his emotional thinking?"]}'
         )
-        self.assertEqual(_sanitize_assistant_reply(raw), "")
+        result = _sanitize_assistant_reply(raw)
+        self.assertIn("angles to explore", result)
+        self.assertIn("What are the next steps?", result)
+
+    def test_detect_client_mention_by_name(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_client_mention("How can we best support Ali today?", store),
+            "ali",
+        )
+
+    def test_detect_client_mention_ignores_unknown_names(self) -> None:
+        self.assertIsNone(
+            detect_client_mention("How can we best support Jordan today?", store)
+        )
+
+    def test_coaching_question_is_not_direct_lookup(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertIsNone(try_direct_client_query("How can we best support Ali today?", store))
 
     def test_sanitize_extracts_response_field(self) -> None:
         raw = '{"response": "Ali email is ali@example.com"}'

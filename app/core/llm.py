@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 _MAX_TOOL_ITERATIONS = 5
 _JSON_WRAPPER_KEYS = ("response", "answer", "content", "message")
 _FOLLOW_UP_ONLY_KEYS = frozenset({"follow_ups", "followups", "follow_up_questions"})
+_FOLLOW_UP_LIST_KEYS = ("follow_ups", "followups", "follow_up_questions")
 
 
 def _last_user_message(messages: list[dict]) -> str:
@@ -44,9 +45,51 @@ def _sanitize_assistant_reply(content: str) -> str:
             return value.strip()
 
     if set(data.keys()) <= _FOLLOW_UP_ONLY_KEYS:
-        return ""
+        return _format_follow_ups_as_text(data)
 
     return content
+
+
+def _format_follow_ups_as_text(data: dict) -> str:
+    """Turn follow-up-only JSON into readable coaching prompts."""
+    for key in _FOLLOW_UP_LIST_KEYS:
+        items = data.get(key)
+        if not isinstance(items, list):
+            continue
+        questions = [str(item).strip() for item in items if str(item).strip()]
+        if questions:
+            lines = "\n".join(f"- {question}" for question in questions)
+            return f"Here are some angles to explore:\n\n{lines}"
+    return ""
+
+
+def _empty_reply_fallback(last_user: str, store: "MemoryStore") -> str:
+    from app.core.client_intents import detect_client_mention
+
+    if detect_client_mention(last_user, store):
+        return (
+            "I wasn't able to put together a full coaching response just now. "
+            "Could you rephrase your question, or ask me to pull up that client's "
+            "notes so we can work from what's on file?"
+        )
+    return (
+        "I'm not sure I understood that. "
+        "Could you please provide more details or specify the client's name?"
+    )
+
+
+def _client_context_for_prompt(client_id: str, store: "MemoryStore") -> str:
+    from app.core.tools import execute_tool
+
+    record = execute_tool("get_client_full", {"client_id": client_id}, store)
+    if record.startswith("❌"):
+        return ""
+    return (
+        "## Referenced Client Record\n"
+        "The coach is asking about this client. Use their profile and notes "
+        "below to give specific, actionable coaching guidance.\n\n"
+        f"{record}"
+    )
 
 
 def _format_direct_lookup_reply(tool_result: str) -> str:
@@ -107,7 +150,7 @@ async def _generate_with_tools(
     store: "MemoryStore",
 ) -> str:
     """Agentic tool-calling loop: execute tools until the LLM gives a final reply."""
-    from app.core.client_intents import try_direct_client_query
+    from app.core.client_intents import detect_client_mention, try_direct_client_query
     from app.core.scope import is_openwebui_task, scope_guard
     from app.core.tools import execute_tool  # avoid circular import
 
@@ -125,6 +168,12 @@ async def _generate_with_tools(
         direct = try_direct_client_query(last_user, store)
         if direct is not None:
             return _format_direct_lookup_reply(direct)
+
+        client_id = detect_client_mention(last_user, store)
+        if client_id:
+            client_context = _client_context_for_prompt(client_id, store)
+            if client_context:
+                system_prompt = f"{system_prompt}\n\n{client_context}"
 
     full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
 
@@ -150,10 +199,7 @@ async def _generate_with_tools(
                     fallback = try_direct_client_query(last_user, store)
                     if fallback is not None:
                         return _format_direct_lookup_reply(fallback)
-                    return (
-                        "I'm not sure I understood that. "
-                        "Could you please provide more details or specify the client's name?"
-                    )
+                    return _empty_reply_fallback(last_user, store)
                 return content
 
             full_messages.append(assistant_msg)

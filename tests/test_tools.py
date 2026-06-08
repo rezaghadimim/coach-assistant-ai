@@ -263,6 +263,57 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(tool_messages), 1)
             self.assertEqual(tool_messages[0]["tool_name"], "list_clients")
 
+    async def test_client_mention_injects_context_into_system_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            execute_tool(
+                "create_client",
+                {
+                    "client_id": "ali",
+                    "name": "Ali",
+                    "email": "ali@example.com",
+                    "confirmed": True,
+                },
+                test_store,
+            )
+            captured_payloads: list[dict] = []
+
+            async def fake_post(_url: str, *, json: dict) -> MagicMock:
+                captured_payloads.append(json)
+                body = {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Focus on Ali's stated goals and check in on progress.",
+                    }
+                }
+                response = MagicMock()
+                response.raise_for_status = MagicMock()
+                response.json = MagicMock(return_value=body)
+                return response
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    [
+                        {
+                            "role": "user",
+                            "content": "How can we best support Ali today?",
+                        }
+                    ],
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            self.assertIn("Focus on Ali's stated goals", reply)
+            system_prompt = captured_payloads[0]["messages"][0]["content"]
+            self.assertIn("Referenced Client Record", system_prompt)
+            self.assertIn("Email: ali@example.com", system_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
