@@ -468,6 +468,79 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("She has two children", reply)
             self.assertEqual(len(test_store.get_client_notes("mina")), 0)
 
+    async def test_coaching_advice_blocks_mistaken_add_note(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            execute_tool(
+                "create_client",
+                {"client_id": "ali", "name": "Ali", "confirmed": True},
+                test_store,
+            )
+            call_count = 0
+
+            async def fake_post(_url: str, *, json: dict) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    body = {
+                        "message": {
+                            "role": "assistant",
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "add_client_note",
+                                        "arguments": {
+                                            "client_id": "ali",
+                                            "content": "Ask open-ended questions.",
+                                            "note_type": "general",
+                                        },
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                else:
+                    body = {
+                        "message": {
+                            "role": "assistant",
+                            "content": (
+                                "Try asking Ali what success would look like for him "
+                                "this month, then explore one small step he could take."
+                            ),
+                        }
+                    }
+                response = MagicMock()
+                response.raise_for_status = MagicMock()
+                response.json = MagicMock(return_value=body)
+                return response
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    [
+                        {
+                            "role": "user",
+                            "content": (
+                                "In general I want to know one way about "
+                                "make patient happier"
+                            ),
+                        }
+                    ],
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            self.assertEqual(call_count, 2)
+            self.assertNotIn("pending confirmation", reply)
+            self.assertIn("success would look like", reply)
+            self.assertEqual(len(test_store.get_client_notes("ali")), 0)
+
     async def test_user_yes_replays_pending_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             test_store = type(store)(str(Path(tmp) / "test.db"))

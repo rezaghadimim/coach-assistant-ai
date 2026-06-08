@@ -59,6 +59,35 @@ _PREFIXES_TO_STRIP = re.compile(r"^(?:the|patient|client)\s+", re.IGNORECASE)
 _PRONOUN_PLACEHOLDERS = frozenset(
     {"this", "that", "a", "an", "my", "your", "their", "our", "its"}
 )
+_EXPLICIT_NOTE_SAVE = re.compile(
+    r"\b(?:"
+    r"note\s+that|save\s+(?:a\s+)?note|document\s+that|record\s+that|"
+    r"add\s+(?:a\s+)?note|write\s+(?:this|that|it)\s+down|log\s+that|"
+    r"save\s+(?:a\s+)?(?:goal|decision|story|progress)|"
+    r"document\s+(?:the|that|this)|note\s+(?:for|about)"
+    r")\b",
+    re.IGNORECASE,
+)
+_COACHING_ADVICE = re.compile(
+    r"(?:"
+    r"\?\s*$|"
+    r"\b(?:"
+    r"want\s+to\s+know|how\s+(?:can|do|should|would)|what\s+(?:should|would|can)|"
+    r"tell\s+me\s+(?:how|what|one|a)|give\s+me\s+(?:a\s+)?(?:way|tip|idea|suggestion|advice)|"
+    r"one\s+way\s+(?:to|about)|help\s+me\s+(?:with|understand)|"
+    r"suggest\s+(?:a|some|any)|recommend\s+(?:a|some|any)|"
+    r"what\s+(?:is|are)\s+(?:some|a\s+good)|"
+    r"in\s+general\s+(?:i\s+)?(?:want|need|would\s+like)"
+    r")\b"
+    r")",
+    re.IGNORECASE,
+)
+
+NOTE_WRITE_MISFIRE_GUIDANCE = (
+    "⚠️ The coach is asking for coaching advice or guidance, not requesting "
+    "that you save a note. Do not call add_client_note. Answer in plain "
+    "language with specific, actionable coaching suggestions."
+)
 
 
 def _clean_client_ref(raw: str) -> str:
@@ -111,6 +140,16 @@ def detect_create_client(message: str) -> Optional[dict[str, str]]:
 def detect_confirm(message: str) -> bool:
     """Backward-compatible alias for the shared confirmation detector."""
     return is_user_confirmation(message)
+
+
+def is_coaching_advice_request(message: str) -> bool:
+    """Return True when the coach is asking for guidance, not saving a note."""
+    text = message.strip()
+    if not text:
+        return False
+    if _EXPLICIT_NOTE_SAVE.search(text):
+        return False
+    return bool(_COACHING_ADVICE.search(text))
 
 
 def _extract_tool_payload(data: dict[str, Any]) -> Optional[tuple[str, dict[str, Any]]]:

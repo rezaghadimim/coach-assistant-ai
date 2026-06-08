@@ -154,7 +154,9 @@ async def _generate_with_tools(
         provider = OllamaProvider()
 
     from app.core.client_intents import (
+        NOTE_WRITE_MISFIRE_GUIDANCE,
         detect_client_mention,
+        is_coaching_advice_request,
         parse_text_tool_call,
         try_direct_client_action,
     )
@@ -199,6 +201,12 @@ async def _generate_with_tools(
             if text_tool:
                 tool_name, params = text_tool
                 tc = ToolCall(id=f"call_text_{tool_name}", name=tool_name, arguments=params)
+                if tool_name == "add_client_note" and is_coaching_advice_request(last_user):
+                    full_messages.append(result.assistant_message)
+                    full_messages.append(
+                        provider.tool_result_message(tc, NOTE_WRITE_MISFIRE_GUIDANCE)
+                    )
+                    continue
                 tool_result = execute_tool(tool_name, params, store)
                 full_messages.append(result.assistant_message)
                 full_messages.append(provider.tool_result_message(tc, tool_result))
@@ -219,6 +227,11 @@ async def _generate_with_tools(
         full_messages.append(result.assistant_message)
 
         for tc in result.tool_calls:
+            if tc.name == "add_client_note" and is_coaching_advice_request(last_user):
+                full_messages.append(
+                    provider.tool_result_message(tc, NOTE_WRITE_MISFIRE_GUIDANCE)
+                )
+                continue
             arguments = sanitize_write_confirmation(tc.name, tc.arguments, last_user)
             tool_result = execute_tool(tc.name, arguments, store)
             full_messages.append(provider.tool_result_message(tc, tool_result))

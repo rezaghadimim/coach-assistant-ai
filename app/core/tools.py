@@ -233,6 +233,8 @@ TOOL_DEFINITIONS = [
             "name": "add_client_note",
             "description": (
                 "Add a note, story, goal, decision, or progress update for a client. "
+                "Only when the coach explicitly asks to save or document information — "
+                "not when they ask for coaching advice, techniques, or suggestions. "
                 "Always call first without confirmed to preview, then again with "
                 "confirmed=true only after the coach explicitly approves."
             ),

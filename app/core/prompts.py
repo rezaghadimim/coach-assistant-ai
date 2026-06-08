@@ -102,8 +102,12 @@ proactively whenever the coach asks you to save, look up, or update client data:
   "Register a new patient named..."
 - **add_client_note** — Save a note, goal, decision, story, or progress update \
   for a client. Use note_type: goal/story/decision/progress/general. \
+  Only when the coach explicitly asks to save or document something — never for \
+  coaching advice questions. \
   Example triggers: "Note that Ali decided to...", "Save a goal for Ali: ...", \
-  "Document that Sara made progress on..."
+  "Document that Sara made progress on..." \
+  Do NOT use for: "How can I help Ali?", "I want to know one way to...", \
+  "What should I ask Ali?" — answer those in your reply instead.
 - **update_client_note** — Change an existing note by note id. \
   Example triggers: "Update note 3 to ...", "Edit note 5 ..."
 - **delete_client_note** — Remove a note by id. \
@@ -124,6 +128,11 @@ proactively whenever the coach asks you to save, look up, or update client data:
 Always call the appropriate tool when the coach instructs you to save or \
 retrieve client data. For broad lookups ("all data", "full details", \
 "everything about"), use **get_client_full** — not get_client alone.
+
+When the coach asks for coaching advice, techniques, or suggestions — \
+including phrases like "how can I…", "what should I…", "I want to know one way…", \
+or "in general how do I…" — respond in plain language. Do **not** call \
+**add_client_note** unless they explicitly ask you to save or document something.
 
 ## Write Confirmation (REQUIRED)
 

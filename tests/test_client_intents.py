@@ -9,6 +9,7 @@ from app.core.client_intents import (
     detect_confirm,
     detect_create_client,
     detect_list_clients,
+    is_coaching_advice_request,
     parse_text_tool_call,
     try_direct_client_action,
     try_direct_client_query,
@@ -93,6 +94,26 @@ class ClientIntentTests(unittest.TestCase):
             store,
         )
         self.assertIsNone(try_direct_client_query("How can we best support Ali today?", store))
+
+    def test_coaching_advice_request_detected(self) -> None:
+        self.assertTrue(
+            is_coaching_advice_request(
+                "In general I want to know one way about make patient happier"
+            )
+        )
+        self.assertTrue(is_coaching_advice_request("How can I support Ali emotionally?"))
+        self.assertTrue(is_coaching_advice_request("What should I ask Ali in our next session?"))
+
+    def test_explicit_note_save_is_not_coaching_advice(self) -> None:
+        self.assertFalse(
+            is_coaching_advice_request("Note that Ali decided to change careers.")
+        )
+        self.assertFalse(
+            is_coaching_advice_request("Save a goal for Ali: run a half marathon.")
+        )
+        self.assertFalse(
+            is_coaching_advice_request("Add note for Ali: she prefers morning sessions.")
+        )
 
     def test_sanitize_extracts_response_field(self) -> None:
         raw = '{"response": "Ali email is ali@example.com"}'
