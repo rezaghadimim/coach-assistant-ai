@@ -150,7 +150,11 @@ async def _generate_with_tools(
     store: "MemoryStore",
 ) -> str:
     """Agentic tool-calling loop: execute tools until the LLM gives a final reply."""
-    from app.core.client_intents import detect_client_mention, try_direct_client_query
+    from app.core.client_intents import (
+        detect_client_mention,
+        parse_text_tool_call,
+        try_direct_client_action,
+    )
     from app.core.scope import is_openwebui_task, scope_guard
     from app.core.tools import execute_tool  # avoid circular import
 
@@ -165,8 +169,10 @@ async def _generate_with_tools(
         if refusal is not None:
             return refusal
 
-        direct = try_direct_client_query(last_user, store)
+        direct = try_direct_client_action(last_user, store, messages)
         if direct is not None:
+            if direct.startswith("⏳") or direct.startswith("✅"):
+                return direct
             return _format_direct_lookup_reply(direct)
 
         client_id = detect_client_mention(last_user, store)
@@ -194,10 +200,25 @@ async def _generate_with_tools(
                 raw_content = assistant_msg.get("content", "")
                 if is_task:
                     return raw_content
+
+                text_tool = parse_text_tool_call(raw_content)
+                if text_tool:
+                    tool_name, params = text_tool
+                    result = execute_tool(tool_name, params, store)
+                    full_messages.append(assistant_msg)
+                    full_messages.append(
+                        {"role": "tool", "tool_name": tool_name, "content": result}
+                    )
+                    if result.startswith("⏳") or result.startswith("✅"):
+                        return result
+                    continue
+
                 content = _sanitize_assistant_reply(raw_content)
                 if not content.strip() and last_user:
-                    fallback = try_direct_client_query(last_user, store)
+                    fallback = try_direct_client_action(last_user, store, messages)
                     if fallback is not None:
+                        if fallback.startswith("⏳") or fallback.startswith("✅"):
+                            return fallback
                         return _format_direct_lookup_reply(fallback)
                     return _empty_reply_fallback(last_user, store)
                 return content

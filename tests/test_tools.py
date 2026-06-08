@@ -14,6 +14,18 @@ class ExecuteToolTests(unittest.TestCase):
     def setUp(self) -> None:
         reset_runtime_state()
 
+    def test_create_client_accepts_string_confirmed(self) -> None:
+        result = execute_tool(
+            "create_client",
+            {
+                "client_id": "hassan",
+                "name": "Hassan",
+                "confirmed": "true",
+            },
+            store,
+        )
+        self.assertIn("saved successfully", result)
+
     def test_create_client_requires_confirmation(self) -> None:
         result = execute_tool(
             "create_client",

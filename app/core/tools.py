@@ -41,7 +41,12 @@ def _format_client_profile(user: dict[str, Any]) -> str:
 
 
 def _is_confirmed(arguments: dict[str, Any]) -> bool:
-    return arguments.get("confirmed") is True
+    value = arguments.get("confirmed")
+    if value is True:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {"true", "yes", "1"}:
+        return True
+    return False
 
 
 def _format_create_client_preview(

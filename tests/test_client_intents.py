@@ -6,7 +6,11 @@ from app.api.chat import reset_runtime_state, store
 from app.core.client_intents import (
     detect_client_lookup,
     detect_client_mention,
+    detect_confirm,
+    detect_create_client,
     detect_list_clients,
+    parse_text_tool_call,
+    try_direct_client_action,
     try_direct_client_query,
 )
 from app.core.llm import _sanitize_assistant_reply
@@ -96,6 +100,56 @@ class ClientIntentTests(unittest.TestCase):
             _sanitize_assistant_reply(raw),
             "Ali email is ali@example.com",
         )
+
+    def test_detect_create_client_add_as_patient(self) -> None:
+        self.assertEqual(
+            detect_create_client("Add Hassan as another patient profile"),
+            {"client_id": "hassan", "name": "Hassan"},
+        )
+
+    def test_detect_create_client_named_patient(self) -> None:
+        self.assertEqual(
+            detect_create_client("Register a new patient named Sara"),
+            {"client_id": "sara", "name": "Sara"},
+        )
+
+    def test_detect_confirm(self) -> None:
+        self.assertTrue(detect_confirm("yes"))
+        self.assertTrue(detect_confirm("confirm"))
+        self.assertFalse(detect_confirm("Add Hassan as a patient"))
+
+    def test_direct_create_client_returns_preview(self) -> None:
+        result = try_direct_client_action("Add Hassan as another patient", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("pending confirmation", result)
+        self.assertIn("Client ID: hassan", result)
+
+    def test_confirm_saves_pending_client(self) -> None:
+        preview = try_direct_client_action("Add Hassan as another patient", store)
+        assert preview is not None
+        history = [
+            {"role": "user", "content": "Add Hassan as another patient"},
+            {"role": "assistant", "content": preview},
+            {"role": "user", "content": "yes"},
+        ]
+        result = try_direct_client_action("yes", store, history)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("saved successfully", result)
+
+    def test_parse_text_tool_call_from_error_wrapper(self) -> None:
+        raw = (
+            '{"error": "Invalid tool call. Please use the correct format: '
+            '{"tool": "create_client", "parameters": {"client_id": "hassan", '
+            '"name": "Hassan", "confirmed": "true"}}"}'
+        )
+        parsed = parse_text_tool_call(raw)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        tool_name, params = parsed
+        self.assertEqual(tool_name, "create_client")
+        self.assertEqual(params["client_id"], "hassan")
 
 
 if __name__ == "__main__":
