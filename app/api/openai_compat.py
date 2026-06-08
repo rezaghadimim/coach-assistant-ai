@@ -21,6 +21,7 @@ import time
 import uuid
 from typing import AsyncGenerator, Optional
 
+import httpx
 from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -40,11 +41,61 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _MODEL_ID = LOCAL_MODEL_ID
-_LLM_UNAVAILABLE_MESSAGE = (
+_LOCAL_LLM_UNAVAILABLE_MESSAGE = (
     "I'm temporarily unable to reach the language model. "
     "If you're running via Docker, ensure Ollama is running on your host and "
     "that OLLAMA_BASE_URL points to host.docker.internal (not localhost)."
 )
+_CLOUD_LLM_UNAVAILABLE_MESSAGE = (
+    "I'm temporarily unable to reach the cloud language model via OpenRouter. "
+    "Check that OPENROUTER_API_KEY is valid, try again in a moment, "
+    "or switch to Coach Assistant AI (Local) for offline use."
+)
+
+
+def _llm_error_hint(exc: Exception, *, cloud: bool) -> Optional[str]:
+    """Return a short, user-facing hint derived from the provider error."""
+    if isinstance(exc, httpx.TimeoutException):
+        if cloud:
+            return (
+                "request timed out — cloud models can be slow; "
+                "try again or use the local model"
+            )
+        return "request timed out"
+    if isinstance(exc, httpx.ConnectError):
+        return "could not connect to OpenRouter" if cloud else "could not connect to Ollama"
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"OpenRouter returned HTTP {exc.response.status_code}"
+    return None
+
+
+def _llm_unavailable_message(model_id: str, exc: Optional[Exception] = None) -> str:
+    """Return a provider-appropriate message when the LLM request fails."""
+    cloud = is_cloud_model_id(model_id)
+    base = _CLOUD_LLM_UNAVAILABLE_MESSAGE if cloud else _LOCAL_LLM_UNAVAILABLE_MESSAGE
+    if exc is None:
+        return base
+    hint = _llm_error_hint(exc, cloud=cloud)
+    return f"{base} ({hint})" if hint else base
+
+
+async def _generate_reply_or_unavailable(
+    *,
+    history: list[dict],
+    system_prompt: str,
+    model_id: str,
+) -> str:
+    try:
+        return await generate_response(
+            messages=history,
+            system_prompt=system_prompt,
+            tools=TOOL_DEFINITIONS,
+            store=store,
+            model_id=model_id,
+        )
+    except Exception as exc:
+        logger.exception("LLM request failed during chat completion")
+        return _llm_unavailable_message(model_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -119,17 +170,11 @@ async def _stream_and_persist(
     """Tool-calling + optional streaming response, then persist the full reply."""
     # Tool-calling is always resolved first (non-streaming) so the agentic loop
     # can execute multiple tool calls before producing a final answer.
-    try:
-        full_reply = await generate_response(
-            messages=history,
-            system_prompt=system_prompt,
-            tools=TOOL_DEFINITIONS,
-            store=store,
-            model_id=model_id,
-        )
-    except Exception:
-        logger.exception("LLM request failed during streaming chat completion")
-        full_reply = _LLM_UNAVAILABLE_MESSAGE
+    full_reply = await _generate_reply_or_unavailable(
+        history=history,
+        system_prompt=system_prompt,
+        model_id=model_id,
+    )
 
     # Stream the final reply in small chunks so Open WebUI shows progressive output.
     chunk_size = 6
@@ -218,11 +263,9 @@ async def chat_completions(
             media_type="text/event-stream",
         )
 
-    reply = await generate_response(
-        messages=history,
+    reply = await _generate_reply_or_unavailable(
+        history=history,
         system_prompt=system_prompt,
-        tools=TOOL_DEFINITIONS,
-        store=store,
         model_id=model_id,
     )
     store.add_message(session_id, "assistant", reply)

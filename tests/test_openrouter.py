@@ -1,5 +1,6 @@
 """Tests for OpenRouter provider integration and model registry."""
 
+import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -305,6 +306,107 @@ class OpenRouterMessageFormatTests(unittest.TestCase):
         self.assertEqual(msg["tool_name"], "list_clients")
         self.assertEqual(msg["content"], "result text")
         self.assertNotIn("tool_call_id", msg)
+
+
+# ---------------------------------------------------------------------------
+# LLM failure messages — provider-aware
+# ---------------------------------------------------------------------------
+
+class LLMUnavailableMessageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        reset_runtime_state()
+        self.client = TestClient(app)
+
+    @staticmethod
+    def _streamed_content(response_text: str) -> str:
+        tokens = []
+        for line in response_text.splitlines():
+            if not line.startswith("data:") or "[DONE]" in line:
+                continue
+            chunk = json.loads(line[len("data: "):].strip())
+            for choice in chunk.get("choices", []):
+                token = choice.get("delta", {}).get("content")
+                if token:
+                    tokens.append(token)
+        return "".join(tokens)
+
+    def test_streaming_cloud_failure_returns_openrouter_message(self) -> None:
+        import httpx
+
+        with patch(
+            "app.api.openai_compat.probe_openrouter",
+            new=AsyncMock(return_value=True),
+        ), patch(
+            "app.api.openai_compat.generate_response",
+            new=AsyncMock(side_effect=httpx.TimeoutException("timed out")),
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai-cloud-gpt-oss-120b",
+                    "messages": [{"role": "user", "content": "Help me coach a client."}],
+                    "stream": True,
+                    "user": "test-user",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = self._streamed_content(response.text)
+        self.assertIn("OpenRouter", content)
+        self.assertNotIn("Ollama", content)
+        self.assertIn("timed out", content)
+
+    def test_streaming_local_failure_returns_ollama_message(self) -> None:
+        import httpx
+
+        with patch(
+            "app.api.openai_compat.generate_response",
+            new=AsyncMock(side_effect=httpx.ConnectError("connection refused")),
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai",
+                    "messages": [{"role": "user", "content": "Help me coach a client."}],
+                    "stream": True,
+                    "user": "test-user",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = self._streamed_content(response.text)
+        self.assertIn("Ollama", content)
+        self.assertNotIn("OpenRouter", content)
+
+    def test_non_streaming_cloud_failure_returns_openrouter_message(self) -> None:
+        import httpx
+
+        with patch(
+            "app.api.openai_compat.probe_openrouter",
+            new=AsyncMock(return_value=True),
+        ), patch(
+            "app.api.openai_compat.generate_response",
+            new=AsyncMock(side_effect=httpx.HTTPStatusError(
+                "rate limited",
+                request=MagicMock(),
+                response=MagicMock(status_code=429),
+            )),
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai-cloud-gpt-oss-120b",
+                    "messages": [{"role": "user", "content": "Help me coach a client."}],
+                    "stream": False,
+                    "user": "test-user",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.json()["choices"][0]["message"]["content"]
+        self.assertIn("OpenRouter", content)
+        self.assertNotIn("Ollama", content)
+        self.assertIn("HTTP 429", content)
 
 
 if __name__ == "__main__":
