@@ -1,4 +1,4 @@
-"""Life Coach AI — Application entry point."""
+"""Coach Assistant AI — Application entry point."""
 
 import uvicorn
 from fastapi import FastAPI

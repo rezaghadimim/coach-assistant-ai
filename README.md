@@ -1,5 +1,7 @@
 # Coach Assistant AI
 
+Repository: [github.com/rezaghadimim/coach-assistant-ai](https://github.com/rezaghadimim/coach-assistant-ai)
+
 An AI-powered coaching assistant that helps coaches manage their clients,
 document each client's journey, and deliver actionable coaching guidance.
 Runs locally using open-source LLMs.

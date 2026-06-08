@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
 from app.core.llm import generate_response
-from app.core.prompts import LIFE_COACH_SYSTEM_PROMPT
+from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
 from app.core.tools import TOOL_DEFINITIONS
 from app.memory import MemoryStore, SessionManager
 from app.models.schemas import ChatRequest, ChatResponse
@@ -29,7 +29,7 @@ def reset_runtime_state() -> None:
 
 
 def build_system_prompt(user_id: str, message: str) -> str:
-    sections = [LIFE_COACH_SYSTEM_PROMPT]
+    sections = [COACH_ASSISTANT_SYSTEM_PROMPT]
 
     if settings.rag_enabled:
         context_chunks = retrieve(

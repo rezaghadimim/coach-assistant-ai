@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     rag_min_score: float = 0.05
 
     # Memory
-    memory_db_path: str = "data/life_coach.db"
+    memory_db_path: str = "data/coach_assistant.db"
     summary_trigger_messages: int = 20
 
     class Config:

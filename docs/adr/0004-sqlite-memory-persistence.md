@@ -20,7 +20,7 @@ Requirements:
 
 ## Decision
 
-Use **SQLite** via Python's built-in `sqlite3` module. The database is stored at a configurable path (default `data/life_coach.db`) and managed entirely within `app/memory/store.py`.
+Use **SQLite** via Python's built-in `sqlite3` module. The database is stored at a configurable path (default `data/coach_assistant.db`) and managed entirely within `app/memory/store.py`.
 
 ## Consequences
 

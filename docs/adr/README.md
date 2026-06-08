@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-This directory contains Architecture Decision Records (ADRs) for the Life Coach AI project.
+This directory contains Architecture Decision Records (ADRs) for the Coach Assistant AI project.
 Each ADR captures a significant architectural or technical decision, its context, the options considered, and the rationale for the choice made.
 
 ## Index

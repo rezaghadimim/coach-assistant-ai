@@ -19,7 +19,7 @@ class Phase4OpenAICompatTests(unittest.TestCase):
     # /v1/models
     # ------------------------------------------------------------------
 
-    def test_list_models_returns_life_coach_entry(self) -> None:
+    def test_list_models_returns_coach_assistant_entry(self) -> None:
         response = self.client.get("/v1/models")
         self.assertEqual(response.status_code, 200)
         body = response.json()

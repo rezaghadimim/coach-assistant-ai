@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, AsyncGenerator, Optional, Union
 import httpx
 
 from app.core.config import settings
-from app.core.prompts import LIFE_COACH_SYSTEM_PROMPT
+from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
 
 if TYPE_CHECKING:
     from app.memory.store import MemoryStore
@@ -16,7 +16,7 @@ _MAX_TOOL_ITERATIONS = 5
 
 async def generate_response(
     messages: list[dict[str, str]],
-    system_prompt: str = LIFE_COACH_SYSTEM_PROMPT,
+    system_prompt: str = COACH_ASSISTANT_SYSTEM_PROMPT,
     stream: bool = False,
     tools: Optional[list[dict]] = None,
     store: Optional["MemoryStore"] = None,

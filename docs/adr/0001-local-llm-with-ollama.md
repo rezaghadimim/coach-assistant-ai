@@ -5,7 +5,7 @@
 
 ## Context
 
-The Life Coach AI project requires a language model for conversational coaching. Key requirements are:
+The Coach Assistant AI project requires a language model for conversational coaching. Key requirements are:
 
 - **Privacy**: Coaching conversations contain sensitive personal information and must not leave the user's machine.
 - **Cost**: Cloud LLM APIs (OpenAI, Anthropic) incur per-token costs that compound over extended coaching sessions.

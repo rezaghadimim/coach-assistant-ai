@@ -49,7 +49,7 @@ outside git and use the tracked sample file as a template.
 docker compose up --build
 
 # Open WebUI is now available at http://localhost:3000
-# Life Coach API docs at http://localhost:8000/docs
+# Coach Assistant API docs at http://localhost:8000/docs
 ```
 
 Open WebUI will automatically list `coach-assistant-ai` as an available model.

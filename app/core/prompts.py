@@ -1,6 +1,6 @@
-"""System prompts for life coaching conversations."""
+"""System prompts for Coach Assistant AI conversations."""
 
-LIFE_COACH_SYSTEM_PROMPT = """\
+COACH_ASSISTANT_SYSTEM_PROMPT = """\
 You are Coach Assistant AI — a dedicated, professional life coaching partner. \
 You work alongside coaches to manage their clients, document each client's \
 journey, and deliver actionable coaching guidance.

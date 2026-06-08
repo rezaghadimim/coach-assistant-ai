@@ -5,7 +5,7 @@
 
 ## Context
 
-Phase 4 requires a web-based chat interface so users can interact with the Life Coach AI without using `curl` or writing API clients. Requirements:
+Phase 4 requires a web-based chat interface so users can interact with Coach Assistant AI without using `curl` or writing API clients. Requirements:
 
 - Provides a polished, production-quality chat UI with minimal custom front-end code.
 - Supports streaming responses for a responsive feel.
@@ -17,7 +17,7 @@ Phase 4 requires a web-based chat interface so users can interact with the Life 
 
 Integrate **Open WebUI** as the front-end by exposing an **OpenAI-compatible API layer** (`GET /v1/models`, `POST /v1/chat/completions`) in the FastAPI backend. Open WebUI is configured to connect to this endpoint instead of Ollama directly.
 
-The full stack is orchestrated with **Docker Compose**: Open WebUI on port 3000, the Life Coach API on port 8000.
+The full stack is orchestrated with **Docker Compose**: Open WebUI on port 3000, the Coach Assistant API on port 8000.
 
 User sessions are identified via the `user` request field or an `X-User-Id` HTTP header, falling back to a shared `"openwebui-user"` session.
 

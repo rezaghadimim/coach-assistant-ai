@@ -63,8 +63,8 @@ Avoid fine-tuning books, documentation, or knowledge repositories to inject info
 Convert conversations to this format (`training_data.jsonl`):
 
 ```json
-{"messages": [{"role": "system", "content": "You are a life coach..."}, {"role": "user", "content": "I feel stuck in my career"}, {"role": "assistant", "content": "I hear you. Let's explore that. When you say stuck, what does that look like day to day?"}]}
-{"messages": [{"role": "system", "content": "You are a life coach..."}, {"role": "user", "content": "I didn't do my homework"}, {"role": "assistant", "content": "No judgment. Let's understand what got in the way. What happened this week?"}]}
+{"messages": [{"role": "system", "content": "You are Coach Assistant AI..."}, {"role": "user", "content": "I feel stuck in my career"}, {"role": "assistant", "content": "I hear you. Let's explore that. When you say stuck, what does that look like day to day?"}]}
+{"messages": [{"role": "system", "content": "You are Coach Assistant AI..."}, {"role": "user", "content": "I didn't do my homework"}, {"role": "assistant", "content": "No judgment. Let's understand what got in the way. What happened this week?"}]}
 ```
 
 ## Steps
@@ -116,7 +116,7 @@ trainer = SFTTrainer(
 trainer.train()
 
 # Save
-model.save_pretrained_gguf("life-coach-model", tokenizer, quantization_method="q4_k_m")
+model.save_pretrained_gguf("coach-assistant-model", tokenizer, quantization_method="q4_k_m")
 ```
 
 ### 4. Deploy to Ollama
@@ -124,24 +124,24 @@ model.save_pretrained_gguf("life-coach-model", tokenizer, quantization_method="q
 ```bash
 # Create Modelfile
 cat > Modelfile << 'EOF'
-FROM ./life-coach-model-Q4_K_M.gguf
-SYSTEM "You are a professional life coach..."
+FROM ./coach-assistant-model-Q4_K_M.gguf
+SYSTEM "You are Coach Assistant AI..."
 PARAMETER temperature 0.7
 PARAMETER top_p 0.9
 EOF
 
 # Import
-ollama create life-coach -f Modelfile
+ollama create coach-assistant -f Modelfile
 
 # Test
-ollama run life-coach "I want to change careers but I'm scared"
+ollama run coach-assistant "I want to change careers but I'm scared"
 ```
 
 ### 5. Update Config
 
 In `app/core/config.py`, change:
 ```python
-MODEL_NAME = "life-coach"  # was "llama3.1:8b"
+ollama_model: str = "coach-assistant"  # was "llama3.1:8b"
 ```
 
 ## Quality Checklist

@@ -136,7 +136,7 @@ async def list_models():
                 "id": _MODEL_ID,
                 "object": "model",
                 "created": int(time.time()),
-                "owned_by": "life-coach-ai",
+                "owned_by": "coach-assistant-ai",
             }
         ],
     }
