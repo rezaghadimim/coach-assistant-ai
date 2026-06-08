@@ -24,6 +24,22 @@
 1. Loads or creates the active session for `user_id`
 2. Persists user and assistant messages in SQLite
 3. Injects user profile, client notes/stories/decisions, and last session summary into system prompt
+4. Exposes LLM tools so coaches can manage clients from natural-language chat
+
+### Chat Tools (via LLM)
+
+Coaches can say things like "Add Ali as a client" or "Save Sara's goal" in chat.
+The model calls tools defined in `app/core/tools.py`:
+
+| Tool | Purpose |
+|------|---------|
+| `create_client` | Register or update a client profile (merges with existing fields) |
+| `add_client_note` | Save a story, goal, decision, or progress note |
+| `get_client` | Look up a client's profile |
+| `list_client_notes` | List notes for a client (optional type filter) |
+| `list_clients` | List all registered clients |
+
+The REST API endpoints below remain available for direct CRUD from other clients.
 
 ## Client Notes
 

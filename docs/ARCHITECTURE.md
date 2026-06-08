@@ -16,6 +16,7 @@ Open WebUI (browser) → FastAPI → Ollama
 - Loads active session history from SQLite
 - Injects optional RAG context, client profile, client notes, and session summary into system prompt
 - Persists user/assistant messages
+- LLM tool calling for client management (create client, add notes, look up profiles)
 
 ### 2) RAG Ingestion + Retrieval (`app/rag/`)
 - `ingest.py`: document discovery + chunking (`.txt`, `.md`, `.pdf`)
@@ -34,9 +35,16 @@ Open WebUI (browser) → FastAPI → Ollama
 - Auto-injected into system prompt for conversation continuity
 - Decisions can be updated when revised
 
-### 5) Open WebUI Integration (`app/api/openai_compat.py`)
+### 5) LLM Tool Calling (`app/core/tools.py`, `app/core/llm.py`)
+- Ollama function-calling loop (up to 5 iterations)
+- Tools: `create_client`, `add_client_note`, `get_client`, `list_client_notes`, `list_clients`
+- Tool results sent back to Ollama with `tool_name` per the Ollama API
+- Profile updates merge with existing client data (partial updates do not wipe fields)
+
+### 6) Open WebUI Integration (`app/api/openai_compat.py`)
 - `GET /v1/models`: list available coaching models (coach-assistant-ai)
 - `POST /v1/chat/completions`: OpenAI-compatible chat completion with streaming
+- Streaming resolves tool calls first, then streams the final reply in chunks
 - User identification via `user` field or `X-User-Id` header
 - `Dockerfile` + `docker-compose.yml` for full-stack deployment
 - Coach-branded UI via WEBUI_NAME environment variable
@@ -52,7 +60,7 @@ Open WebUI (browser) → FastAPI → Ollama
    - user profile
    - client notes/stories/decisions
    - previous session summary
-5. Backend calls Ollama and stores reply in SQLite
+5. Backend calls Ollama (with optional tool-calling loop) and stores reply in SQLite
 
 ## Current File Map
 
@@ -66,7 +74,8 @@ app/
 ├── core/
 │   ├── config.py
 │   ├── llm.py
-│   └── prompts.py
+│   ├── prompts.py
+│   └── tools.py
 ├── rag/
 │   ├── ingest.py
 │   └── retriever.py

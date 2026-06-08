@@ -14,6 +14,7 @@ The coaching session is keyed on a *user_id*.  Callers can supply it via:
 3. Defaults to ``"openwebui-user"`` if neither is provided.
 """
 
+import asyncio
 import json
 import time
 import uuid
@@ -26,6 +27,7 @@ from pydantic import BaseModel
 from app.api.chat import build_system_prompt, session_manager, store
 from app.core.config import settings
 from app.core.llm import generate_response
+from app.core.tools import TOOL_DEFINITIONS
 
 router = APIRouter()
 
@@ -94,23 +96,27 @@ async def _stream_and_persist(
     completion_id: str,
     created: int,
 ) -> AsyncGenerator[str, None]:
-    """Yield SSE chunks from Ollama and persist the full reply afterward."""
-    collected: list[str] = []
-
-    token_gen = await generate_response(
-        messages=history, system_prompt=system_prompt, stream=True
+    """Tool-calling + optional streaming response, then persist the full reply."""
+    # Tool-calling is always resolved first (non-streaming) so the agentic loop
+    # can execute multiple tool calls before producing a final answer.
+    full_reply = await generate_response(
+        messages=history,
+        system_prompt=system_prompt,
+        tools=TOOL_DEFINITIONS,
+        store=store,
     )
-    async for token in token_gen:
-        collected.append(token)
-        yield _make_chunk(completion_id, created, content=token)
 
-    full_reply = "".join(collected)
+    # Stream the final reply in small chunks so Open WebUI shows progressive output.
+    chunk_size = 6
+    for i in range(0, len(full_reply), chunk_size):
+        yield _make_chunk(completion_id, created, content=full_reply[i : i + chunk_size])
+        await asyncio.sleep(0)
+
     store.add_message(session_id, "assistant", full_reply)
     session_manager.maybe_update_summary(
         session_id, threshold=settings.summary_trigger_messages
     )
 
-    # Final "stop" chunk + done sentinel
     yield _make_chunk(completion_id, created, finish_reason="stop")
     yield "data: [DONE]\n\n"
 
@@ -172,7 +178,12 @@ async def chat_completions(
             media_type="text/event-stream",
         )
 
-    reply = await generate_response(messages=history, system_prompt=system_prompt)
+    reply = await generate_response(
+        messages=history,
+        system_prompt=system_prompt,
+        tools=TOOL_DEFINITIONS,
+        store=store,
+    )
     store.add_message(session_id, "assistant", reply)
     session_manager.maybe_update_summary(
         session_id, threshold=settings.summary_trigger_messages

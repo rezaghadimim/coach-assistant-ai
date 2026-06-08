@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from app.core.config import settings
 from app.core.llm import generate_response
 from app.core.prompts import LIFE_COACH_SYSTEM_PROMPT
+from app.core.tools import TOOL_DEFINITIONS
 from app.memory import MemoryStore, SessionManager
 from app.models.schemas import ChatRequest, ChatResponse
 from app.rag.retriever import format_retrieval_context, retrieve
@@ -78,6 +79,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         reply = await generate_response(
             messages=history,
             system_prompt=build_system_prompt(request.user_id, request.message),
+            tools=TOOL_DEFINITIONS,
+            store=store,
         )
         store.add_message(session_id, "assistant", reply)
 

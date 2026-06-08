@@ -316,6 +316,22 @@ class MemoryStore:
             for row in rows
         ]
 
+    def list_users(self) -> List[Dict[str, Any]]:
+        """Return all registered users/clients."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, name, profile_json, created_at FROM users ORDER BY created_at DESC"
+            ).fetchall()
+        return [
+            {
+                "user_id": row["user_id"],
+                "name": row["name"],
+                "profile": json.loads(row["profile_json"] or "{}"),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
     def delete_client_note(self, note_id: int) -> bool:
         """Delete a note by id. Returns True if the note existed."""
         with self._connect() as conn:

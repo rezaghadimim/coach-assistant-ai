@@ -31,6 +31,13 @@
 - `Dockerfile` and `docker-compose.yml` for running the full stack
 - Phase 4 tests
 
+### Client Management Tools (Chat)
+- Ollama tool-calling loop in `app/core/llm.py`
+- Five client-management tools in `app/core/tools.py`
+- Wired into `/api/chat` and `/v1/chat/completions`
+- Profile merge on partial `create_client` updates
+- Tests in `tests/test_tools.py`
+
 ## Remaining
 
 ### Phase 5: Fine-tuning (LoRA) — Behavior Adaptation

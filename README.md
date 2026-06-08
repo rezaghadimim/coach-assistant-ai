@@ -18,6 +18,7 @@ Runs locally using open-source LLMs.
 ## Key Features
 
 - **Client Documentation**: Each conversation serves as a living record for each client
+- **Chat-Based Client Management**: Register clients, save notes, and look up profiles via natural language in chat
 - **Story & Decision Tracking**: Add notes, stories, and decisions per client — always accessible
 - **Session Continuity**: Coach references past sessions, notes, and decisions automatically
 - **Actionable Coaching**: Direct coaching advice using GROW model and other frameworks

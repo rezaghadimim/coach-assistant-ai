@@ -116,13 +116,9 @@ class Phase4OpenAICompatTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_chat_completion_streaming_returns_sse_events(self) -> None:
-        async def _fake_stream(*_args, **_kwargs):
-            for token in ["Hello", " there", "!"]:
-                yield token
-
         with patch(
             "app.api.openai_compat.generate_response",
-            new=AsyncMock(return_value=_fake_stream()),
+            new=AsyncMock(return_value="Hello there!"),
         ):
             response = self.client.post(
                 "/v1/chat/completions",
@@ -141,13 +137,9 @@ class Phase4OpenAICompatTests(unittest.TestCase):
         self.assertTrue(any("[DONE]" in line for line in lines))
 
     def test_chat_completion_streaming_chunks_contain_content(self) -> None:
-        async def _fake_stream(*_args, **_kwargs):
-            for token in ["Think", " about", " your", " goal."]:
-                yield token
-
         with patch(
             "app.api.openai_compat.generate_response",
-            new=AsyncMock(return_value=_fake_stream()),
+            new=AsyncMock(return_value="Think about your goal."),
         ):
             response = self.client.post(
                 "/v1/chat/completions",

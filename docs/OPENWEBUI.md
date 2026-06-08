@@ -10,6 +10,7 @@ backend while retaining all coaching features:
 - RAG context injection (Phase 2)
 - Per-user SQLite session memory, client notes, and summaries (Phase 3)
 - Streaming and non-streaming responses
+- Chat-based client management via LLM tool calling (same as `/api/chat`)
 
 The UI is branded as **Coach Assistant AI** with `WEBUI_NAME` set in docker-compose.
 
@@ -76,6 +77,16 @@ curl http://localhost:8000/v1/chat/completions \
   }'
 ```
 
+## Streaming Behavior
+
+When `"stream": true`, the backend first runs the full tool-calling loop
+(non-streaming) so client-management actions complete before any text is sent.
+The final coaching reply is then streamed to Open WebUI in small chunks.
+
+This means there may be a pause before the first token when the model invokes
+tools (e.g. saving a client note), but the streamed content is always the
+complete, tool-resolved answer.
+
 ## Architecture
 
 ```text
@@ -85,6 +96,7 @@ Browser → Open WebUI "Coach Assistant AI" (port 3000)
               ├─ /v1/chat/completions  ← OpenAI-compat
               ├─ RAG retrieval
               ├─ SQLite memory + client notes
+              ├─ LLM tool calling (client CRUD)
               └─ Ollama LLM
 ```
 
