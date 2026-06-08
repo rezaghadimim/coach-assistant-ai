@@ -332,10 +332,52 @@ class MemoryStore:
             for row in rows
         ]
 
+    def get_client_note(self, note_id: int) -> Optional[Dict[str, Any]]:
+        """Return one note by id, or None if it does not exist."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, user_id, session_id, note_type, title, content,
+                       created_at, updated_at
+                FROM client_notes
+                WHERE id = ?
+                """,
+                (note_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "user_id": row["user_id"],
+            "session_id": row["session_id"],
+            "note_type": row["note_type"],
+            "title": row["title"],
+            "content": row["content"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
     def delete_client_note(self, note_id: int) -> bool:
         """Delete a note by id. Returns True if the note existed."""
         with self._connect() as conn:
             cursor = conn.execute(
                 "DELETE FROM client_notes WHERE id = ?", (note_id,)
             )
+            return cursor.rowcount > 0
+
+    def delete_user(self, user_id: str) -> bool:
+        """Delete a client and their notes. Sessions/messages are kept orphaned-free."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM client_notes WHERE user_id = ?", (user_id,))
+            conn.execute(
+                """
+                DELETE FROM messages
+                WHERE session_id IN (
+                    SELECT session_id FROM sessions WHERE user_id = ?
+                )
+                """,
+                (user_id,),
+            )
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            cursor = conn.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
             return cursor.rowcount > 0

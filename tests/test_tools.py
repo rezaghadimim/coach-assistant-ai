@@ -6,8 +6,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.api.chat import reset_runtime_state, store
+from app.core.confirmations import is_user_confirmation, parse_pending_write
 from app.core.llm import _generate_with_tools
-from app.core.tools import TOOL_DEFINITIONS, execute_tool
+from app.core.tools import TOOL_DEFINITIONS, execute_tool, sanitize_write_confirmation
 
 
 class ExecuteToolTests(unittest.TestCase):
@@ -38,6 +39,7 @@ class ExecuteToolTests(unittest.TestCase):
             store,
         )
         self.assertIn("pending confirmation", result)
+        self.assertIn("Are you sure", result)
         self.assertIn("Email: ali@example.com", result)
         self.assertIsNone(store.get_user("ali"))
 
@@ -108,6 +110,7 @@ class ExecuteToolTests(unittest.TestCase):
             store,
         )
         self.assertIn("pending confirmation", result)
+        self.assertIn("Are you sure", result)
         self.assertIn("Ali wants to change careers.", result)
         self.assertEqual(len(store.get_client_notes("ali")), 0)
 
@@ -192,6 +195,137 @@ class ExecuteToolTests(unittest.TestCase):
         result = execute_tool("get_client", {"client_id": "Ali Reza"}, store)
         self.assertIn("Email: ali@test.com", result)
 
+    def test_create_client_resolves_display_name_on_update(self) -> None:
+        execute_tool(
+            "create_client",
+            {
+                "client_id": "ali",
+                "name": "Ali Reza",
+                "email": "ali@example.com",
+                "confirmed": True,
+            },
+            store,
+        )
+        preview = execute_tool(
+            "create_client",
+            {
+                "client_id": "Ali Reza",
+                "name": "Ali Reza",
+                "phone": "555-9999",
+            },
+            store,
+        )
+        self.assertIn("pending confirmation", preview)
+        saved = execute_tool(
+            "create_client",
+            {
+                "client_id": "Ali Reza",
+                "name": "Ali Reza",
+                "phone": "555-9999",
+                "confirmed": True,
+            },
+            store,
+        )
+        self.assertIn("saved successfully", saved)
+        user = store.get_user("ali")
+        self.assertEqual(user["profile"]["phone"], "555-9999")
+        self.assertEqual(user["profile"]["email"], "ali@example.com")
+
+    def test_list_client_notes(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        execute_tool(
+            "add_client_note",
+            {
+                "client_id": "ali",
+                "content": "Career change goal",
+                "note_type": "goal",
+                "confirmed": True,
+            },
+            store,
+        )
+        result = execute_tool(
+            "list_client_notes",
+            {"client_id": "ali", "note_type": "goal"},
+            store,
+        )
+        self.assertIn("Career change goal", result)
+
+    def test_update_client_note_requires_confirmation(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        add_result = execute_tool(
+            "add_client_note",
+            {
+                "client_id": "ali",
+                "content": "Original text",
+                "note_type": "general",
+                "confirmed": True,
+            },
+            store,
+        )
+        note_id = int(add_result.split("ID: ")[1].split(")")[0])
+        preview = execute_tool(
+            "update_client_note",
+            {"note_id": note_id, "content": "Updated text"},
+            store,
+        )
+        self.assertIn("pending confirmation", preview)
+        saved = execute_tool(
+            "update_client_note",
+            {"note_id": note_id, "content": "Updated text", "confirmed": True},
+            store,
+        )
+        self.assertIn("updated", saved)
+
+    def test_delete_client_note_requires_confirmation(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        add_result = execute_tool(
+            "add_client_note",
+            {
+                "client_id": "ali",
+                "content": "To delete",
+                "confirmed": True,
+            },
+            store,
+        )
+        note_id = int(add_result.split("ID: ")[1].split(")")[0])
+        preview = execute_tool("delete_client_note", {"note_id": note_id}, store)
+        self.assertIn("pending confirmation", preview)
+        deleted = execute_tool(
+            "delete_client_note",
+            {"note_id": note_id, "confirmed": True},
+            store,
+        )
+        self.assertIn("deleted", deleted)
+        self.assertIsNone(store.get_client_note(note_id))
+
+    def test_delete_client_requires_confirmation(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        preview = execute_tool("delete_client", {"client_id": "Ali"}, store)
+        self.assertIn("pending confirmation", preview)
+        deleted = execute_tool(
+            "delete_client",
+            {"client_id": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertIn("deleted", deleted)
+        self.assertIsNone(store.get_user("ali"))
+
     def test_get_client_full_includes_notes(self) -> None:
         execute_tool(
             "create_client",
@@ -218,7 +352,153 @@ class ExecuteToolTests(unittest.TestCase):
         self.assertIn("Follow up about career change next week.", result)
 
 
+class ConfirmationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        reset_runtime_state()
+
+    def test_is_user_confirmation(self) -> None:
+        self.assertTrue(is_user_confirmation("yes"))
+        self.assertTrue(is_user_confirmation("confirm"))
+        self.assertFalse(is_user_confirmation("add note for Ali"))
+
+    def test_sanitize_write_confirmation_strips_premature_confirm(self) -> None:
+        sanitized = sanitize_write_confirmation(
+            "add_client_note",
+            {
+                "client_id": "ali",
+                "content": "Test",
+                "confirmed": True,
+            },
+            "Add a note for Ali: Test",
+        )
+        self.assertFalse(sanitized.get("confirmed"))
+
+    def test_parse_pending_add_note_preview(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "mina", "name": "Mina", "confirmed": True},
+            store,
+        )
+        preview = execute_tool(
+            "add_client_note",
+            {"client_id": "mina", "content": "She has two children"},
+            store,
+        )
+        pending = parse_pending_write([{"role": "assistant", "content": preview}])
+        self.assertEqual(
+            pending,
+            (
+                "add_client_note",
+                {
+                    "client_id": "mina",
+                    "content": "She has two children",
+                    "note_type": "general",
+                },
+            ),
+        )
+
+
 class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_write_preview_returns_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            execute_tool(
+                "create_client",
+                {"client_id": "mina", "name": "Mina", "confirmed": True},
+                test_store,
+            )
+            call_count = 0
+
+            async def fake_post(_url: str, *, json: dict) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                body = {
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "add_client_note",
+                                    "arguments": {
+                                        "client_id": "mina",
+                                        "content": "She has two children",
+                                        "confirmed": True,
+                                    },
+                                }
+                            }
+                        ],
+                    }
+                }
+                response = MagicMock()
+                response.raise_for_status = MagicMock()
+                response.json = MagicMock(return_value=body)
+                return response
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    [
+                        {
+                            "role": "user",
+                            "content": "Add note for Mina: she has two children",
+                        }
+                    ],
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            self.assertEqual(call_count, 1)
+            self.assertIn("pending confirmation", reply)
+            self.assertIn("She has two children", reply)
+            self.assertEqual(len(test_store.get_client_notes("mina")), 0)
+
+    async def test_user_yes_replays_pending_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            execute_tool(
+                "create_client",
+                {"client_id": "mina", "name": "Mina", "confirmed": True},
+                test_store,
+            )
+            preview = execute_tool(
+                "add_client_note",
+                {"client_id": "mina", "content": "She has two children"},
+                test_store,
+            )
+            history = [
+                {
+                    "role": "user",
+                    "content": "Add note for Mina: she has two children",
+                },
+                {"role": "assistant", "content": preview},
+                {"role": "user", "content": "yes"},
+            ]
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    history,
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            mock_client.post.assert_not_called()
+            self.assertIn("added for client", reply)
+            notes = test_store.get_client_notes("mina")
+            self.assertEqual(len(notes), 1)
+            self.assertEqual(notes[0]["content"], "She has two children")
+
     async def test_tool_results_include_tool_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             test_store = type(store)(str(Path(tmp) / "test.db"))
@@ -274,58 +554,6 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             ]
             self.assertEqual(len(tool_messages), 1)
             self.assertEqual(tool_messages[0]["tool_name"], "list_clients")
-
-    async def test_client_mention_injects_context_into_system_prompt(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            test_store = type(store)(str(Path(tmp) / "test.db"))
-            execute_tool(
-                "create_client",
-                {
-                    "client_id": "ali",
-                    "name": "Ali",
-                    "email": "ali@example.com",
-                    "confirmed": True,
-                },
-                test_store,
-            )
-            captured_payloads: list[dict] = []
-
-            async def fake_post(_url: str, *, json: dict) -> MagicMock:
-                captured_payloads.append(json)
-                body = {
-                    "message": {
-                        "role": "assistant",
-                        "content": "Focus on Ali's stated goals and check in on progress.",
-                    }
-                }
-                response = MagicMock()
-                response.raise_for_status = MagicMock()
-                response.json = MagicMock(return_value=body)
-                return response
-
-            mock_client = MagicMock()
-            mock_client.post = AsyncMock(side_effect=fake_post)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-
-            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
-                reply = await _generate_with_tools(
-                    [
-                        {
-                            "role": "user",
-                            "content": "How can we best support Ali today?",
-                        }
-                    ],
-                    "system",
-                    TOOL_DEFINITIONS,
-                    test_store,
-                )
-
-            self.assertIn("Focus on Ali's stated goals", reply)
-            system_prompt = captured_payloads[0]["messages"][0]["content"]
-            self.assertIn("Referenced Client Record", system_prompt)
-            self.assertIn("Email: ali@example.com", system_prompt)
-
 
 if __name__ == "__main__":
     unittest.main()

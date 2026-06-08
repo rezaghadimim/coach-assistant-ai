@@ -5,8 +5,31 @@ from typing import Any, Optional
 from app.memory.store import MemoryStore
 
 _PROFILE_FIELDS = ("email", "phone", "age", "occupation", "background")
-_CONFIRM_HINT = (
-    "Ask the coach to confirm, then call the same tool again with confirmed=true."
+_CONFIRM_CLIENT_HINT = (
+    "Are you sure you want to save this client? Reply yes or confirm to save."
+)
+_CONFIRM_NOTE_HINT = (
+    "Are you sure you want to save this note? Reply yes or confirm to save."
+)
+_CONFIRM_UPDATE_NOTE_HINT = (
+    "Are you sure you want to update this note? Reply yes or confirm to save."
+)
+_CONFIRM_DELETE_NOTE_HINT = (
+    "Are you sure you want to delete this note? Reply yes or confirm to delete."
+)
+_CONFIRM_DELETE_CLIENT_HINT = (
+    "Are you sure you want to delete this client and all their notes? "
+    "Reply yes or confirm to delete."
+)
+_VALID_NOTE_TYPES = frozenset({"general", "story", "decision", "goal", "progress"})
+_WRITE_TOOLS = frozenset(
+    {
+        "create_client",
+        "add_client_note",
+        "update_client_note",
+        "delete_client_note",
+        "delete_client",
+    }
 )
 
 
@@ -40,6 +63,21 @@ def _format_client_profile(user: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def sanitize_write_confirmation(
+    tool_name: str,
+    arguments: dict[str, Any],
+    last_user: str,
+) -> dict[str, Any]:
+    """Ignore premature confirmed=true unless the user explicitly approved."""
+    if tool_name not in _WRITE_TOOLS or not _is_confirmed(arguments):
+        return arguments
+    from app.core.confirmations import is_user_confirmation
+
+    if is_user_confirmation(last_user):
+        return arguments
+    return {**arguments, "confirmed": False}
+
+
 def _is_confirmed(arguments: dict[str, Any]) -> bool:
     value = arguments.get("confirmed")
     if value is True:
@@ -61,7 +99,7 @@ def _format_create_client_preview(
     return (
         f"⏳ {action} — pending confirmation (not saved yet).\n\n"
         f"{_format_client_profile(preview_user)}\n\n"
-        f"{_CONFIRM_HINT}"
+        f"{_CONFIRM_CLIENT_HINT}"
     )
 
 
@@ -80,7 +118,7 @@ def _format_add_note_preview(
         lines.append(f"Title: {title}")
     lines.append(f"Content: {content}")
     lines.append("")
-    lines.append(_CONFIRM_HINT)
+    lines.append(_CONFIRM_NOTE_HINT)
     return "\n".join(lines)
 
 
@@ -95,6 +133,58 @@ def _format_client_notes(notes: list[dict[str, Any]]) -> str:
         lines.append(f"- {header} ({note['updated_at']})")
         lines.append(f"  {note['content']}")
     return "\n".join(lines)
+
+
+def _normalize_note_type(note_type: str) -> str:
+    normalized = note_type.strip().lower()
+    return normalized if normalized in _VALID_NOTE_TYPES else "general"
+
+
+def _format_update_note_preview(
+    note_id: int,
+    client_id: str,
+    content: str,
+    note_type: str,
+    title: Optional[str],
+) -> str:
+    lines = [
+        "⏳ Update note — pending confirmation (not saved yet).",
+        f"Note ID: {note_id}",
+        f"Client: {client_id}",
+        f"Type: {note_type}",
+    ]
+    if title:
+        lines.append(f"Title: {title}")
+    lines.append(f"Content: {content}")
+    lines.append("")
+    lines.append(_CONFIRM_UPDATE_NOTE_HINT)
+    return "\n".join(lines)
+
+
+def _format_delete_note_preview(note_id: int, client_id: str, note: dict[str, Any]) -> str:
+    header = f"[{note['note_type'].upper()}]"
+    if note.get("title"):
+        header += f" {note['title']}"
+    return (
+        "⏳ Delete note — pending confirmation (not deleted yet).\n\n"
+        f"Note ID: {note_id}\n"
+        f"Client: {client_id}\n"
+        f"Type: {note['note_type']}\n"
+        f"Content: {note['content']}\n\n"
+        f"{_CONFIRM_DELETE_NOTE_HINT}"
+    )
+
+
+def _format_delete_client_preview(user: dict[str, Any], note_count: int) -> str:
+    name = user.get("name") or user["user_id"]
+    return (
+        "⏳ Delete client — pending confirmation (not deleted yet).\n\n"
+        f"Client ID: {user['user_id']}\n"
+        f"Name: {name}\n"
+        f"Notes on file: {note_count}\n\n"
+        f"{_CONFIRM_DELETE_CLIENT_HINT}"
+    )
+
 
 TOOL_DEFINITIONS = [
     {
@@ -118,7 +208,10 @@ TOOL_DEFINITIONS = [
                     },
                     "client_id": {
                         "type": "string",
-                        "description": "Short unique identifier for the client (e.g. 'ali', 'sara-001'). Use lowercase, no spaces.",
+                        "description": (
+                            "Client identifier or display name (e.g. 'ali' or 'Ali'). "
+                            "For new clients use a short lowercase id."
+                        ),
                     },
                     "name": {"type": "string", "description": "Full name of the client"},
                     "phone": {"type": "string", "description": "Phone number"},
@@ -155,7 +248,9 @@ TOOL_DEFINITIONS = [
                     },
                     "client_id": {
                         "type": "string",
-                        "description": "Client identifier (must already exist)",
+                        "description": (
+                            "Client identifier or display name (must already exist)"
+                        ),
                     },
                     "content": {
                         "type": "string",
@@ -236,7 +331,10 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "client_id": {
                         "type": "string",
-                        "description": "Client identifier",
+                        "description": (
+                            "Client identifier or display name "
+                            "(e.g. 'ali' or 'Ali')"
+                        ),
                     },
                     "note_type": {
                         "type": "string",
@@ -256,6 +354,69 @@ TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_client_note",
+            "description": (
+                "Update an existing client note by id. Always preview first, then "
+                "call again with confirmed=true after the coach approves."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "confirmed": {"type": "boolean"},
+                    "note_id": {"type": "integer", "description": "Note id to update"},
+                    "content": {"type": "string", "description": "New note text"},
+                    "note_type": {
+                        "type": "string",
+                        "enum": ["general", "story", "decision", "goal", "progress"],
+                    },
+                    "title": {"type": "string"},
+                },
+                "required": ["note_id", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_client_note",
+            "description": (
+                "Delete a client note by id. Always preview first, then call again "
+                "with confirmed=true after the coach approves."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "confirmed": {"type": "boolean"},
+                    "note_id": {"type": "integer", "description": "Note id to delete"},
+                },
+                "required": ["note_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_client",
+            "description": (
+                "Delete a client and all their notes. Always preview first, then "
+                "call again with confirmed=true after the coach approves."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "confirmed": {"type": "boolean"},
+                    "client_id": {
+                        "type": "string",
+                        "description": "Client identifier or display name to delete",
+                    },
+                },
+                "required": ["client_id"],
+            },
+        },
+    },
 ]
 
 
@@ -263,9 +424,15 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
     """Execute a tool call and return the result as a string."""
     try:
         if name == "create_client":
-            client_id = arguments["client_id"]
-            client_name = arguments["name"]
+            client_ref = arguments["client_id"]
+            resolved_id = _resolve_client_id(store, client_ref)
+            client_id = resolved_id or client_ref.strip()
             existing = store.get_user(client_id)
+            client_name = (
+                arguments.get("name")
+                or (existing or {}).get("name")
+                or client_ref
+            )
             existing_profile = (existing or {}).get("profile") or {}
             updates = {
                 k: v
@@ -291,7 +458,7 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
                     f"❌ Client '{client_ref}' not found. "
                     "Please create the client first using create_client."
                 )
-            note_type = arguments.get("note_type", "general")
+            note_type = _normalize_note_type(arguments.get("note_type", "general"))
             title = arguments.get("title")
             content = arguments["content"]
             if not _is_confirmed(arguments):
@@ -337,6 +504,62 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
                 f"- {u['name'] or u['user_id']} (ID: {u['user_id']})" for u in users
             ]
             return "Registered clients:\n" + "\n".join(lines)
+
+        if name == "update_client_note":
+            note_id = int(arguments["note_id"])
+            note = store.get_client_note(note_id)
+            if note is None:
+                return f"❌ Note '{note_id}' not found."
+            content = arguments["content"]
+            note_type = _normalize_note_type(
+                arguments.get("note_type") or note["note_type"]
+            )
+            title = arguments["title"] if "title" in arguments else note.get("title")
+            if not _is_confirmed(arguments):
+                return _format_update_note_preview(
+                    note_id,
+                    note["user_id"],
+                    content,
+                    note_type,
+                    title,
+                )
+            ok = store.update_client_note(
+                note_id,
+                content,
+                title=title,
+                note_type=note_type,
+            )
+            if not ok:
+                return f"❌ Note '{note_id}' not found."
+            return f"✅ Note (ID: {note_id}) updated for client '{note['user_id']}'."
+
+        if name == "delete_client_note":
+            note_id = int(arguments["note_id"])
+            note = store.get_client_note(note_id)
+            if note is None:
+                return f"❌ Note '{note_id}' not found."
+            if not _is_confirmed(arguments):
+                return _format_delete_note_preview(note_id, note["user_id"], note)
+            if not store.delete_client_note(note_id):
+                return f"❌ Note '{note_id}' not found."
+            return f"✅ Note (ID: {note_id}) deleted for client '{note['user_id']}'."
+
+        if name == "delete_client":
+            client_ref = arguments["client_id"]
+            resolved_id = _resolve_client_id(store, client_ref)
+            if resolved_id is None:
+                return f"❌ Client '{client_ref}' not found."
+            user = store.get_user(resolved_id)
+            assert user is not None
+            note_count = len(store.get_client_notes(resolved_id))
+            if not _is_confirmed(arguments):
+                return _format_delete_client_preview(user, note_count)
+            if not store.delete_user(resolved_id):
+                return f"❌ Client '{client_ref}' not found."
+            return (
+                f"✅ Client '{user.get('name') or resolved_id}' "
+                f"(ID: {resolved_id}) and {note_count} note(s) deleted."
+            )
 
         return f"❌ Unknown tool: {name}"
 

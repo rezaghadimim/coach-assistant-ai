@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Optional
 
+from app.core.confirmations import is_user_confirmation, parse_pending_write
 from app.memory.store import MemoryStore
+
+logger = logging.getLogger(__name__)
 
 _POSSESSIVE_LOOKUP = re.compile(
     r"(?:get|show|give|fetch|retrieve|pull|tell)\s+(?:me\s+)?"
@@ -39,13 +43,6 @@ _CREATE_NAMED_CLIENT = re.compile(
     r"(?:client|patient)\s+(?:named\s+|called\s+)?(.+?)(?:\s+profile)?\s*$",
     re.IGNORECASE,
 )
-_CONFIRM = re.compile(
-    r"^(?:yes|yeah|yep|confirm(?:ed)?|save\s+it|go\s+ahead|ok(?:ay)?|do\s+it|"
-    r"please\s+save|sounds\s+good|that(?:'s| is)\s+(?:fine|correct|right))\.?\s*$",
-    re.IGNORECASE,
-)
-_PENDING_CLIENT_ID = re.compile(r"^Client ID:\s*(.+)$", re.MULTILINE)
-_PENDING_CLIENT_NAME = re.compile(r"^Name:\s*(.+)$", re.MULTILINE)
 
 _PREFIXES_TO_STRIP = re.compile(r"^(?:the|patient|client)\s+", re.IGNORECASE)
 _PRONOUN_PLACEHOLDERS = frozenset(
@@ -101,27 +98,8 @@ def detect_create_client(message: str) -> Optional[dict[str, str]]:
 
 
 def detect_confirm(message: str) -> bool:
-    return bool(_CONFIRM.match(message.strip()))
-
-
-def _parse_pending_create(messages: list[dict]) -> Optional[dict[str, str]]:
-    """Read client_id/name from the most recent create-client preview."""
-    for message in reversed(messages):
-        if message.get("role") != "assistant":
-            continue
-        content = message.get("content", "")
-        if not isinstance(content, str) or "pending confirmation" not in content:
-            continue
-        client_id_match = _PENDING_CLIENT_ID.search(content)
-        name_match = _PENDING_CLIENT_NAME.search(content)
-        if not client_id_match or not name_match:
-            continue
-        client_id = client_id_match.group(1).strip()
-        name = name_match.group(1).strip()
-        if name == "(not set)":
-            name = client_id
-        return {"client_id": client_id, "name": name}
-    return None
+    """Backward-compatible alias for the shared confirmation detector."""
+    return is_user_confirmation(message)
 
 
 def _extract_tool_payload(data: dict[str, Any]) -> Optional[tuple[str, dict[str, Any]]]:
@@ -209,17 +187,63 @@ def detect_client_mention(message: str, store: MemoryStore) -> Optional[str]:
 
 
 def try_direct_client_query(message: str, store: MemoryStore) -> Optional[str]:
-    """Run a read-only client query directly. Returns None if not a lookup command."""
+    """Run a read-only client query directly. Returns None if not a lookup command.
+
+    Tries fast regex patterns first, then falls back to the offline intent
+    knowledge base. Returns ``None`` (deferring to the LLM) whenever neither is
+    confident, or when a client-scoped intent does not name a known client.
+    """
     from app.core.tools import execute_tool
 
     if detect_list_clients(message):
+        logger.debug("client_intents: regex list_clients matched")
         return execute_tool("list_clients", {}, store)
 
     client_ref = detect_client_lookup(message)
     if client_ref:
+        logger.debug("client_intents: regex lookup matched ref=%r", client_ref)
         return execute_tool("get_client_full", {"client_id": client_ref}, store)
 
-    return None
+    return _kb_client_query(message, store)
+
+
+def _kb_client_query(message: str, store: MemoryStore) -> Optional[str]:
+    """Knowledge-base fallback for read-only client queries."""
+    from app.core.intent_kb import classify
+    from app.core.tools import execute_tool
+
+    match = classify(message)
+    if match is None:
+        logger.debug("client_intents: KB deferred (no confident intent)")
+        return None
+
+    if not match.requires_client:
+        logger.debug(
+            "client_intents: KB matched intent=%s score=%.2f", match.intent, match.score
+        )
+        return execute_tool(match.tool, {}, store)
+
+    client_id = detect_client_mention(message, store)
+    if client_id is None:
+        # Confident about the intent but cannot tie it to a known client;
+        # defer to the LLM rather than guessing.
+        logger.debug(
+            "client_intents: KB intent=%s but no known client mentioned; deferring",
+            match.intent,
+        )
+        return None
+
+    params: dict[str, Any] = {"client_id": client_id}
+    if match.note_type:
+        params["note_type"] = match.note_type
+    logger.debug(
+        "client_intents: KB matched intent=%s score=%.2f client=%s note_type=%s",
+        match.intent,
+        match.score,
+        client_id,
+        match.note_type,
+    )
+    return execute_tool(match.tool, params, store)
 
 
 def try_direct_client_action(
@@ -232,14 +256,11 @@ def try_direct_client_action(
 
     history = messages or []
 
-    if detect_confirm(message):
-        pending = _parse_pending_create(history)
+    if is_user_confirmation(message):
+        pending = parse_pending_write(history)
         if pending:
-            return execute_tool(
-                "create_client",
-                {**pending, "confirmed": True},
-                store,
-            )
+            tool_name, params = pending
+            return execute_tool(tool_name, {**params, "confirmed": True}, store)
 
     create_args = detect_create_client(message)
     if create_args:

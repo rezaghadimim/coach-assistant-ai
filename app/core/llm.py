@@ -156,7 +156,7 @@ async def _generate_with_tools(
         try_direct_client_action,
     )
     from app.core.scope import is_openwebui_task, scope_guard
-    from app.core.tools import execute_tool  # avoid circular import
+    from app.core.tools import execute_tool, sanitize_write_confirmation
 
     last_user = _last_user_message(messages)
     # Open WebUI task prompts (follow-up suggestions, title, tags) are passed
@@ -171,7 +171,7 @@ async def _generate_with_tools(
 
         direct = try_direct_client_action(last_user, store, messages)
         if direct is not None:
-            if direct.startswith("⏳") or direct.startswith("✅"):
+            if direct.startswith(("⏳", "✅", "❌")):
                 return direct
             return _format_direct_lookup_reply(direct)
 
@@ -209,7 +209,7 @@ async def _generate_with_tools(
                     full_messages.append(
                         {"role": "tool", "tool_name": tool_name, "content": result}
                     )
-                    if result.startswith("⏳") or result.startswith("✅"):
+                    if result.startswith(("⏳", "✅", "❌")):
                         return result
                     continue
 
@@ -217,7 +217,7 @@ async def _generate_with_tools(
                 if not content.strip() and last_user:
                     fallback = try_direct_client_action(last_user, store, messages)
                     if fallback is not None:
-                        if fallback.startswith("⏳") or fallback.startswith("✅"):
+                        if fallback.startswith(("⏳", "✅", "❌")):
                             return fallback
                         return _format_direct_lookup_reply(fallback)
                     return _empty_reply_fallback(last_user, store)
@@ -232,10 +232,17 @@ async def _generate_with_tools(
                 arguments = (
                     raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
                 )
+                arguments = sanitize_write_confirmation(
+                    tool_name, arguments, last_user
+                )
                 result = execute_tool(tool_name, arguments, store)
                 full_messages.append(
                     {"role": "tool", "tool_name": tool_name, "content": result}
                 )
+                # Stop after write previews, outcomes, and errors so the coach
+                # must reply yes/confirm before anything is saved or deleted.
+                if result.startswith(("⏳", "✅", "❌")):
+                    return result
 
     return "I was unable to complete the action within the allowed steps."
 
