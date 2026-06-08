@@ -12,6 +12,47 @@ if TYPE_CHECKING:
     from app.memory.store import MemoryStore
 
 _MAX_TOOL_ITERATIONS = 5
+_JSON_WRAPPER_KEYS = ("response", "answer", "content", "message")
+_FOLLOW_UP_ONLY_KEYS = frozenset({"follow_ups", "followups", "follow_up_questions"})
+
+
+def _last_user_message(messages: list[dict]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content", "")
+            return content if isinstance(content, str) else ""
+    return ""
+
+
+def _sanitize_assistant_reply(content: str) -> str:
+    """Strip JSON wrappers some models emit instead of plain text."""
+    stripped = content.strip()
+    if not stripped.startswith("{"):
+        return content
+
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        return content
+
+    if not isinstance(data, dict):
+        return content
+
+    for key in _JSON_WRAPPER_KEYS:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    if set(data.keys()) <= _FOLLOW_UP_ONLY_KEYS:
+        return ""
+
+    return content
+
+
+def _format_direct_lookup_reply(tool_result: str) -> str:
+    if tool_result.startswith("❌"):
+        return tool_result
+    return f"Here are the details on file:\n\n{tool_result}"
 
 
 async def generate_response(
@@ -66,7 +107,14 @@ async def _generate_with_tools(
     store: "MemoryStore",
 ) -> str:
     """Agentic tool-calling loop: execute tools until the LLM gives a final reply."""
+    from app.core.client_intents import try_direct_client_query
     from app.core.tools import execute_tool  # avoid circular import
+
+    last_user = _last_user_message(messages)
+    if last_user:
+        direct = try_direct_client_query(last_user, store)
+        if direct is not None:
+            return _format_direct_lookup_reply(direct)
 
     full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
 
@@ -84,7 +132,18 @@ async def _generate_with_tools(
             tool_calls = assistant_msg.get("tool_calls") or []
 
             if not tool_calls:
-                return assistant_msg.get("content", "")
+                content = _sanitize_assistant_reply(
+                    assistant_msg.get("content", "")
+                )
+                if not content.strip() and last_user:
+                    fallback = try_direct_client_query(last_user, store)
+                    if fallback is not None:
+                        return _format_direct_lookup_reply(fallback)
+                    return (
+                        "I'm not sure I understood that. "
+                        "Could you please provide more details or specify the client's name?"
+                    )
+                return content
 
             full_messages.append(assistant_msg)
 

@@ -1,9 +1,95 @@
 """LLM tool definitions and executor for client management via chat."""
 
-import json
-from typing import Any
+from typing import Any, Optional
 
 from app.memory.store import MemoryStore
+
+_PROFILE_FIELDS = ("email", "phone", "age", "occupation", "background")
+_CONFIRM_HINT = (
+    "Ask the coach to confirm, then call the same tool again with confirmed=true."
+)
+
+
+def _resolve_client_id(store: MemoryStore, client_id_or_name: str) -> Optional[str]:
+    """Match a client by exact id, case-insensitive id, or display name."""
+    if store.get_user(client_id_or_name):
+        return client_id_or_name
+
+    needle = client_id_or_name.strip().lower()
+    for user in store.list_users():
+        if user["user_id"].lower() == needle:
+            return user["user_id"]
+        name = (user.get("name") or "").strip().lower()
+        if name and name == needle:
+            return user["user_id"]
+    return None
+
+
+def _format_client_profile(user: dict[str, Any]) -> str:
+    profile = user.get("profile") or {}
+    lines = [
+        f"Client ID: {user['user_id']}",
+        f"Name: {user.get('name') or '(not set)'}",
+    ]
+    for field in _PROFILE_FIELDS:
+        value = profile.get(field)
+        label = field.capitalize()
+        lines.append(
+            f"{label}: {value}" if value not in (None, "") else f"{label}: (not set)"
+        )
+    return "\n".join(lines)
+
+
+def _is_confirmed(arguments: dict[str, Any]) -> bool:
+    return arguments.get("confirmed") is True
+
+
+def _format_create_client_preview(
+    client_id: str,
+    client_name: str,
+    profile: dict[str, Any],
+    *,
+    is_update: bool,
+) -> str:
+    action = "Update client" if is_update else "Create client"
+    preview_user = {"user_id": client_id, "name": client_name, "profile": profile}
+    return (
+        f"⏳ {action} — pending confirmation (not saved yet).\n\n"
+        f"{_format_client_profile(preview_user)}\n\n"
+        f"{_CONFIRM_HINT}"
+    )
+
+
+def _format_add_note_preview(
+    client_id: str,
+    content: str,
+    note_type: str,
+    title: Optional[str],
+) -> str:
+    lines = [
+        "⏳ Add note — pending confirmation (not saved yet).",
+        f"Client: {client_id}",
+        f"Type: {note_type}",
+    ]
+    if title:
+        lines.append(f"Title: {title}")
+    lines.append(f"Content: {content}")
+    lines.append("")
+    lines.append(_CONFIRM_HINT)
+    return "\n".join(lines)
+
+
+def _format_client_notes(notes: list[dict[str, Any]]) -> str:
+    if not notes:
+        return "No notes on file."
+    lines: list[str] = []
+    for note in notes:
+        header = f"[{note['note_type'].upper()}]"
+        if note.get("title"):
+            header += f" {note['title']}"
+        lines.append(f"- {header} ({note['updated_at']})")
+        lines.append(f"  {note['content']}")
+    return "\n".join(lines)
 
 TOOL_DEFINITIONS = [
     {
@@ -12,12 +98,19 @@ TOOL_DEFINITIONS = [
             "name": "create_client",
             "description": (
                 "Create or update a client (patient/visitor) profile. "
-                "Use this when the coach wants to register a new client or update "
-                "an existing client's contact information or background details."
+                "Always call first without confirmed to preview, then again with "
+                "confirmed=true only after the coach explicitly approves."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "confirmed": {
+                        "type": "boolean",
+                        "description": (
+                            "Set to true only after the coach explicitly confirms "
+                            "the preview. Omit or false on the first call."
+                        ),
+                    },
                     "client_id": {
                         "type": "string",
                         "description": "Short unique identifier for the client (e.g. 'ali', 'sara-001'). Use lowercase, no spaces.",
@@ -42,12 +135,19 @@ TOOL_DEFINITIONS = [
             "name": "add_client_note",
             "description": (
                 "Add a note, story, goal, decision, or progress update for a client. "
-                "Use this to document important information about a client that should "
-                "be remembered across sessions."
+                "Always call first without confirmed to preview, then again with "
+                "confirmed=true only after the coach explicitly approves."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "confirmed": {
+                        "type": "boolean",
+                        "description": (
+                            "Set to true only after the coach explicitly confirms "
+                            "the preview. Omit or false on the first call."
+                        ),
+                    },
                     "client_id": {
                         "type": "string",
                         "description": "Client identifier (must already exist)",
@@ -78,13 +178,43 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_client",
-            "description": "Retrieve a client's profile and contact information.",
+            "description": (
+                "Retrieve a client's profile and contact information only "
+                "(no notes). Use get_client_full when the coach wants everything."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "client_id": {
                         "type": "string",
-                        "description": "Client identifier",
+                        "description": (
+                            "Client identifier or display name "
+                            "(e.g. 'ali' or 'Ali')"
+                        ),
+                    }
+                },
+                "required": ["client_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_client_full",
+            "description": (
+                "Retrieve a client's complete record: profile, contact details, "
+                "and all saved notes/messages. Use when the coach asks for all "
+                "data, full details, or everything about a client/patient."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "client_id": {
+                        "type": "string",
+                        "description": (
+                            "Client identifier or display name "
+                            "(e.g. 'ali' or 'Ali')"
+                        ),
                     }
                 },
                 "required": ["client_id"],
@@ -135,42 +265,64 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             updates = {
                 k: v
                 for k, v in arguments.items()
-                if k not in ("client_id", "name") and v is not None
+                if k not in ("client_id", "name", "confirmed") and v is not None
             }
             profile = {**existing_profile, **updates}
+            if not _is_confirmed(arguments):
+                return _format_create_client_preview(
+                    client_id,
+                    client_name,
+                    profile,
+                    is_update=existing is not None,
+                )
             store.upsert_user(client_id, name=client_name, profile=profile)
             return f"✅ Client '{client_name}' (ID: {client_id}) saved successfully."
 
         if name == "add_client_note":
-            client_id = arguments["client_id"]
-            if store.get_user(client_id) is None:
+            client_ref = arguments["client_id"]
+            resolved_id = _resolve_client_id(store, client_ref)
+            if resolved_id is None:
                 return (
-                    f"❌ Client '{client_id}' not found. "
+                    f"❌ Client '{client_ref}' not found. "
                     "Please create the client first using create_client."
                 )
+            note_type = arguments.get("note_type", "general")
+            title = arguments.get("title")
+            content = arguments["content"]
+            if not _is_confirmed(arguments):
+                return _format_add_note_preview(resolved_id, content, note_type, title)
             note_id = store.add_client_note(
-                client_id,
-                arguments["content"],
-                note_type=arguments.get("note_type", "general"),
-                title=arguments.get("title"),
+                resolved_id,
+                content,
+                note_type=note_type,
+                title=title,
             )
-            return f"✅ Note (ID: {note_id}) added for client '{client_id}'."
+            return f"✅ Note (ID: {note_id}) added for client '{resolved_id}'."
 
-        if name == "get_client":
-            client_id = arguments["client_id"]
-            user = store.get_user(client_id)
-            if user is None:
-                return f"❌ Client '{client_id}' not found."
-            return json.dumps(user, ensure_ascii=False, indent=2)
+        if name in ("get_client", "get_client_full"):
+            client_ref = arguments["client_id"]
+            resolved_id = _resolve_client_id(store, client_ref)
+            if resolved_id is None:
+                return f"❌ Client '{client_ref}' not found."
+            user = store.get_user(resolved_id)
+            assert user is not None
+            sections = ["## Profile\n" + _format_client_profile(user)]
+            if name == "get_client_full":
+                notes = store.get_client_notes(resolved_id)
+                sections.append("## Notes\n" + _format_client_notes(notes))
+            return "\n\n".join(sections)
 
         if name == "list_client_notes":
-            client_id = arguments["client_id"]
+            client_ref = arguments["client_id"]
+            resolved_id = _resolve_client_id(store, client_ref)
+            if resolved_id is None:
+                return f"❌ Client '{client_ref}' not found."
             note_type = arguments.get("note_type")
-            notes = store.get_client_notes(client_id, note_type=note_type)
+            notes = store.get_client_notes(resolved_id, note_type=note_type)
             if not notes:
-                label = f"of type '{note_type}'" if note_type else ""
-                return f"No notes {label} found for client '{client_id}'."
-            return json.dumps(notes, ensure_ascii=False, indent=2)
+                label = f"of type '{note_type}' " if note_type else ""
+                return f"No notes {label}found for client '{resolved_id}'."
+            return _format_client_notes(notes)
 
         if name == "list_clients":
             users = store.list_users()
