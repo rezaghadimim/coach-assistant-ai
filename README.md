@@ -25,6 +25,7 @@ Runs locally using open-source LLMs.
 - **Session Continuity**: Coach references past sessions, notes, and decisions automatically
 - **Actionable Coaching**: Direct coaching advice using GROW model and other frameworks
 - **Progress Monitoring**: Track goals, action items, and outcomes across sessions
+- **Coaching-only Scope**: Stays focused on coaching — off-topic requests are declined and redirected, and follow-up/starter suggestions remain coaching-focused
 
 ## Prerequisites
 

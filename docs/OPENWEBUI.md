@@ -87,6 +87,23 @@ This means there may be a pause before the first token when the model invokes
 tools (e.g. saving a client note), but the streamed content is always the
 complete, tool-resolved answer.
 
+## Coaching-only Scope & Follow-up Suggestions
+
+The backend stays focused on coaching. Clearly off-topic user requests (writing
+code, math, weather, trivia, translation, recipes, current news, etc.) are
+declined with a fixed coaching redirect — enforced both by the system prompt and
+a deterministic guardrail (`app/core/scope.py`) that short-circuits before any
+LLM call.
+
+Open WebUI's hidden **task** requests (follow-up suggestions, chat title, and
+tag generation) are detected and always allowed through:
+
+- They bypass the scope guardrail and client-lookup shortcuts.
+- Their JSON reply (e.g. `{ "follow_ups": [...] }`) is returned unmodified so
+  Open WebUI's parser can render the suggestions.
+- Because the coaching system prompt and chat context are still injected, the
+  generated follow-ups and starters stay coaching-focused.
+
 ## Architecture
 
 ```text

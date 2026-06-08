@@ -108,10 +108,20 @@ async def _generate_with_tools(
 ) -> str:
     """Agentic tool-calling loop: execute tools until the LLM gives a final reply."""
     from app.core.client_intents import try_direct_client_query
+    from app.core.scope import is_openwebui_task, scope_guard
     from app.core.tools import execute_tool  # avoid circular import
 
     last_user = _last_user_message(messages)
-    if last_user:
+    # Open WebUI task prompts (follow-up suggestions, title, tags) are passed
+    # straight to the model: no deterministic intent shortcuts, no scope guard,
+    # and the raw JSON reply is returned unsanitized so the UI can parse it.
+    is_task = bool(last_user) and is_openwebui_task(last_user)
+
+    if last_user and not is_task:
+        refusal = scope_guard(last_user)
+        if refusal is not None:
+            return refusal
+
         direct = try_direct_client_query(last_user, store)
         if direct is not None:
             return _format_direct_lookup_reply(direct)
@@ -132,9 +142,10 @@ async def _generate_with_tools(
             tool_calls = assistant_msg.get("tool_calls") or []
 
             if not tool_calls:
-                content = _sanitize_assistant_reply(
-                    assistant_msg.get("content", "")
-                )
+                raw_content = assistant_msg.get("content", "")
+                if is_task:
+                    return raw_content
+                content = _sanitize_assistant_reply(raw_content)
                 if not content.strip() and last_user:
                     fallback = try_direct_client_query(last_user, store)
                     if fallback is not None:
