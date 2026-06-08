@@ -1,8 +1,9 @@
 """Model registry: virtual model IDs, provider resolution, and cloud availability probe.
 
-Open WebUI sees two virtual models when OpenRouter is healthy:
-  - ``coach-assistant-ai``        → OllamaProvider (always available)
-  - ``coach-assistant-ai-cloud``  → OpenRouterProvider (only when probe passes)
+Open WebUI sees the local model plus cloud models when OpenRouter is healthy.
+Cloud models are configured via the comma-separated ``OPENROUTER_MODELS`` env var.
+The first slug maps to ``coach-assistant-ai-cloud``; additional slugs get derived
+virtual IDs (e.g. ``coach-assistant-ai-cloud-gpt-oss-120b``).
 
 The cloud probe result is cached for 60 seconds to avoid hammering the
 OpenRouter API on every /v1/models request.
@@ -27,6 +28,34 @@ logger = logging.getLogger(__name__)
 LOCAL_MODEL_ID = "coach-assistant-ai"
 CLOUD_MODEL_ID = "coach-assistant-ai-cloud"
 
+
+def _parse_openrouter_model_slugs(raw: str) -> list[str]:
+    return [slug.strip() for slug in raw.split(",") if slug.strip()]
+
+
+def _virtual_id_for_slug(slug: str, *, primary: bool) -> str:
+    if primary:
+        return CLOUD_MODEL_ID
+    name = slug.rsplit("/", 1)[-1]
+    name = name.split(":", 1)[0]
+    return f"coach-assistant-ai-cloud-{name.replace('.', '-')}"
+
+
+def openrouter_models() -> dict[str, str]:
+    """Return virtual cloud model IDs mapped to OpenRouter model slugs."""
+    slugs = _parse_openrouter_model_slugs(settings.openrouter_models)
+    registry: dict[str, str] = {}
+    for index, slug in enumerate(slugs):
+        virtual_id = _virtual_id_for_slug(slug, primary=index == 0)
+        registry[virtual_id] = slug
+    return registry
+
+
+def is_cloud_model_id(model_id: Optional[str]) -> bool:
+    """Return True when ``model_id`` routes to OpenRouter."""
+    return model_id is not None and model_id in openrouter_models()
+
+
 _PROBE_TTL_SECONDS = 60
 _PROBE_TIMEOUT_SECONDS = 5.0
 
@@ -40,12 +69,6 @@ def _get_ollama_provider() -> "OllamaProvider":
     return OllamaProvider()
 
 
-def _get_openrouter_provider() -> "OpenRouterProvider":
-    from app.core.llm_providers.openrouter import OpenRouterProvider
-
-    return OpenRouterProvider()
-
-
 def resolve_provider(
     model_id: Optional[str],
 ) -> Union["OllamaProvider", "OpenRouterProvider"]:
@@ -55,8 +78,10 @@ def resolve_provider(
     The cloud provider is returned only when the API key is configured;
     no live probe is done here (that is done by list_available_models).
     """
-    if model_id == CLOUD_MODEL_ID and settings.openrouter_api_key:
-        return _get_openrouter_provider()
+    if is_cloud_model_id(model_id) and settings.openrouter_api_key:
+        from app.core.llm_providers.openrouter import OpenRouterProvider
+
+        return OpenRouterProvider(model=openrouter_models()[model_id])
     return _get_ollama_provider()
 
 
@@ -122,15 +147,16 @@ async def list_available_models() -> list[dict]:
 
     cloud_available = await probe_openrouter()
     if cloud_available:
-        models.append(
-            {
-                "id": CLOUD_MODEL_ID,
-                "object": "model",
-                "created": created_ts,
-                "owned_by": "openrouter",
-                "name": f"Coach Assistant AI (Cloud · {settings.openrouter_model})",
-            }
-        )
+        for virtual_id, openrouter_slug in openrouter_models().items():
+            models.append(
+                {
+                    "id": virtual_id,
+                    "object": "model",
+                    "created": created_ts,
+                    "owned_by": "openrouter",
+                    "name": f"Coach Assistant AI (Cloud · {openrouter_slug})",
+                }
+            )
 
     return models
 

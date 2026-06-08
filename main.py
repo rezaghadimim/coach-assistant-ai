@@ -25,15 +25,15 @@ app.include_router(openai_compat_router, tags=["openai-compat"])
 async def health_check():
     """Report the application status and LLM provider availability."""
     from app.core.model_registry import (
-        CLOUD_MODEL_ID,
         LOCAL_MODEL_ID,
         openrouter_availability_reason,
+        openrouter_models,
         probe_openrouter,
     )
 
     cloud_ok = await probe_openrouter()
     openrouter_info: dict = {
-        "model": settings.openrouter_model,
+        "models": openrouter_models(),
         "available": cloud_ok,
     }
     if not cloud_ok:

@@ -15,6 +15,17 @@ from app.core.llm_providers.types import CompletionResult, ToolCall
 class OpenRouterProvider:
     """Client for OpenRouter's OpenAI-compatible /chat/completions endpoint."""
 
+    def __init__(self, model: Optional[str] = None) -> None:
+        if model is not None:
+            self._model = model
+        else:
+            slugs = [
+                slug.strip()
+                for slug in settings.openrouter_models.split(",")
+                if slug.strip()
+            ]
+            self._model = slugs[0] if slugs else "openai/gpt-4o-mini"
+
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {
             "Authorization": f"Bearer {settings.openrouter_api_key}",
@@ -34,7 +45,7 @@ class OpenRouterProvider:
         tools: Optional[list[dict]] = None,
     ) -> dict:
         payload: dict = {
-            "model": settings.openrouter_model,
+            "model": self._model,
             "messages": messages,
             "stream": stream,
             "temperature": settings.temperature,

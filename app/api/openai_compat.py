@@ -29,8 +29,8 @@ from app.api.chat import build_system_prompt, session_manager, store
 from app.core.config import settings
 from app.core.llm import generate_response
 from app.core.model_registry import (
-    CLOUD_MODEL_ID,
     LOCAL_MODEL_ID,
+    is_cloud_model_id,
     list_available_models,
     probe_openrouter,
 )
@@ -67,7 +67,7 @@ class _ChatCompletionRequest(BaseModel):
 
     def effective_model_id(self) -> str:
         """Normalise the requested model ID, defaulting unknown IDs to local."""
-        if self.model in (LOCAL_MODEL_ID, CLOUD_MODEL_ID):
+        if self.model == LOCAL_MODEL_ID or is_cloud_model_id(self.model):
             return self.model
         return LOCAL_MODEL_ID
 
@@ -178,7 +178,7 @@ async def chat_completions(
     model_id = request.effective_model_id()
 
     # Reject cloud requests when OpenRouter is not available.
-    if model_id == CLOUD_MODEL_ID and not await probe_openrouter():
+    if is_cloud_model_id(model_id) and not await probe_openrouter():
         return JSONResponse(
             status_code=503,
             content={

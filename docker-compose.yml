@@ -13,7 +13,7 @@ services:
       OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:8b}"
       # OpenRouter (optional cloud provider — leave OPENROUTER_API_KEY empty to disable)
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
-      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openai/gpt-4o-mini}"
+      OPENROUTER_MODELS: "${OPENROUTER_MODELS:-openai/gpt-4o-mini,openai/gpt-oss-120b:free,openai/gpt-oss-20b:free,z-ai/glm-4.5-air:free}"
       OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
     volumes:
       - coach_data:/app/data

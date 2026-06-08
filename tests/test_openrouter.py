@@ -8,6 +8,11 @@ from fastapi.testclient import TestClient
 from app.api.chat import reset_runtime_state
 from main import app
 
+DEFAULT_OPENROUTER_MODELS = (
+    "openai/gpt-4o-mini,openai/gpt-oss-120b:free,"
+    "openai/gpt-oss-20b:free,z-ai/glm-4.5-air:free"
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -22,13 +27,33 @@ def _local_model_entry():
     }
 
 
-def _cloud_model_entry():
-    return {
-        "id": "coach-assistant-ai-cloud",
-        "object": "model",
-        "owned_by": "openrouter",
-        "name": "Coach Assistant AI (Cloud · openai/gpt-4o-mini)",
-    }
+def _cloud_model_entries():
+    return [
+        {
+            "id": "coach-assistant-ai-cloud",
+            "object": "model",
+            "owned_by": "openrouter",
+            "name": "Coach Assistant AI (Cloud · openai/gpt-4o-mini)",
+        },
+        {
+            "id": "coach-assistant-ai-cloud-gpt-oss-120b",
+            "object": "model",
+            "owned_by": "openrouter",
+            "name": "Coach Assistant AI (Cloud · openai/gpt-oss-120b:free)",
+        },
+        {
+            "id": "coach-assistant-ai-cloud-gpt-oss-20b",
+            "object": "model",
+            "owned_by": "openrouter",
+            "name": "Coach Assistant AI (Cloud · openai/gpt-oss-20b:free)",
+        },
+        {
+            "id": "coach-assistant-ai-cloud-glm-4-5-air",
+            "object": "model",
+            "owned_by": "openrouter",
+            "name": "Coach Assistant AI (Cloud · z-ai/glm-4.5-air:free)",
+        },
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +70,7 @@ class ModelListTests(unittest.TestCase):
         with patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = ""
             mock_settings.ollama_model = "llama3.1:8b"
-            mock_settings.openrouter_model = "openai/gpt-4o-mini"
+            mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             response = self.client.get("/v1/models")
 
         self.assertEqual(response.status_code, 200)
@@ -55,21 +80,22 @@ class ModelListTests(unittest.TestCase):
         self.assertNotIn("coach-assistant-ai-cloud", ids)
 
     def test_list_models_with_valid_key_and_probe_returns_both(self) -> None:
-        """With a working API key both models must be listed."""
+        """With a working API key all cloud models must be listed."""
         with patch(
             "app.core.model_registry.probe_openrouter",
             new=AsyncMock(return_value=True),
         ), patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = "sk-or-test"
             mock_settings.ollama_model = "llama3.1:8b"
-            mock_settings.openrouter_model = "openai/gpt-4o-mini"
+            mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             response = self.client.get("/v1/models")
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
         ids = [m["id"] for m in body["data"]]
         self.assertIn("coach-assistant-ai", ids)
-        self.assertIn("coach-assistant-ai-cloud", ids)
+        for entry in _cloud_model_entries():
+            self.assertIn(entry["id"], ids)
 
     def test_list_models_probe_fails_returns_only_local(self) -> None:
         """When the probe fails the cloud model must be hidden."""
@@ -79,7 +105,7 @@ class ModelListTests(unittest.TestCase):
         ), patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = "sk-or-bad"
             mock_settings.ollama_model = "llama3.1:8b"
-            mock_settings.openrouter_model = "openai/gpt-4o-mini"
+            mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             response = self.client.get("/v1/models")
 
         self.assertEqual(response.status_code, 200)
@@ -99,7 +125,7 @@ class CloudModelRoutingTests(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_cloud_model_request_routes_to_openrouter_provider(self) -> None:
-        """Requesting coach-assistant-ai-cloud should call generate_response with that model_id."""
+        """Requesting a cloud model should call generate_response with that model_id."""
         with patch(
             "app.api.openai_compat.probe_openrouter",
             new=AsyncMock(return_value=True),
@@ -110,7 +136,7 @@ class CloudModelRoutingTests(unittest.TestCase):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "coach-assistant-ai-cloud",
+                    "model": "coach-assistant-ai-cloud-gpt-oss-120b",
                     "messages": [{"role": "user", "content": "What is my goal?"}],
                     "user": "test-user",
                 },
@@ -118,11 +144,12 @@ class CloudModelRoutingTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body["model"], "coach-assistant-ai-cloud")
+        self.assertEqual(body["model"], "coach-assistant-ai-cloud-gpt-oss-120b")
         self.assertEqual(body["choices"][0]["message"]["content"], "Cloud coaching reply.")
-        # Verify model_id was passed through to generate_response
         call_kwargs = mock_gen.call_args.kwargs
-        self.assertEqual(call_kwargs.get("model_id"), "coach-assistant-ai-cloud")
+        self.assertEqual(
+            call_kwargs.get("model_id"), "coach-assistant-ai-cloud-gpt-oss-120b"
+        )
 
     def test_cloud_model_unavailable_returns_503(self) -> None:
         """Requesting the cloud model when probe fails must return HTTP 503."""
@@ -187,9 +214,11 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = "sk-or-test"
-            provider = resolve_provider("coach-assistant-ai-cloud")
+            mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
+            provider = resolve_provider("coach-assistant-ai-cloud-glm-4-5-air")
 
         self.assertIsInstance(provider, OpenRouterProvider)
+        self.assertEqual(provider._model, "z-ai/glm-4.5-air:free")
 
     async def test_resolve_provider_cloud_without_key_returns_ollama(self) -> None:
         """Cloud model ID without an API key must fall back to local."""
@@ -210,6 +239,23 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
             result = await model_registry.probe_openrouter()
 
         self.assertFalse(result)
+
+    async def test_openrouter_models_parsed_from_env(self) -> None:
+        from app.core import model_registry
+
+        with patch.object(model_registry, "settings") as mock_settings:
+            mock_settings.openrouter_models = (
+                "openai/gpt-4o-mini, anthropic/claude-3.5-sonnet"
+            )
+            registry = model_registry.openrouter_models()
+
+        self.assertEqual(
+            registry,
+            {
+                "coach-assistant-ai-cloud": "openai/gpt-4o-mini",
+                "coach-assistant-ai-cloud-claude-3-5-sonnet": "anthropic/claude-3.5-sonnet",
+            },
+        )
 
     async def test_probe_caches_result(self) -> None:
         """The probe should not perform a second HTTP request within the TTL."""
