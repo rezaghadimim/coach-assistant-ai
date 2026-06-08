@@ -7,9 +7,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Point at the host's Ollama instance (or change to a containerised one)
-      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      # Inside Docker, localhost is the container — use host.docker.internal to
+      # reach Ollama on the Mac/Windows host. Override only for a remote Ollama.
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
       OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:8b}"
+      # OpenRouter (optional cloud provider — leave OPENROUTER_API_KEY empty to disable)
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-openai/gpt-4o-mini}"
+      OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
     volumes:
       - coach_data:/app/data
       - ./docs/knowledge:/app/docs/knowledge:ro

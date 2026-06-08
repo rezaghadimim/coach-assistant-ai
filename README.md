@@ -63,6 +63,21 @@ docker compose up --build
 
 See [Open WebUI Integration](./docs/OPENWEBUI.md) for details.
 
+## Optional Cloud Testing (OpenRouter)
+
+Set `OPENROUTER_API_KEY` in a `.env` file (see `.env.example`) to unlock an
+optional second model in Open WebUI that routes to a cloud LLM via
+[OpenRouter](https://openrouter.ai). The local Ollama model remains the default
+— the cloud model only appears in the picker when the API key is valid.
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+OPENROUTER_MODEL=openai/gpt-4o-mini   # or any model on openrouter.ai/models
+```
+
+See [OpenRouter Integration](./docs/OPENROUTER.md) for full setup instructions,
+model options, cost reference, and troubleshooting.
+
 ## API Endpoints
 
 ### Native API
@@ -91,5 +106,6 @@ See [Open WebUI Integration](./docs/OPENWEBUI.md) for details.
 - [RAG Pipeline](./docs/RAG.md)
 - [Memory System](./docs/MEMORY.md)
 - [Open WebUI Integration](./docs/OPENWEBUI.md)
+- [OpenRouter Integration](./docs/OPENROUTER.md)
 - [Fine-tuning Guide](./docs/FINETUNE.md)
 - [Architecture Decision Records](./docs/adr/README.md)

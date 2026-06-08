@@ -23,8 +23,33 @@ app.include_router(openai_compat_router, tags=["openai-compat"])
 
 @app.get("/health")
 async def health_check():
-    """Basic health check endpoint."""
-    return {"status": "ok", "model": settings.ollama_model}
+    """Report the application status and LLM provider availability."""
+    from app.core.model_registry import (
+        CLOUD_MODEL_ID,
+        LOCAL_MODEL_ID,
+        openrouter_availability_reason,
+        probe_openrouter,
+    )
+
+    cloud_ok = await probe_openrouter()
+    openrouter_info: dict = {
+        "model": settings.openrouter_model,
+        "available": cloud_ok,
+    }
+    if not cloud_ok:
+        openrouter_info["reason"] = openrouter_availability_reason()
+
+    return {
+        "status": "ok",
+        "default_model": LOCAL_MODEL_ID,
+        "providers": {
+            "ollama": {
+                "model": settings.ollama_model,
+                "available": True,
+            },
+            "openrouter": openrouter_info,
+        },
+    }
 
 
 if __name__ == "__main__":

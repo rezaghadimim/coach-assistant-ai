@@ -3,11 +3,20 @@
 ## Overview
 
 ```text
-Open WebUI (browser) → FastAPI → Ollama
-                           | \
-                           |  → Local RAG Index (in-memory)
-                           → SQLite Memory Store (users, sessions, messages, client notes)
+Open WebUI (browser) → FastAPI ─────────────────────────────────────┐
+                           |                                         │
+                           ├─ /v1/chat/completions (model=local)  → Ollama (local)
+                           ├─ /v1/chat/completions (model=cloud)  → OpenRouter (optional)
+                           |                                         │
+                           ├─ Local RAG Index (in-memory)           │
+                           └─ SQLite Memory Store                   │
+                                 (users, sessions, messages,        │
+                                  client notes)                     │
 ```
+
+The cloud OpenRouter provider is optional and only activated when
+`OPENROUTER_API_KEY` is set and the availability probe succeeds.
+The local Ollama provider is always the default.
 
 ## Implemented Components
 
@@ -36,15 +45,22 @@ Open WebUI (browser) → FastAPI → Ollama
 - Decisions can be updated when revised
 
 ### 5) LLM Tool Calling (`app/core/tools.py`, `app/core/llm.py`)
-- Ollama function-calling loop (up to 5 iterations)
-- Tools: `create_client`, `add_client_note`, `get_client`, `list_client_notes`, `list_clients`
-- Tool results sent back to Ollama with `tool_name` per the Ollama API
+- Provider-agnostic agentic loop (up to 5 iterations)
+- Tools: `create_client`, `add_client_note`, `get_client`, `get_client_full`, `list_client_notes`, `list_clients`, `update_client_note`, `delete_client_note`, `delete_client`
+- Tool results formatted per provider (Ollama uses `tool_name`; OpenRouter uses `tool_call_id`)
 - Profile updates merge with existing client data (partial updates do not wipe fields)
 
-### 6) Open WebUI Integration (`app/api/openai_compat.py`)
-- `GET /v1/models`: list available coaching models (coach-assistant-ai)
-- `POST /v1/chat/completions`: OpenAI-compatible chat completion with streaming
+### 6) LLM Provider Abstraction (`app/core/llm_providers/`)
+- `types.py`: `LLMProvider` protocol, `CompletionResult`, `ToolCall` dataclasses
+- `ollama.py`: Ollama `/api/chat` client (always active)
+- `openrouter.py`: OpenRouter `/chat/completions` client (optional, opt-in via `OPENROUTER_API_KEY`)
+- `app/core/model_registry.py`: virtual model IDs, provider resolution, and cached availability probe
+
+### 7) Open WebUI Integration (`app/api/openai_compat.py`)
+- `GET /v1/models`: dynamic model list — local always, cloud when probe passes
+- `POST /v1/chat/completions`: routes by `model` field to the appropriate provider
 - Streaming resolves tool calls first, then streams the final reply in chunks
+- Cloud model returns HTTP 503 when OpenRouter is unavailable
 - User identification via `user` field or `X-User-Id` header
 - `Dockerfile` + `docker-compose.yml` for full-stack deployment
 - Coach-branded UI via WEBUI_NAME environment variable
@@ -60,7 +76,8 @@ Open WebUI (browser) → FastAPI → Ollama
    - user profile
    - client notes/stories/decisions
    - previous session summary
-5. Backend calls Ollama (with optional tool-calling loop) and stores reply in SQLite
+5. Backend resolves provider (Ollama or OpenRouter) from the virtual model ID
+6. Provider executes the tool-calling loop and returns a final reply; result is stored in SQLite
 
 ## Current File Map
 
@@ -74,8 +91,17 @@ app/
 ├── core/
 │   ├── config.py
 │   ├── llm.py
+│   ├── model_registry.py
 │   ├── prompts.py
-│   └── tools.py
+│   ├── scope.py
+│   ├── tools.py
+│   ├── client_intents.py
+│   ├── confirmations.py
+│   ├── intent_kb.py
+│   └── llm_providers/
+│       ├── types.py
+│       ├── ollama.py
+│       └── openrouter.py
 ├── rag/
 │   ├── ingest.py
 │   └── retriever.py

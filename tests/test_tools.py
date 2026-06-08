@@ -6,7 +6,11 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.api.chat import reset_runtime_state, store
-from app.core.confirmations import is_user_confirmation, parse_pending_write
+from app.core.confirmations import (
+    is_user_cancellation,
+    is_user_confirmation,
+    parse_pending_write,
+)
 from app.core.llm import _generate_with_tools
 from app.core.tools import TOOL_DEFINITIONS, execute_tool, sanitize_write_confirmation
 
@@ -361,6 +365,12 @@ class ConfirmationTests(unittest.TestCase):
         self.assertTrue(is_user_confirmation("confirm"))
         self.assertFalse(is_user_confirmation("add note for Ali"))
 
+    def test_is_user_cancellation(self) -> None:
+        for phrase in ("no", "No", "nope", "cancel", "don't save", "never mind"):
+            self.assertTrue(is_user_cancellation(phrase), phrase)
+        for phrase in ("yes", "confirm", "save it", "add note for Ali"):
+            self.assertFalse(is_user_cancellation(phrase), phrase)
+
     def test_sanitize_write_confirmation_strips_premature_confirm(self) -> None:
         sanitized = sanitize_write_confirmation(
             "add_client_note",
@@ -440,7 +450,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [
                         {
@@ -485,7 +495,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
                 reply = await _generate_with_tools(
                     history,
                     "system",
@@ -498,6 +508,47 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             notes = test_store.get_client_notes("mina")
             self.assertEqual(len(notes), 1)
             self.assertEqual(notes[0]["content"], "She has two children")
+
+    async def test_user_no_cancels_pending_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            execute_tool(
+                "create_client",
+                {"client_id": "mina", "name": "Mina", "confirmed": True},
+                test_store,
+            )
+            preview = execute_tool(
+                "add_client_note",
+                {"client_id": "mina", "content": "She has two children"},
+                test_store,
+            )
+            history = [
+                {
+                    "role": "user",
+                    "content": "Add note for Mina: she has two children",
+                },
+                {"role": "assistant", "content": preview},
+                {"role": "user", "content": "no"},
+            ]
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    history,
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            # The LLM must not be consulted and nothing should be saved or re-proposed.
+            mock_client.post.assert_not_called()
+            self.assertNotIn("pending confirmation", reply)
+            self.assertIn("won't save", reply)
+            self.assertEqual(len(test_store.get_client_notes("mina")), 0)
 
     async def test_tool_results_include_tool_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -538,7 +589,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [{"role": "user", "content": "Use the registry tool."}],
                     "system",

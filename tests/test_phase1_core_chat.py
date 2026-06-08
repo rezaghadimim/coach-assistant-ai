@@ -23,8 +23,9 @@ class Phase1CoreChatTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["status"], "ok")
-        self.assertIn("model", body)
-        self.assertTrue(body["model"])
+        self.assertIn("providers", body)
+        self.assertIn("ollama", body["providers"])
+        self.assertTrue(body["providers"]["ollama"]["model"])
 
     def test_chat_returns_llm_reply(self) -> None:
         with patch(

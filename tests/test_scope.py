@@ -102,7 +102,7 @@ class GenerateWithToolsScopeTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [{"role": "user", "content": "Write Python code to sort a list"}],
                     "system",
@@ -130,7 +130,7 @@ class GenerateWithToolsScopeTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [{"role": "user", "content": _FOLLOW_UP_TASK}],
                     "system",

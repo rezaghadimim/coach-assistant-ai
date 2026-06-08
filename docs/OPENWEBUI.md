@@ -52,7 +52,21 @@ docker compose up --build
 # Coach Assistant API docs at http://localhost:8000/docs
 ```
 
-Open WebUI will automatically list `coach-assistant-ai` as an available model.
+Open WebUI will automatically list `coach-assistant-ai` (local) as an available
+model. If you have configured `OPENROUTER_API_KEY`, a second model
+`coach-assistant-ai-cloud` will also appear in the picker. See
+[OpenRouter Integration](./OPENROUTER.md) for setup details.
+
+## Model Picker Behaviour
+
+| Scenario | Models listed in Open WebUI |
+|---|---|
+| No `OPENROUTER_API_KEY` set | `coach-assistant-ai` (local only) |
+| API key set, OpenRouter reachable | Both `coach-assistant-ai` and `coach-assistant-ai-cloud` |
+| API key set, OpenRouter unreachable | `coach-assistant-ai` (local only) |
+
+The default model is always the local one. Open WebUI remembers your last
+selection per chat, but new chats start on `coach-assistant-ai`.
 
 ## Manual / curl Test
 

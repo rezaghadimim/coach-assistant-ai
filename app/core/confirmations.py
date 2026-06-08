@@ -22,6 +22,28 @@ _CONFIRM = re.compile(
     re.IGNORECASE,
 )
 _CONFIRM_PREFIX = re.compile(r"^(?:yes|confirm|save|ok(?:ay)?)\b", re.IGNORECASE)
+_CANCEL = re.compile(
+    r"^(?:"
+    r"no(?:[,.!]?\s*(?:thanks?|thank\s+you|don'?t(?:\s+save)?|do\s+not(?:\s+save)?|"
+    r"cancel|stop|not\s+now))?|"
+    r"nope|nah|"
+    r"cancel(?:\s+(?:that|it|this))?|"
+    r"don'?t(?:\s+(?:save|do\s+it))?|"
+    r"do\s+not(?:\s+save)?|"
+    r"stop|"
+    r"never\s*mind|"
+    r"discard(?:\s+(?:it|that))?|"
+    r"forget\s+it|"
+    r"scratch\s+that|"
+    r"abort|"
+    r"not\s+now"
+    r")\.?\s*$",
+    re.IGNORECASE,
+)
+_CANCEL_PREFIX = re.compile(
+    r"^(?:no|nope|nah|cancel|don'?t|do\s+not|stop|discard|abort|never\s*mind)\b",
+    re.IGNORECASE,
+)
 _PENDING_CLIENT_ID = re.compile(r"^Client ID:\s*(.+)$", re.MULTILINE)
 _PENDING_CLIENT_NAME = re.compile(r"^Name:\s*(.+)$", re.MULTILINE)
 _PENDING_PROFILE_FIELD = re.compile(
@@ -49,6 +71,16 @@ def is_user_confirmation(message: str) -> bool:
     if _CONFIRM.match(text):
         return True
     return bool(_CONFIRM_PREFIX.search(text))
+
+
+def is_user_cancellation(message: str) -> bool:
+    """Return True when the message declines/cancels a pending write."""
+    text = message.strip()
+    if not text:
+        return False
+    if _CANCEL.match(text):
+        return True
+    return bool(_CANCEL_PREFIX.search(text))
 
 
 def parse_pending_write(messages: list[dict]) -> Optional[tuple[str, dict[str, Any]]]:

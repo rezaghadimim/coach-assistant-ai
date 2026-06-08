@@ -7,10 +7,21 @@ import logging
 import re
 from typing import Any, Optional
 
-from app.core.confirmations import is_user_confirmation, parse_pending_write
+from app.core.confirmations import (
+    is_user_cancellation,
+    is_user_confirmation,
+    parse_pending_write,
+)
 from app.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
+
+# Returned (with a recognized status prefix so the LLM layer surfaces it
+# verbatim) when the coach declines a pending write preview.
+_CANCEL_REPLY = (
+    "✅ Okay, I won't save that — nothing has been changed. "
+    "Let me know if you'd like to adjust the details or work on something else."
+)
 
 _POSSESSIVE_LOOKUP = re.compile(
     r"(?:get|show|give|fetch|retrieve|pull|tell)\s+(?:me\s+)?"
@@ -256,9 +267,14 @@ def try_direct_client_action(
 
     history = messages or []
 
-    if is_user_confirmation(message):
-        pending = parse_pending_write(history)
-        if pending:
+    pending = parse_pending_write(history)
+    if pending:
+        # Resolve the pending write first so a decline cancels it instead of
+        # falling through to the LLM, which would re-propose the same preview.
+        if is_user_cancellation(message):
+            logger.debug("client_intents: pending write cancelled by user")
+            return _CANCEL_REPLY
+        if is_user_confirmation(message):
             tool_name, params = pending
             return execute_tool(tool_name, {**params, "confirmed": True}, store)
 

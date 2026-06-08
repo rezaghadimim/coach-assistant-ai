@@ -16,22 +16,35 @@ The coaching session is keyed on a *user_id*.  Callers can supply it via:
 
 import asyncio
 import json
+import logging
 import time
 import uuid
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Header
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.api.chat import build_system_prompt, session_manager, store
 from app.core.config import settings
 from app.core.llm import generate_response
+from app.core.model_registry import (
+    CLOUD_MODEL_ID,
+    LOCAL_MODEL_ID,
+    list_available_models,
+    probe_openrouter,
+)
 from app.core.tools import TOOL_DEFINITIONS
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
-_MODEL_ID = "coach-assistant-ai"
+_MODEL_ID = LOCAL_MODEL_ID
+_LLM_UNAVAILABLE_MESSAGE = (
+    "I'm temporarily unable to reach the language model. "
+    "If you're running via Docker, ensure Ollama is running on your host and "
+    "that OLLAMA_BASE_URL points to host.docker.internal (not localhost)."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +64,12 @@ class _ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     user: Optional[str] = None
+
+    def effective_model_id(self) -> str:
+        """Normalise the requested model ID, defaulting unknown IDs to local."""
+        if self.model in (LOCAL_MODEL_ID, CLOUD_MODEL_ID):
+            return self.model
+        return LOCAL_MODEL_ID
 
 
 # ---------------------------------------------------------------------------
@@ -95,16 +114,22 @@ async def _stream_and_persist(
     session_id: str,
     completion_id: str,
     created: int,
+    model_id: str = LOCAL_MODEL_ID,
 ) -> AsyncGenerator[str, None]:
     """Tool-calling + optional streaming response, then persist the full reply."""
     # Tool-calling is always resolved first (non-streaming) so the agentic loop
     # can execute multiple tool calls before producing a final answer.
-    full_reply = await generate_response(
-        messages=history,
-        system_prompt=system_prompt,
-        tools=TOOL_DEFINITIONS,
-        store=store,
-    )
+    try:
+        full_reply = await generate_response(
+            messages=history,
+            system_prompt=system_prompt,
+            tools=TOOL_DEFINITIONS,
+            store=store,
+            model_id=model_id,
+        )
+    except Exception:
+        logger.exception("LLM request failed during streaming chat completion")
+        full_reply = _LLM_UNAVAILABLE_MESSAGE
 
     # Stream the final reply in small chunks so Open WebUI shows progressive output.
     chunk_size = 6
@@ -128,18 +153,14 @@ async def _stream_and_persist(
 
 @router.get("/v1/models")
 async def list_models():
-    """Return the single coach-assistant-ai model entry."""
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": _MODEL_ID,
-                "object": "model",
-                "created": int(time.time()),
-                "owned_by": "coach-assistant-ai",
-            }
-        ],
-    }
+    """Return available coaching models.
+
+    Always includes the local Ollama model. The cloud OpenRouter model is
+    included only when OPENROUTER_API_KEY is set and the availability probe
+    passes (checked with a 60-second cache).
+    """
+    models = await list_available_models()
+    return {"object": "list", "data": models}
 
 
 @router.post("/v1/chat/completions")
@@ -154,6 +175,24 @@ async def chat_completions(
     coaching context (RAG, user profile, session summary) is injected into
     the system prompt automatically.
     """
+    model_id = request.effective_model_id()
+
+    # Reject cloud requests when OpenRouter is not available.
+    if model_id == CLOUD_MODEL_ID and not await probe_openrouter():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "message": (
+                        "Cloud model unavailable — check OPENROUTER_API_KEY "
+                        "or use model 'coach-assistant-ai' for the local provider."
+                    ),
+                    "type": "service_unavailable",
+                    "code": "cloud_model_unavailable",
+                }
+            },
+        )
+
     user_id = _resolve_user_id(request.user, x_user_id)
 
     # Extract the latest user message for RAG retrieval and persistence.
@@ -173,7 +212,8 @@ async def chat_completions(
     if request.stream:
         return StreamingResponse(
             _stream_and_persist(
-                history, system_prompt, session_id, completion_id, created
+                history, system_prompt, session_id, completion_id, created,
+                model_id=model_id,
             ),
             media_type="text/event-stream",
         )
@@ -183,6 +223,7 @@ async def chat_completions(
         system_prompt=system_prompt,
         tools=TOOL_DEFINITIONS,
         store=store,
+        model_id=model_id,
     )
     store.add_message(session_id, "assistant", reply)
     session_manager.maybe_update_summary(
@@ -193,7 +234,7 @@ async def chat_completions(
         "id": completion_id,
         "object": "chat.completion",
         "created": created,
-        "model": _MODEL_ID,
+        "model": model_id,
         "choices": [
             {
                 "index": 0,
