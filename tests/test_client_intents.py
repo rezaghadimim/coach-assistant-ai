@@ -9,8 +9,10 @@ from app.core.client_intents import (
     detect_confirm,
     detect_create_client,
     detect_list_clients,
+    detect_profile_update,
     is_coaching_advice_request,
     parse_text_tool_call,
+    profile_update_from_add_note,
     try_direct_client_action,
     try_direct_client_query,
 )
@@ -145,6 +147,59 @@ class ClientIntentTests(unittest.TestCase):
         assert result is not None
         self.assertIn("pending confirmation", result)
         self.assertIn("Client ID: hassan", result)
+
+    def test_detect_profile_update_age(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_profile_update("Ali is 23 years old", store),
+            {"client_id": "ali", "name": "Ali", "age": 23},
+        )
+
+    def test_detect_profile_update_age_with_profile_suffix(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_profile_update("Ali is 23 years old profile", store),
+            {"client_id": "ali", "name": "Ali", "age": 23},
+        )
+
+    def test_direct_profile_update_returns_update_client_preview(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        result = try_direct_client_action("Ali is 23 years old", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("Age: 23", result)
+        self.assertNotIn("Add note", result)
+
+    def test_profile_update_from_add_note_redirects_age(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            profile_update_from_add_note(
+                {
+                    "client_id": "ali",
+                    "content": "Ali is 23 years old",
+                    "note_type": "general",
+                },
+                store,
+            ),
+            {"client_id": "ali", "name": "Ali", "age": 23},
+        )
 
     def test_confirm_saves_pending_client(self) -> None:
         preview = try_direct_client_action("Add Hassan as another patient", store)

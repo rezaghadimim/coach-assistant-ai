@@ -54,6 +54,28 @@ _CREATE_NAMED_CLIENT = re.compile(
     r"(?:client|patient)\s+(?:named\s+|called\s+)?(.+?)(?:\s+profile)?\s*$",
     re.IGNORECASE,
 )
+_PROFILE_CONTEXT_SUFFIX = re.compile(r"\s+profile\s*$", re.IGNORECASE)
+_AGE_IS = re.compile(
+    r"^(.+?)\s+is\s+(\d{1,3})\s+years?\s+old\.?\s*$",
+    re.IGNORECASE,
+)
+_AGE_POSSESSIVE = re.compile(
+    r"^(.+?)(?:'s|'s)\s+age\s+is\s+(\d{1,3})\b",
+    re.IGNORECASE,
+)
+_AGE_SET = re.compile(
+    r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+age\s+(?:to|as)\s+(\d{1,3})\b",
+    re.IGNORECASE,
+)
+_EMAIL_POSSESSIVE = re.compile(
+    r"^(.+?)(?:'s|'s)\s+email\s+is\s+(\S+@\S+)\.?\s*$",
+    re.IGNORECASE,
+)
+_PHONE_POSSESSIVE = re.compile(
+    r"^(.+?)(?:'s|'s)\s+phone(?:\s+number)?\s+is\s+([\d\s\-\+\(\)\.]+)\.?\s*$",
+    re.IGNORECASE,
+)
+_AGE_ONLY = re.compile(r"^(\d{1,3})\s+years?\s+old\.?\s*$", re.IGNORECASE)
 
 _PREFIXES_TO_STRIP = re.compile(r"^(?:the|patient|client)\s+", re.IGNORECASE)
 _PRONOUN_PLACEHOLDERS = frozenset(
@@ -116,6 +138,78 @@ def detect_client_lookup(message: str) -> Optional[str]:
 
 def detect_list_clients(message: str) -> bool:
     return bool(_LIST_CLIENTS.search(message.strip()))
+
+
+def _strip_profile_context(text: str) -> str:
+    return _PROFILE_CONTEXT_SUFFIX.sub("", text.strip()).strip(" .")
+
+
+def _profile_update_args(
+    client_ref: str,
+    store: MemoryStore,
+    **fields: Any,
+) -> dict[str, Any]:
+    from app.core.tools import _resolve_client_id
+
+    resolved_id = _resolve_client_id(store, client_ref)
+    client_id = resolved_id or client_ref.strip()
+    existing = store.get_user(client_id)
+    name = (existing or {}).get("name") or client_ref.strip()
+    return {"client_id": client_id, "name": name, **fields}
+
+
+def detect_profile_update(
+    message: str,
+    store: MemoryStore,
+) -> Optional[dict[str, Any]]:
+    """Return create_client args when the message updates a profile field."""
+    text = _strip_profile_context(message.strip())
+    if not text:
+        return None
+
+    for pattern, field, transform in (
+        (_AGE_IS, "age", int),
+        (_AGE_POSSESSIVE, "age", int),
+        (_AGE_SET, "age", int),
+        (_EMAIL_POSSESSIVE, "email", str),
+        (_PHONE_POSSESSIVE, "phone", lambda value: value.strip()),
+    ):
+        match = pattern.search(text)
+        if not match:
+            continue
+        client_ref = _clean_client_ref(match.group(1))
+        if not client_ref or client_ref.lower() in _PRONOUN_PLACEHOLDERS:
+            continue
+        return _profile_update_args(client_ref, store, **{field: transform(match.group(2))})
+
+    return None
+
+
+def profile_update_from_add_note(
+    arguments: dict[str, Any],
+    store: MemoryStore,
+) -> Optional[dict[str, Any]]:
+    """When add_client_note carries profile data, return create_client args instead."""
+    content = arguments.get("content", "")
+    if not isinstance(content, str) or not content.strip():
+        return None
+
+    parsed = detect_profile_update(content, store)
+    if parsed is not None:
+        return parsed
+
+    client_ref = arguments.get("client_id", "")
+    if not isinstance(client_ref, str) or not client_ref.strip():
+        return None
+
+    age_match = _AGE_ONLY.match(content.strip())
+    if age_match:
+        return _profile_update_args(
+            client_ref,
+            store,
+            age=int(age_match.group(1)),
+        )
+    return None
 
 
 def detect_create_client(message: str) -> Optional[dict[str, str]]:
@@ -316,6 +410,10 @@ def try_direct_client_action(
         if is_user_confirmation(message):
             tool_name, params = pending
             return execute_tool(tool_name, {**params, "confirmed": True}, store)
+
+    profile_args = detect_profile_update(message, store)
+    if profile_args:
+        return execute_tool("create_client", profile_args, store)
 
     create_args = detect_create_client(message)
     if create_args:

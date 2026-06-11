@@ -104,9 +104,12 @@ proactively whenever the coach asks you to save, look up, or update client data:
 - **add_client_note** — Save a note, goal, decision, story, or progress update \
   for a client. Use note_type: goal/story/decision/progress/general. \
   Only when the coach explicitly asks to save or document something — never for \
-  coaching advice questions. \
+  coaching advice questions or profile fields. \
   Example triggers: "Note that Ali decided to...", "Save a goal for Ali: ...", \
   "Document that Sara made progress on..." \
+  Do NOT use for profile fields (age, email, phone, occupation, background) — \
+  use **create_client** instead. Example: "Ali is 23 years old" → create_client \
+  with age=23, not add_client_note. \
   Do NOT use for: "How can I help Ali?", "I want to know one way to...", \
   "What should I ask Ali?" — answer those in your reply instead.
 - **update_client_note** — Change an existing note by note id. \

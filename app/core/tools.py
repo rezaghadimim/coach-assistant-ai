@@ -240,6 +240,8 @@ TOOL_DEFINITIONS = [
                 "Add a note, story, goal, decision, or progress update for a client. "
                 "Only when the coach explicitly asks to save or document information — "
                 "not when they ask for coaching advice, techniques, or suggestions. "
+                "Do NOT use for profile fields (age, email, phone, occupation, "
+                "background) — use create_client for those instead. "
                 "Always call first without confirmed to preview, then again with "
                 "confirmed=true only after the coach explicitly approves."
             ),

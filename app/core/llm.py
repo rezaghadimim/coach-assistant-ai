@@ -158,6 +158,7 @@ async def _generate_with_tools(
         detect_client_mention,
         is_coaching_advice_request,
         parse_text_tool_call,
+        profile_update_from_add_note,
         try_direct_client_action,
     )
     from app.core.llm_providers.types import ToolCall
@@ -207,6 +208,11 @@ async def _generate_with_tools(
                         provider.tool_result_message(tc, NOTE_WRITE_MISFIRE_GUIDANCE)
                     )
                     continue
+                if tool_name == "add_client_note":
+                    profile_args = profile_update_from_add_note(params, store)
+                    if profile_args is not None:
+                        tool_name = "create_client"
+                        params = profile_args
                 tool_result = execute_tool(tool_name, params, store)
                 full_messages.append(result.assistant_message)
                 full_messages.append(provider.tool_result_message(tc, tool_result))
@@ -232,8 +238,15 @@ async def _generate_with_tools(
                     provider.tool_result_message(tc, NOTE_WRITE_MISFIRE_GUIDANCE)
                 )
                 continue
-            arguments = sanitize_write_confirmation(tc.name, tc.arguments, last_user)
-            tool_result = execute_tool(tc.name, arguments, store)
+            tool_name = tc.name
+            arguments = tc.arguments
+            if tool_name == "add_client_note":
+                profile_args = profile_update_from_add_note(arguments, store)
+                if profile_args is not None:
+                    tool_name = "create_client"
+                    arguments = profile_args
+            arguments = sanitize_write_confirmation(tool_name, arguments, last_user)
+            tool_result = execute_tool(tool_name, arguments, store)
             full_messages.append(provider.tool_result_message(tc, tool_result))
             # Stop after write previews, outcomes, and errors so the coach
             # must reply yes/confirm before anything is saved or deleted.
