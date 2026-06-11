@@ -33,20 +33,56 @@
 
 ### Client Management Tools (Chat)
 - Ollama tool-calling loop in `app/core/llm.py`
-- Five client-management tools in `app/core/tools.py`
+- Client-management tools in `app/core/tools.py`
 - Wired into `/api/chat` and `/v1/chat/completions`
 - Profile merge on partial `create_client` updates
 - Tests in `tests/test_tools.py`
+
+### Client Notes API
+- SQLite `client_notes` table (stories, decisions, goals, progress)
+- CRUD endpoints under `/api/clients/{user_id}/notes`
+- Notes auto-injected into the chat system prompt
+- Tests in `tests/test_client_notes.py`
+
+### Coaching Scope Guardrails
+- Deterministic off-topic detection in `app/core/scope.py`
+- Open WebUI task prompts (follow-ups, title, tags) allowed through
+- Tests in `tests/test_scope.py`
+
+### Client Intent Detection
+- Regex-based fast path for common client-management commands in `app/core/client_intents.py`
+- Write confirmation flow via `app/core/confirmations.py`
+- Intent knowledge base in `app/core/intent_kb.py`
+- Tests in `tests/test_client_intents.py` and `tests/test_intent_kb.py`
+
+### Optional OpenRouter Provider
+- Cloud LLM routing when `OPENROUTER_API_KEY` is set
+- Provider abstraction in `app/core/llm_providers/`
+- Dynamic model registry and availability probe
+- Tests in `tests/test_openrouter.py`
+- See [`OPENROUTER.md`](OPENROUTER.md)
+
+### Phase 5 Prep: Training Data Export
+- `scripts/export_training_data.py` — export closed sessions from SQLite to JSONL
+- Export logic in `app/memory/training_export.py`
+- Tests in `tests/test_training_export.py`
 
 ## Remaining
 
 ### Phase 5: Fine-tuning (LoRA) — Behavior Adaptation
 > Fine-tuning is for **how the model behaves**, not what it knows. Use this to teach the model the coach's tone, questioning style, and response patterns — not to inject knowledge that belongs in RAG.
-- Collect 500+ real coaching conversations (behavior examples, not documents)
-- Train a LoRA adapter on coaching style, tone, and questioning strategy
-- Evaluate adapter quality against the coaching methodology
-- Deploy fine-tuned model in Ollama
-- See [`FINETUNE.md`](FINETUNE.md) for full guide and decision rules
+
+**Done (tooling):**
+- [x] Export script: `python scripts/export_training_data.py --output training_data.jsonl`
+
+**Still to do (data + training):**
+- [ ] Collect 500+ real coaching conversations (behavior examples, not documents)
+- [ ] Validate that RAG + prompting isn't sufficient for your quality bar
+- [ ] Train a LoRA adapter on coaching style, tone, and questioning strategy
+- [ ] Evaluate adapter quality against the coaching methodology
+- [ ] Deploy fine-tuned model in Ollama and point `ollama_model` at it
+
+See [`FINETUNE.md`](FINETUNE.md) for the full guide, export options, and decision rules.
 
 ## Test Command
 

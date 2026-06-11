@@ -232,6 +232,30 @@ class MemoryStore:
             for row in rows
         ]
 
+    def list_all_sessions(self, *, ended_only: bool = False) -> list[dict[str, Any]]:
+        """Return sessions across all users, optionally limited to closed sessions."""
+        query = """
+            SELECT session_id, user_id, started_at, ended_at, summary
+            FROM sessions
+        """
+        if ended_only:
+            query += " WHERE ended_at IS NOT NULL"
+        query += " ORDER BY started_at ASC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query).fetchall()
+
+        return [
+            {
+                "session_id": row["session_id"],
+                "user_id": row["user_id"],
+                "started_at": row["started_at"],
+                "ended_at": row["ended_at"],
+                "summary": row["summary"],
+            }
+            for row in rows
+        ]
+
     # ------------------------------------------------------------------
     # Client notes (per-client documentation, stories, decisions)
     # ------------------------------------------------------------------

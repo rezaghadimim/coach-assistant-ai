@@ -47,6 +47,9 @@ python main.py
 
 # 4. Run tests
 python3 -m unittest discover -s tests -p "test_*.py"
+
+# 5. (Optional, Phase 5) Export sessions for fine-tuning
+python scripts/export_training_data.py --output training_data.jsonl
 ```
 
 `docs/knowledge/` is a local-only ingest folder. Keep your real source documents there

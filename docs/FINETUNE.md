@@ -71,9 +71,25 @@ Convert conversations to this format (`training_data.jsonl`):
 
 ### 1. Export Training Data
 
+Export closed coaching sessions from the SQLite memory store. By default, only
+sessions with at least **4 user→assistant turn pairs** are included (use
+`--min-turns` to change the threshold).
+
 ```bash
-python scripts/export_training_data.py --min-quality 4 --output training_data.jsonl
+python scripts/export_training_data.py --output training_data.jsonl
 ```
+
+Options:
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--output` | `training_data.jsonl` | Output JSONL path |
+| `--db-path` | `data/coach_assistant.db` | SQLite database to read |
+| `--min-turns` | `4` | Minimum user→assistant pairs per session |
+| `--include-open-sessions` | off | Also export sessions that have not been closed |
+
+Review the exported file manually before training — the script filters by
+session length, not response quality.
 
 ### 2. Rent a GPU
 

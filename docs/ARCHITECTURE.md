@@ -65,6 +65,20 @@ The local Ollama provider is always the default.
 - `Dockerfile` + `docker-compose.yml` for full-stack deployment
 - Coach-branded UI via WEBUI_NAME environment variable
 
+### 8) Coaching Scope Guardrails (`app/core/scope.py`)
+- Deterministic off-topic detection before LLM calls
+- Open WebUI auto-generated task prompts (follow-ups, title, tags) bypass the guard
+- Fixed coaching-focused redirect for clearly non-coaching requests
+
+### 9) Client Intent Detection (`app/core/client_intents.py`)
+- Regex fast path for common client-management commands (lookup, create, notes)
+- Write confirmation previews via `app/core/confirmations.py`
+- Falls back to LLM tool calling when no intent matches
+
+### 10) Fine-tuning Export (`app/memory/training_export.py`)
+- `scripts/export_training_data.py`: export closed sessions from SQLite to JSONL
+- Used as Phase 5 prep — see [`FINETUNE.md`](FINETUNE.md)
+
 ## Data Flow
 
 1. Client sends `POST /api/chat {user_id, message}`
@@ -108,7 +122,12 @@ app/
 ├── memory/
 │   ├── session.py
 │   ├── store.py
-│   └── summarizer.py
+│   ├── summarizer.py
+│   └── training_export.py
 └── models/
     └── schemas.py
+
+scripts/
+├── ingest.py
+└── export_training_data.py
 ```
