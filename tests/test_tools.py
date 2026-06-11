@@ -85,6 +85,27 @@ class ExecuteToolTests(unittest.TestCase):
         self.assertEqual(user["profile"]["phone"], "555-9999")
         self.assertEqual(user["profile"]["email"], "sara@example.com")
 
+    def test_update_client_alias_merges_profile(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        preview = execute_tool(
+            "update_client",
+            {"client_id": "ali", "age": 23},
+            store,
+        )
+        self.assertIn("Update client", preview)
+        self.assertIn("Age: 23", preview)
+        execute_tool(
+            "update_client",
+            {"client_id": "ali", "age": 23, "confirmed": True},
+            store,
+        )
+        user = store.get_user("ali")
+        self.assertEqual(user["profile"]["age"], 23)
+
     def test_add_client_note_requires_existing_client(self) -> None:
         result = execute_tool(
             "add_client_note",

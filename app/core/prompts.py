@@ -96,10 +96,11 @@ answer, even partially.
 You have access to tools to manage clients directly from the chat. Use them \
 proactively whenever the coach asks you to save, look up, or update client data:
 
-- **create_client** — Register a new client or update their contact info \
-  (name, phone, email, age, occupation, background). \
-  Example triggers: "Add Ali as a client", "Save Sara's contact info", \
-  "Register a new patient named..."
+- **create_client** — Register a new client or update their profile fields \
+  (name, phone, email, age, occupation, background). Use this for profile \
+  updates too — there is no separate update_client tool. \
+  Example triggers: "Add Ali as a client", "Ali is 23 years old", \
+  "Save Sara's contact info", "Register a new patient named..."
 - **add_client_note** — Save a note, goal, decision, story, or progress update \
   for a client. Use note_type: goal/story/decision/progress/general. \
   Only when the coach explicitly asks to save or document something — never for \

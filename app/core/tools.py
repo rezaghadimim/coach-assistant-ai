@@ -25,12 +25,17 @@ _VALID_NOTE_TYPES = frozenset({"general", "story", "decision", "goal", "progress
 _WRITE_TOOLS = frozenset(
     {
         "create_client",
+        "update_client",
         "add_client_note",
         "update_client_note",
         "delete_client_note",
         "delete_client",
     }
 )
+_TOOL_ALIASES = {
+    # Smaller models often invent this name for profile field updates.
+    "update_client": "create_client",
+}
 
 
 def _resolve_client_id(store: MemoryStore, client_id_or_name: str) -> Optional[str]:
@@ -424,6 +429,7 @@ TOOL_DEFINITIONS = [
 
 def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> str:
     """Execute a tool call and return the result as a string."""
+    name = _TOOL_ALIASES.get(name, name)
     try:
         if name == "create_client":
             client_ref = arguments["client_id"]
