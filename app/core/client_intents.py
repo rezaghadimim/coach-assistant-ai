@@ -67,6 +67,14 @@ _AGE_SET = re.compile(
     r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+age\s+(?:to|as)\s+(\d{1,3})\b",
     re.IGNORECASE,
 )
+_AGE_FOR = re.compile(
+    r"(?:add|set|update|change)\s+age\s+for\s+(.+?)\s+(?:to\s+)?(\d{1,3})\b",
+    re.IGNORECASE,
+)
+_AGE_FOR_REVERSE = re.compile(
+    r"(?:add|set|update|change)\s+age\s+(?:to\s+)?(\d{1,3})\s+for\s+(.+?)\s*$",
+    re.IGNORECASE,
+)
 _EMAIL_POSSESSIVE = re.compile(
     r"^(.+?)(?:'s|'s)\s+email\s+is\s+(\S+@\S+)\.?\s*$",
     re.IGNORECASE,
@@ -147,11 +155,17 @@ def _strip_profile_context(text: str) -> str:
 def _profile_update_args(
     client_ref: str,
     store: MemoryStore,
+    *,
+    message: str = "",
     **fields: Any,
 ) -> dict[str, Any]:
-    from app.core.tools import _resolve_client_id
+    from app.core.tools import _fuzzy_resolve_client_id, _resolve_client_id
 
     resolved_id = _resolve_client_id(store, client_ref)
+    if resolved_id is None:
+        resolved_id = _fuzzy_resolve_client_id(store, client_ref)
+    if resolved_id is None and message.strip():
+        resolved_id = detect_client_mention(message, store)
     client_id = resolved_id or client_ref.strip()
     existing = store.get_user(client_id)
     name = (existing or {}).get("name") or client_ref.strip()
@@ -180,7 +194,29 @@ def detect_profile_update(
         client_ref = _clean_client_ref(match.group(1))
         if not client_ref or client_ref.lower() in _PRONOUN_PLACEHOLDERS:
             continue
-        return _profile_update_args(client_ref, store, **{field: transform(match.group(2))})
+        return _profile_update_args(
+            client_ref,
+            store,
+            message=text,
+            **{field: transform(match.group(2))},
+        )
+
+    for pattern, client_group, age_group in (
+        (_AGE_FOR, 1, 2),
+        (_AGE_FOR_REVERSE, 2, 1),
+    ):
+        match = pattern.search(text)
+        if not match:
+            continue
+        client_ref = _clean_client_ref(match.group(client_group))
+        if not client_ref or client_ref.lower() in _PRONOUN_PLACEHOLDERS:
+            continue
+        return _profile_update_args(
+            client_ref,
+            store,
+            message=text,
+            age=int(match.group(age_group)),
+        )
 
     return None
 
@@ -207,6 +243,7 @@ def profile_update_from_add_note(
         return _profile_update_args(
             client_ref,
             store,
+            message=content,
             age=int(age_match.group(1)),
         )
     return None
@@ -330,6 +367,98 @@ def detect_client_mention(message: str, store: MemoryStore) -> Optional[str]:
     return None
 
 
+_UPDATE_NOTE_ID = re.compile(
+    r"(?:update|edit|change|revise|fix)\s+note\s+(\d+)",
+    re.IGNORECASE,
+)
+_DELETE_NOTE_ID = re.compile(
+    r"(?:delete|remove|drop)\s+note\s+(\d+)",
+    re.IGNORECASE,
+)
+
+
+def _tool_router_action(message: str, store: MemoryStore) -> Optional[str]:
+    """Use the tool router to classify and execute the best-matching tool.
+
+    Called after regex profile/create detection and before :func:`try_direct_client_query`.
+    Returns ``None`` when the router is not confident or params cannot be extracted.
+    """
+    from app.core.tool_router import classify_tool
+    from app.core.tools import execute_tool
+
+    match = classify_tool(message)
+    if match is None:
+        return None
+
+    tool = match.tool
+    hint = match.hint or ""
+    logger.debug(
+        "client_intents: tool_router matched tool=%s score=%.2f hint=%r backend=%s",
+        tool,
+        match.score,
+        hint,
+        match.backend,
+    )
+
+    if tool == "list_clients":
+        return execute_tool("list_clients", {}, store)
+
+    if tool == "create_client":
+        # Router says profile update; delegate to existing param extractors.
+        profile_args = detect_profile_update(message, store)
+        if profile_args:
+            return execute_tool("create_client", profile_args, store)
+        create_args = detect_create_client(message)
+        if create_args:
+            return execute_tool("create_client", create_args, store)
+        # Confident about the tool but cannot extract params → LLM handles it.
+        return None
+
+    if tool in ("get_client", "get_client_full"):
+        client_ref = detect_client_lookup(message)
+        if client_ref:
+            return execute_tool(tool, {"client_id": client_ref}, store)
+        client_id = detect_client_mention(message, store)
+        if client_id:
+            return execute_tool(tool, {"client_id": client_id}, store)
+        return None
+
+    if tool == "list_client_notes":
+        client_id = detect_client_mention(message, store)
+        if client_id is None:
+            return None
+        params: dict[str, Any] = {"client_id": client_id}
+        # Extract note_type from hint, e.g. "note_type:goal"
+        if hint.startswith("note_type:"):
+            note_type = hint.split(":", 1)[1]
+            params["note_type"] = note_type
+        return execute_tool("list_client_notes", params, store)
+
+    if tool == "update_client_note":
+        id_match = _UPDATE_NOTE_ID.search(message)
+        if id_match:
+            return execute_tool("update_client_note", {"note_id": int(id_match.group(1)), "content": message}, store)
+        return None
+
+    if tool == "delete_client_note":
+        id_match = _DELETE_NOTE_ID.search(message)
+        if id_match:
+            return execute_tool("delete_client_note", {"note_id": int(id_match.group(1))}, store)
+        return None
+
+    if tool == "delete_client":
+        client_ref = detect_client_lookup(message)
+        if client_ref:
+            return execute_tool("delete_client", {"client_id": client_ref}, store)
+        client_id = detect_client_mention(message, store)
+        if client_id:
+            return execute_tool("delete_client", {"client_id": client_id}, store)
+        return None
+
+    # add_client_note and any unknown tool: defer to LLM for param extraction.
+    return None
+
+
 def try_direct_client_query(message: str, store: MemoryStore) -> Optional[str]:
     """Run a read-only client query directly. Returns None if not a lookup command.
 
@@ -423,5 +552,9 @@ def try_direct_client_action(
     if text_tool:
         tool_name, params = text_tool
         return execute_tool(tool_name, params, store)
+
+    router_result = _tool_router_action(message, store)
+    if router_result is not None:
+        return router_result
 
     return try_direct_client_query(message, store)

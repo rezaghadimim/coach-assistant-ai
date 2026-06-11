@@ -170,6 +170,50 @@ class ClientIntentTests(unittest.TestCase):
             {"client_id": "ali", "name": "Ali", "age": 23},
         )
 
+    def test_detect_profile_update_add_age_for_client(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_profile_update("Add age for ali 13", store),
+            {"client_id": "ali", "name": "Ali", "age": 13},
+        )
+
+    def test_detect_profile_update_add_age_for_client_typo(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_profile_update("Add age for all 13", store),
+            {"client_id": "ali", "name": "Ali", "age": 13},
+        )
+
+    def test_detect_profile_update_add_age_reverse_order(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_profile_update("Add age 13 for ali", store),
+            {"client_id": "ali", "name": "Ali", "age": 13},
+        )
+
+    def test_detect_profile_update_set_age_for_client(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        self.assertEqual(
+            detect_profile_update("Set age for ali to 13", store),
+            {"client_id": "ali", "name": "Ali", "age": 13},
+        )
+
     def test_direct_profile_update_returns_update_client_preview(self) -> None:
         execute_tool(
             "create_client",
@@ -226,6 +270,121 @@ class ClientIntentTests(unittest.TestCase):
         tool_name, params = parsed
         self.assertEqual(tool_name, "create_client")
         self.assertEqual(params["client_id"], "hassan")
+
+
+class ToolRouterWiringTests(unittest.TestCase):
+    """End-to-end tests confirming the tool router is correctly wired
+    into try_direct_client_action() for common misrouting scenarios."""
+
+    def setUp(self) -> None:
+        import os
+        os.environ.setdefault("TOOL_ROUTER_BACKEND", "token")
+        os.environ.setdefault("TOOL_ROUTER_THRESHOLD", "0.40")
+        os.environ.setdefault("TOOL_ROUTER_MARGIN", "0.05")
+        reset_runtime_state()
+        from app.core.tool_router import build_index, reset_index
+        reset_index()
+        build_index()
+
+    def tearDown(self) -> None:
+        from app.core.tool_router import reset_index
+        reset_index()
+
+    def _register_ali(self) -> None:
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+
+    # ------------------------------------------------------------------
+    # The main bug fix: age updates must NOT create add_client_note rows
+    # ------------------------------------------------------------------
+
+    def test_age_is_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action("Ali is 23 years old", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("Age: 23", result)
+        self.assertNotIn("Add note", result)
+
+    def test_age_possessive_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action("Ali's age is 23", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("Age: 23", result)
+
+    def test_age_set_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action("Set Ali's age to 30", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("30", result)
+
+    def test_add_age_for_client_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action("Add age for ali 13", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("Age: 13", result)
+        self.assertNotIn("Age: 23", result)
+
+    def test_age_update_does_not_create_note(self) -> None:
+        self._register_ali()
+        # Simulate a confirmation flow so the profile is actually saved.
+        preview = try_direct_client_action("Ali is 23 years old", store)
+        assert preview is not None
+        history = [
+            {"role": "user", "content": "Ali is 23 years old"},
+            {"role": "assistant", "content": preview},
+            {"role": "user", "content": "yes"},
+        ]
+        result = try_direct_client_action("yes", store, history)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("saved successfully", result)
+        # Confirm no stray note was written
+        notes = store.get_client_notes("ali")
+        age_notes = [n for n in notes if "23" in (n.get("content") or "")]
+        self.assertEqual(len(age_notes), 0, "Age update should not create a note")
+
+    # ------------------------------------------------------------------
+    # Tool router wiring for read tools
+    # ------------------------------------------------------------------
+
+    def test_router_list_clients_via_try_direct(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action("Who are my clients?", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Ali", result)
+
+    def test_router_get_client_full_via_try_direct(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action("Show me everything about Ali", store)
+        self.assertIsNotNone(result)
+
+    def test_router_list_notes_goals(self) -> None:
+        self._register_ali()
+        execute_tool(
+            "add_client_note",
+            {
+                "client_id": "ali",
+                "content": "Run 3x per week",
+                "note_type": "goal",
+                "confirmed": True,
+            },
+            store,
+        )
+        result = try_direct_client_action("What are Ali's goals?", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Run 3x per week", result)
 
 
 if __name__ == "__main__":

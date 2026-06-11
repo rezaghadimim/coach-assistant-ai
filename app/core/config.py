@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     rag_top_k: int = 3
     rag_min_score: float = 0.05
 
+    # Tool Router
+    tool_router_enabled: bool = True
+    # backend: "embedding" | "token" | "auto"
+    # "auto" uses embedding when the Ollama embed model probe passes, else falls back to token.
+    tool_router_backend: str = "auto"
+    ollama_embed_model: str = "karuniaperjuangan/multilingual-e5-small"
+    tool_knowledge_dir: str = "docs/tool-knowledge"
+    tool_router_threshold: float = 0.75
+    tool_router_margin: float = 0.08
+    # Prepend "query: " / "passage: " prefixes required by multilingual-e5 models.
+    tool_router_use_e5_prefix: bool = True
+
     # Memory
     memory_db_path: str = "data/coach_assistant.db"
     summary_trigger_messages: int = 20

@@ -13,6 +13,7 @@ Each ADR captures a significant architectural or technical decision, its context
 | [0004](0004-sqlite-memory-persistence.md) | SQLite for session and memory persistence | Accepted |
 | [0005](0005-openwebui-integration.md) | Open WebUI integration via OpenAI-compatible API | Accepted |
 | [0006](0006-optional-openrouter-provider.md) | Optional cloud LLM provider via OpenRouter | Accepted |
+| [0007](0007-ollama-embedding-tool-routing.md) | Ollama embeddings for tool routing | Accepted |
 
 ## Template
 

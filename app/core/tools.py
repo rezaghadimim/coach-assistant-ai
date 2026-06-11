@@ -53,6 +53,21 @@ def _resolve_client_id(store: MemoryStore, client_id_or_name: str) -> Optional[s
     return None
 
 
+def _fuzzy_resolve_client_id(store: MemoryStore, client_id_or_name: str) -> Optional[str]:
+    """Match when the ref is one character off from a known id or display name."""
+    needle = client_id_or_name.strip().lower()
+    if len(needle) < 3:
+        return None
+    for user in store.list_users():
+        for candidate in (user["user_id"], user.get("name") or ""):
+            cand = candidate.strip().lower()
+            if not cand or len(cand) != len(needle):
+                continue
+            if sum(a != b for a, b in zip(needle, cand)) == 1:
+                return user["user_id"]
+    return None
+
+
 def _format_client_profile(user: dict[str, Any]) -> str:
     profile = user.get("profile") or {}
     lines = [

@@ -119,3 +119,42 @@ class ClientNoteListResponse(BaseModel):
 
     user_id: str
     notes: list[ClientNoteResponse]
+
+
+# ------------------------------------------------------------------
+# Tool routing
+# ------------------------------------------------------------------
+
+
+class ToolClassifyRequest(BaseModel):
+    """Request payload for classifying a message into a tool."""
+
+    message: str = Field(..., min_length=1)
+
+
+class ToolMatchItem(BaseModel):
+    """A single tool candidate with its score."""
+
+    tool: str
+    score: float
+    hint: Optional[str] = None
+    utterance: Optional[str] = None
+
+
+class ToolClassifyResponse(BaseModel):
+    """Response from the tool classification endpoint."""
+
+    message: str
+    tool: Optional[str] = None
+    score: Optional[float] = None
+    hint: Optional[str] = None
+    backend: Optional[str] = None
+    top_n: list[ToolMatchItem] = Field(default_factory=list)
+    deferred: bool = False
+
+
+class ToolReindexResponse(BaseModel):
+    """Response from the tool router reindex endpoint."""
+
+    examples_indexed: int
+    backend: str

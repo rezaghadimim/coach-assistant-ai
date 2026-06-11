@@ -11,7 +11,9 @@ Runs locally using open-source LLMs.
 | Item | Detail |
 |------|--------|
 | LLM | Llama 3.1 8B (via Ollama) |
+| Embed model | multilingual-e5-small (via Ollama, for tool routing) |
 | RAG | Local chunk index + similarity retrieval |
+| Tool Routing | Embedding + token similarity for pre-LLM tool disambiguation |
 | Backend | FastAPI (Python) |
 | Database | SQLite (client notes, sessions, memory) |
 | UI | Open WebUI (via OpenAI-compatible API) |
@@ -32,6 +34,7 @@ Runs locally using open-source LLMs.
 - Python 3.11+
 - [Ollama](https://ollama.com) installed
 - `ollama pull llama3.1:8b`
+- `ollama pull karuniaperjuangan/multilingual-e5-small` — for tool routing (multilingual support)
 
 ## Getting Started
 
@@ -40,20 +43,28 @@ Runs locally using open-source LLMs.
 pip install -r requirements.txt
 
 # 2. Ingest coaching documents
-python scripts/ingest.py --docs-dir ./docs/knowledge/
+python3 scripts/ingest.py --docs-dir ./docs/knowledge/
 
 # 3. Run API
-python main.py
+python3 main.py
 
 # 4. Run tests
 python3 -m unittest discover -s tests -p "test_*.py"
 
-# 5. (Optional, Phase 5) Export sessions for fine-tuning
-python scripts/export_training_data.py --output training_data.jsonl
+# 5. (Optional) Evaluate tool routing accuracy
+python3 scripts/eval_tool_routing.py --backend token --show-errors
+
+# 6. (Optional, Phase 5) Export sessions for fine-tuning
+python3 scripts/export_training_data.py --output training_data.jsonl
 ```
 
 `docs/knowledge/` is a local-only ingest folder. Keep your real source documents there
 outside git; only a sample file is tracked in the repository.
+
+`docs/tool-knowledge/` contains per-tool documentation and the routing corpus
+(`examples/routing.jsonl`). This is tracked in git and is the source of truth for
+tool disambiguation. Add examples here when you observe misrouting, then call
+`POST /api/tools/reindex` to pick up changes without restarting.
 
 ## Docker / Open WebUI
 
@@ -87,6 +98,8 @@ model options, cost reference, and troubleshooting.
 - `GET /health`
 - `POST /api/chat`
 - `POST /api/ingest`
+- `POST /api/tools/classify` — debug tool routing for a message
+- `POST /api/tools/reindex` — rebuild routing index after editing corpus
 - `POST /api/users`
 - `GET /api/users/{user_id}`
 - `GET /api/sessions/{user_id}`
@@ -106,6 +119,7 @@ model options, cost reference, and troubleshooting.
 
 - [Architecture](./docs/ARCHITECTURE.md)
 - [Implementation Plan](./docs/IMPLEMENTATION.md)
+- [Tool Routing](./docs/TOOL_ROUTING.md)
 - [RAG Pipeline](./docs/RAG.md)
 - [Memory System](./docs/MEMORY.md)
 - [Open WebUI Integration](./docs/OPENWEBUI.md)

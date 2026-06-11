@@ -67,6 +67,30 @@
 - Export logic in `app/memory/training_export.py`
 - Tests in `tests/test_training_export.py`
 
+### Phase 2B: Tool Routing — Embedding-Based Disambiguation
+
+**Problem solved:** messages like "Ali's age is 23" were reaching `add_client_note` (duplicate note on every message) instead of `create_client` (profile field merge).
+
+**Done:**
+- [x] Tool knowledge corpus: `docs/tool-knowledge/` (9 per-tool markdown docs + `routing.jsonl`)
+- [x] Configuration: `TOOL_ROUTER_BACKEND`, `OLLAMA_EMBED_MODEL`, `TOOL_ROUTER_THRESHOLD`, etc.
+- [x] Embedding client: `app/core/embeddings.py` — Ollama `/api/embeddings` with E5 prefix support
+- [x] Tool router: `app/core/tool_router.py` — token + embedding backends, `classify_tool()`
+- [x] Wiring: `_tool_router_action()` in `client_intents.py`, inserted before LLM tool calling
+- [x] Eval dataset: `data/eval/tool_routing.jsonl` (~60 labeled utterances)
+- [x] Eval script: `scripts/eval_tool_routing.py` — accuracy/precision/recall/F1 per tool
+- [x] API: `POST /api/tools/classify`, `POST /api/tools/reindex`, health embed status
+- [x] Tests: `test_tool_router.py`, `test_embeddings.py`, `test_tools_api.py`, extended `test_client_intents.py`
+- [x] Docs: `TOOL_ROUTING.md`, ADR-0007
+
+**To operate:**
+```bash
+ollama pull karuniaperjuangan/multilingual-e5-small
+python scripts/eval_tool_routing.py --backend token --show-errors
+```
+
+See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) for full guide.
+
 ## Remaining
 
 ### Phase 5: Fine-tuning (LoRA) — Behavior Adaptation

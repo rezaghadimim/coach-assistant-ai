@@ -1,0 +1,50 @@
+{"utterance": "Ali's age is 23", "expected_tool": "create_client"}
+{"utterance": "Ali is 23 years old", "expected_tool": "create_client"}
+{"utterance": "Set Ali's age to 30", "expected_tool": "create_client"}
+{"utterance": "Update Ali's age to 25", "expected_tool": "create_client"}
+{"utterance": "Sara is 28 years old", "expected_tool": "create_client"}
+{"utterance": "Mohammad is 40 years old", "expected_tool": "create_client"}
+{"utterance": "Ali's email is ali@example.com", "expected_tool": "create_client"}
+{"utterance": "Sara's phone number is 09121234567", "expected_tool": "create_client"}
+{"utterance": "Ali works as a software engineer", "expected_tool": "create_client"}
+{"utterance": "Sara is a doctor", "expected_tool": "create_client"}
+{"utterance": "Add Ali as a client", "expected_tool": "create_client"}
+{"utterance": "Register Sara as a new patient", "expected_tool": "create_client"}
+{"utterance": "Create a client named Mohammad", "expected_tool": "create_client"}
+{"utterance": "Add Hassan as another patient", "expected_tool": "create_client"}
+{"utterance": "Note that Ali decided to change careers", "expected_tool": "add_client_note"}
+{"utterance": "Save a goal for Ali: run 3 times per week", "expected_tool": "add_client_note"}
+{"utterance": "Document that Sara made progress on her goal", "expected_tool": "add_client_note"}
+{"utterance": "Add a note: Ali is feeling overwhelmed with work", "expected_tool": "add_client_note"}
+{"utterance": "Write down that Ali committed to journaling daily", "expected_tool": "add_client_note"}
+{"utterance": "Ali wants to improve his work-life balance, save this as a goal", "expected_tool": "add_client_note"}
+{"utterance": "Log that Sara completed her weekly review", "expected_tool": "add_client_note"}
+{"utterance": "Save Ali's story: he moved to Canada at age 10", "expected_tool": "add_client_note"}
+{"utterance": "Record that Mohammad grew up in a large family", "expected_tool": "add_client_note"}
+{"utterance": "Update note 3 to: Ali now runs 5 times per week", "expected_tool": "update_client_note"}
+{"utterance": "Edit note 5 for Ali", "expected_tool": "update_client_note"}
+{"utterance": "Change note 7: Ali's goal is to read daily", "expected_tool": "update_client_note"}
+{"utterance": "Revise note 2 with the new decision", "expected_tool": "update_client_note"}
+{"utterance": "Delete note 3", "expected_tool": "delete_client_note"}
+{"utterance": "Remove note 5 for Ali", "expected_tool": "delete_client_note"}
+{"utterance": "Get rid of note 7", "expected_tool": "delete_client_note"}
+{"utterance": "Delete client Ali", "expected_tool": "delete_client"}
+{"utterance": "Remove patient Sara", "expected_tool": "delete_client"}
+{"utterance": "Delete Ali and all his data", "expected_tool": "delete_client"}
+{"utterance": "What is Ali's email?", "expected_tool": "get_client"}
+{"utterance": "What is Ali's phone number?", "expected_tool": "get_client"}
+{"utterance": "What is Sara's occupation?", "expected_tool": "get_client"}
+{"utterance": "Show me everything about Ali", "expected_tool": "get_client_full"}
+{"utterance": "Get all data about Sara", "expected_tool": "get_client_full"}
+{"utterance": "Give me Ali's full details", "expected_tool": "get_client_full"}
+{"utterance": "Tell me all about Mohammad", "expected_tool": "get_client_full"}
+{"utterance": "What are Ali's goals?", "expected_tool": "list_client_notes"}
+{"utterance": "Show me Ali's decisions", "expected_tool": "list_client_notes"}
+{"utterance": "What progress has Sara made?", "expected_tool": "list_client_notes"}
+{"utterance": "Tell me Ali's background story", "expected_tool": "list_client_notes"}
+{"utterance": "List all notes for Ali", "expected_tool": "list_client_notes"}
+{"utterance": "What objectives does Mohammad have?", "expected_tool": "list_client_notes"}
+{"utterance": "Who are my clients?", "expected_tool": "list_clients"}
+{"utterance": "List my clients", "expected_tool": "list_clients"}
+{"utterance": "Show all my patients", "expected_tool": "list_clients"}
+{"utterance": "Who am I coaching?", "expected_tool": "list_clients"}

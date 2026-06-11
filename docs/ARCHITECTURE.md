@@ -79,6 +79,16 @@ The local Ollama provider is always the default.
 - `scripts/export_training_data.py`: export closed sessions from SQLite to JSONL
 - Used as Phase 5 prep — see [`FINETUNE.md`](FINETUNE.md)
 
+### 11) Tool Router (`app/core/tool_router.py`, `app/core/embeddings.py`)
+- Classifies a coach message into the best-matching tool *before* the LLM using example-based similarity
+- Two backends: **token** (TF cosine, offline/CI-safe) and **embedding** (Ollama dense vectors, multilingual)
+- Backend selection via `TOOL_ROUTER_BACKEND`: `"token"` | `"embedding"` | `"auto"` (default)
+- Corpus: `docs/tool-knowledge/examples/routing.jsonl` — labeled utterances per tool
+- API: `POST /api/tools/classify`, `POST /api/tools/reindex`
+- Fixes misrouting of profile updates (e.g. age) to `add_client_note` instead of `create_client`
+- Embed model: `karuniaperjuangan/multilingual-e5-small` via Ollama; supports Farsi/Persian input
+- See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)
+
 ## Data Flow
 
 1. Client sends `POST /api/chat {user_id, message}`
@@ -91,7 +101,8 @@ The local Ollama provider is always the default.
    - client notes/stories/decisions
    - previous session summary
 5. Backend resolves provider (Ollama or OpenRouter) from the virtual model ID
-6. Provider executes the tool-calling loop and returns a final reply; result is stored in SQLite
+6. **Tool Router** classifies the message; if confident, executes the tool directly (skips LLM for this step)
+7. Provider executes the tool-calling loop for remaining cases and returns a final reply; result is stored in SQLite
 
 ## Current File Map
 
@@ -101,13 +112,16 @@ app/
 │   ├── chat.py
 │   ├── ingest.py
 │   ├── openai_compat.py
+│   ├── tools.py           ← tool routing API
 │   └── users.py
 ├── core/
 │   ├── config.py
+│   ├── embeddings.py      ← Ollama embedding client
 │   ├── llm.py
 │   ├── model_registry.py
 │   ├── prompts.py
 │   ├── scope.py
+│   ├── tool_router.py     ← tool classification (token + embedding)
 │   ├── tools.py
 │   ├── client_intents.py
 │   ├── confirmations.py
@@ -127,7 +141,20 @@ app/
 └── models/
     └── schemas.py
 
+docs/
+├── tool-knowledge/        ← per-tool docs + routing corpus
+│   ├── create_client.md
+│   ├── add_client_note.md
+│   ├── ... (one per tool)
+│   └── examples/
+│       └── routing.jsonl
+
+data/
+└── eval/
+    └── tool_routing.jsonl ← labeled eval set
+
 scripts/
 ├── ingest.py
-└── export_training_data.py
+├── export_training_data.py
+└── eval_tool_routing.py   ← accuracy/F1 evaluation script
 ```

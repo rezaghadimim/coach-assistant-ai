@@ -1,0 +1,76 @@
+{"utterance": "Ali's age is 23", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Ali is 23 years old", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Set Ali's age to 30", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Add age for Ali 13", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Set age for Ali to 13", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Add age 13 for Ali", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Update Ali's age to 25", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Ali is 35 years old", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Sara is 28 years old", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Mohammad is 40 years old", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Ali's email is ali@example.com", "tool": "create_client", "hint": "profile:email"}
+{"utterance": "Sara's email is sara@test.com", "tool": "create_client", "hint": "profile:email"}
+{"utterance": "Ali's phone number is 09121234567", "tool": "create_client", "hint": "profile:phone"}
+{"utterance": "Sara's phone is +1-555-0100", "tool": "create_client", "hint": "profile:phone"}
+{"utterance": "Ali works as a software engineer", "tool": "create_client", "hint": "profile:occupation"}
+{"utterance": "Sara is a doctor", "tool": "create_client", "hint": "profile:occupation"}
+{"utterance": "Mohammad works as a teacher", "tool": "create_client", "hint": "profile:occupation"}
+{"utterance": "Ali grew up in Tehran", "tool": "create_client", "hint": "profile:background"}
+{"utterance": "Add Ali as a client", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Register Sara as a new patient", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Create a client named Mohammad", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Add Hassan as another patient", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Note that Ali decided to change careers", "tool": "add_client_note", "hint": "note_type:decision"}
+{"utterance": "Save a goal for Ali: run 3 times per week", "tool": "add_client_note", "hint": "note_type:goal"}
+{"utterance": "Document that Sara made progress on her goal", "tool": "add_client_note", "hint": "note_type:progress"}
+{"utterance": "Record that Mohammad grew up in a large family", "tool": "add_client_note", "hint": "note_type:story"}
+{"utterance": "Add a note: Ali is feeling overwhelmed with work", "tool": "add_client_note", "hint": "note_type:general"}
+{"utterance": "Write down that Ali committed to journaling daily", "tool": "add_client_note", "hint": "note_type:decision"}
+{"utterance": "Ali wants to improve his work-life balance, save this as a goal", "tool": "add_client_note", "hint": "note_type:goal"}
+{"utterance": "Save Ali's story: he moved to Canada at age 10", "tool": "add_client_note", "hint": "note_type:story"}
+{"utterance": "Log that Sara completed her weekly review", "tool": "add_client_note", "hint": "note_type:progress"}
+{"utterance": "Ali decided to leave his job by end of year", "tool": "add_client_note", "hint": "note_type:decision"}
+{"utterance": "Note: Sara wants to start her own business", "tool": "add_client_note", "hint": "note_type:goal"}
+{"utterance": "Save that Mohammad is making great progress on his fitness goal", "tool": "add_client_note", "hint": "note_type:progress"}
+{"utterance": "Document Ali's background: grew up in a small town", "tool": "add_client_note", "hint": "note_type:story"}
+{"utterance": "Update note 3 to: Ali now runs 5 times per week", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Edit note 5 for Ali", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Change note 7: Ali's goal is to read daily", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Revise note 2 with the new decision", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Fix note 4, Ali changed his mind", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Delete note 3", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "Remove note 5 for Ali", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "Get rid of note 7", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "Delete client Ali", "tool": "delete_client", "hint": "client"}
+{"utterance": "Remove patient Sara", "tool": "delete_client", "hint": "client"}
+{"utterance": "Delete Ali and all his data", "tool": "delete_client", "hint": "client"}
+{"utterance": "What is Ali's email?", "tool": "get_client", "hint": "profile:email"}
+{"utterance": "What is Ali's phone number?", "tool": "get_client", "hint": "profile:phone"}
+{"utterance": "Show me Ali's contact info", "tool": "get_client", "hint": "profile"}
+{"utterance": "What is Ali's age?", "tool": "get_client", "hint": "profile:age"}
+{"utterance": "What is Sara's occupation?", "tool": "get_client", "hint": "profile:occupation"}
+{"utterance": "Get Ali's profile details", "tool": "get_client", "hint": "profile"}
+{"utterance": "Show me everything about Ali", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Get all data about Sara", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Give me Ali's full details", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Pull up the complete record for Mohammad", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Everything on file for Ali", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Full profile and notes for Sara", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Tell me all about Ali", "tool": "get_client_full", "hint": "full"}
+{"utterance": "What are Ali's goals?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "Show me Ali's goals", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What is Sara working toward?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "List Mohammad's objectives", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What decisions has Ali made?", "tool": "list_client_notes", "hint": "note_type:decision"}
+{"utterance": "Show me Ali's decisions", "tool": "list_client_notes", "hint": "note_type:decision"}
+{"utterance": "What progress has Sara made?", "tool": "list_client_notes", "hint": "note_type:progress"}
+{"utterance": "Show me Sara's progress updates", "tool": "list_client_notes", "hint": "note_type:progress"}
+{"utterance": "Tell me Ali's background story", "tool": "list_client_notes", "hint": "note_type:story"}
+{"utterance": "What is Ali's story?", "tool": "list_client_notes", "hint": "note_type:story"}
+{"utterance": "List all notes for Ali", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "Show all documentation for Sara", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "Who are my clients?", "tool": "list_clients", "hint": "all"}
+{"utterance": "List my clients", "tool": "list_clients", "hint": "all"}
+{"utterance": "Show all my patients", "tool": "list_clients", "hint": "all"}
+{"utterance": "Who am I coaching?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Which clients do I have?", "tool": "list_clients", "hint": "all"}

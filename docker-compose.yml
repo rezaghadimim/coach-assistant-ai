@@ -19,6 +19,7 @@ services:
     volumes:
       - coach_data:/app/data
       - ./docs/knowledge:/app/docs/knowledge:ro
+      - ./docs/tool-knowledge:/app/docs/tool-knowledge:ro
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
