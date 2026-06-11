@@ -4,8 +4,7 @@ from pydantic_settings import BaseSettings
 DEFAULT_OPENROUTER_MODELS = (
     "openai/gpt-4o-mini,"
     "openai/gpt-oss-120b:free,"
-    "openai/gpt-oss-20b:free,"
-    "z-ai/glm-4.5-air:free"
+    "openai/gpt-oss-20b:free"
 )
 
 

@@ -11,7 +11,7 @@ from main import app
 
 DEFAULT_OPENROUTER_MODELS = (
     "openai/gpt-4o-mini,openai/gpt-oss-120b:free,"
-    "openai/gpt-oss-20b:free,z-ai/glm-4.5-air:free"
+    "openai/gpt-oss-20b:free"
 )
 
 
@@ -47,12 +47,6 @@ def _cloud_model_entries():
             "object": "model",
             "owned_by": "openrouter",
             "name": "Coach Assistant AI (Cloud · openai/gpt-oss-20b:free)",
-        },
-        {
-            "id": "coach-assistant-ai-cloud-glm-4-5-air",
-            "object": "model",
-            "owned_by": "openrouter",
-            "name": "Coach Assistant AI (Cloud · z-ai/glm-4.5-air:free)",
         },
     ]
 
@@ -216,10 +210,10 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = "sk-or-test"
             mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
-            provider = resolve_provider("coach-assistant-ai-cloud-glm-4-5-air")
+            provider = resolve_provider("coach-assistant-ai-cloud-gpt-oss-20b")
 
         self.assertIsInstance(provider, OpenRouterProvider)
-        self.assertEqual(provider._model, "z-ai/glm-4.5-air:free")
+        self.assertEqual(provider._model, "openai/gpt-oss-20b:free")
 
     async def test_resolve_provider_cloud_without_key_returns_ollama(self) -> None:
         """Cloud model ID without an API key must fall back to local."""

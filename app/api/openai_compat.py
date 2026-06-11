@@ -65,7 +65,16 @@ def _llm_error_hint(exc: Exception, *, cloud: bool) -> Optional[str]:
     if isinstance(exc, httpx.ConnectError):
         return "could not connect to OpenRouter" if cloud else "could not connect to Ollama"
     if isinstance(exc, httpx.HTTPStatusError):
-        return f"OpenRouter returned HTTP {exc.response.status_code}"
+        if cloud:
+            try:
+                body = exc.response.json()
+                message = body.get("error", {}).get("message")
+                if isinstance(message, str) and message.strip():
+                    return message.strip()
+            except (json.JSONDecodeError, ValueError, AttributeError):
+                pass
+            return f"OpenRouter returned HTTP {exc.response.status_code}"
+        return f"Ollama returned HTTP {exc.response.status_code}"
     return None
 
 
