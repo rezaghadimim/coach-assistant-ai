@@ -31,6 +31,10 @@ import argparse
 import json
 import os
 import sys
+
+# hf-xet can hang indefinitely on some networks (0-byte .incomplete blobs).
+# Must be set before huggingface_hub is imported (lazy imports below).
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 import textwrap
 from datetime import datetime
 from pathlib import Path
