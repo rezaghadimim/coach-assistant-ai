@@ -1,5 +1,7 @@
 """Session lifecycle helpers for per-user coaching sessions."""
 
+from typing import Optional
+
 from app.memory.store import MemoryStore
 from app.memory.summarizer import summarize_session
 
@@ -15,7 +17,14 @@ class SessionManager:
         """Clear in-memory active session cache."""
         self._active_sessions.clear()
 
-    def get_or_create_session_id(self, user_id: str) -> str:
+    def get_or_create_session_id(
+        self,
+        user_id: str,
+        *,
+        coach_name: Optional[str] = None,
+    ) -> str:
+        self.store.upsert_user(user_id, name=coach_name, is_coach=True)
+
         if user_id in self._active_sessions:
             return self._active_sessions[user_id]
 
@@ -24,19 +33,24 @@ class SessionManager:
             self._active_sessions[user_id] = existing
             return existing
 
-        self.store.upsert_user(user_id)
         created = self.store.create_session(user_id)
         self._active_sessions[user_id] = created
         return created
 
-    def start_new_session(self, user_id: str) -> str:
+    def start_new_session(
+        self,
+        user_id: str,
+        *,
+        coach_name: Optional[str] = None,
+    ) -> str:
+        self.store.upsert_user(user_id, name=coach_name, is_coach=True)
+
         old_session = self._active_sessions.get(user_id) or self.store.get_latest_open_session(user_id)
         if old_session:
             messages = self.store.get_session_messages(old_session)
             summary = summarize_session(messages) if messages else None
             self.store.end_session(old_session, summary=summary)
 
-        self.store.upsert_user(user_id)
         new_session = self.store.create_session(user_id)
         self._active_sessions[user_id] = new_session
         return new_session

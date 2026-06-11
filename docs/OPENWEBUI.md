@@ -28,10 +28,18 @@ resolves it with the following priority:
 
 1. `"user"` field in the request JSON body
 2. `X-User-Id` HTTP request header
-3. Falls back to `"openwebui-user"` (shared session)
+3. Open WebUI forwarded headers (`ENABLE_FORWARD_USER_INFO_HEADERS=true` in
+   docker-compose): `X-OpenWebUI-User-Id` and `X-OpenWebUI-User-Name`
+4. Falls back to `"openwebui-user"` (shared session)
 
-For per-user isolation, set the `X-User-Id` header in Open WebUI's
-*Connection → Headers* settings, or pass `"user": "<id>"` from a custom pipe.
+With `ENABLE_FORWARD_USER_INFO_HEADERS` enabled (default in docker-compose),
+each logged-in coach gets their own session keyed on their WebUI user ID, and
+their full display name is stored for the assistant context. Coach accounts are
+excluded from patient/client lists (`list_clients`).
+
+For manual per-user isolation without Open WebUI headers, set the `X-User-Id`
+header in Open WebUI's *Connection → Headers* settings, or pass
+`"user": "<id>"` from a custom pipe.
 
 ## Running with Docker Compose
 

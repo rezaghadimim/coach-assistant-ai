@@ -189,6 +189,23 @@ class ExecuteToolTests(unittest.TestCase):
         self.assertIn("Ali", result)
         self.assertIn("ali", result)
 
+    def test_list_clients_excludes_coach_session_user(self) -> None:
+        from app.memory.session import SessionManager
+
+        session_manager = SessionManager(store)
+        session_manager.get_or_create_session_id(
+            "coach-reza", coach_name="Reza Coach"
+        )
+        execute_tool(
+            "create_client",
+            {"client_id": "ali", "name": "Ali", "confirmed": True},
+            store,
+        )
+        result = execute_tool("list_clients", {}, store)
+        self.assertIn("Ali", result)
+        self.assertNotIn("coach-reza", result)
+        self.assertNotIn("Reza Coach", result)
+
     def test_get_client_returns_readable_profile(self) -> None:
         execute_tool(
             "create_client",

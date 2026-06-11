@@ -46,6 +46,8 @@ services:
       # Coach branding for the UI
       WEBUI_NAME: "Coach Assistant AI"
       DEFAULT_MODELS: "coach-assistant-ai"
+      # Forward logged-in user id/name to the Coach API on each chat request.
+      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
     volumes:
       - webui_data:/app/backend/data
     depends_on:

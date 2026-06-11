@@ -73,6 +73,30 @@ class Phase4OpenAICompatTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
 
+    def test_chat_completion_uses_openwebui_user_headers(self) -> None:
+        from app.api.chat import store
+
+        with patch(
+            "app.api.openai_compat.generate_response",
+            new=AsyncMock(return_value="Hello coach."),
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai",
+                    "messages": [{"role": "user", "content": "Who are my clients?"}],
+                },
+                headers={
+                    "X-OpenWebUI-User-Id": "webui-uuid-123",
+                    "X-OpenWebUI-User-Name": "Reza Fullname",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        coach = store.get_user("webui-uuid-123")
+        self.assertIsNotNone(coach)
+        assert coach is not None
+        self.assertEqual(coach["name"], "Reza Fullname")
+
     def test_chat_completion_defaults_to_openwebui_user(self) -> None:
         with patch(
             "app.api.openai_compat.generate_response",

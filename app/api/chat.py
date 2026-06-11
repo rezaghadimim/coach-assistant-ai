@@ -42,11 +42,8 @@ def build_system_prompt(user_id: str, message: str) -> str:
             sections.append(rag_context)
 
     user = store.get_user(user_id)
-    if user:
-        sections.append(
-            "## Client Profile\n"
-            + json.dumps(user["profile"], ensure_ascii=False, indent=2)
-        )
+    if user and user.get("name"):
+        sections.append(f"## Coach\nYou are assisting **{user['name']}**.")
 
     # Inject client notes/stories/decisions as documentation context
     client_notes = store.get_client_notes(user_id)

@@ -11,7 +11,12 @@ The coaching session is keyed on a *user_id*.  Callers can supply it via:
 
 1. The ``user`` field in the request body  (``{"user": "alice", ...}``)
 2. The ``X-User-Id`` HTTP request header
-3. Defaults to ``"openwebui-user"`` if neither is provided.
+3. Open WebUI forwarded headers (when ``ENABLE_FORWARD_USER_INFO_HEADERS=true``):
+   ``X-OpenWebUI-User-Id`` and ``X-OpenWebUI-User-Name``
+4. Defaults to ``"openwebui-user"`` if none of the above are provided.
+
+Coach accounts are stored separately from client/patient records so the
+logged-in coach does not appear in ``list_clients`` results.
 """
 
 import asyncio
@@ -140,8 +145,9 @@ class _ChatCompletionRequest(BaseModel):
 def _resolve_user_id(
     request_user: Optional[str],
     header_user: Optional[str],
+    openwebui_user_id: Optional[str],
 ) -> str:
-    return request_user or header_user or "openwebui-user"
+    return request_user or header_user or openwebui_user_id or "openwebui-user"
 
 
 def _make_chunk(
@@ -221,6 +227,12 @@ async def list_models():
 async def chat_completions(
     request: _ChatCompletionRequest,
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    x_openwebui_user_id: Optional[str] = Header(
+        default=None, alias="X-OpenWebUI-User-Id"
+    ),
+    x_openwebui_user_name: Optional[str] = Header(
+        default=None, alias="X-OpenWebUI-User-Name"
+    ),
 ):
     """OpenAI-compatible chat completion endpoint.
 
@@ -247,13 +259,16 @@ async def chat_completions(
             },
         )
 
-    user_id = _resolve_user_id(request.user, x_user_id)
+    user_id = _resolve_user_id(request.user, x_user_id, x_openwebui_user_id)
+    coach_name = (x_openwebui_user_name or "").strip() or None
 
     # Extract the latest user message for RAG retrieval and persistence.
     user_messages = [m for m in request.messages if m.role == "user"]
     last_user_message = user_messages[-1].content if user_messages else ""
 
-    session_id = session_manager.get_or_create_session_id(user_id)
+    session_id = session_manager.get_or_create_session_id(
+        user_id, coach_name=coach_name
+    )
     if last_user_message:
         store.add_message(session_id, "user", last_user_message)
 

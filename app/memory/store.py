@@ -75,6 +75,24 @@ class MemoryStore:
                 )
                 """
             )
+            self._ensure_users_is_coach_column(conn)
+
+    def _ensure_users_is_coach_column(self, conn: sqlite3.Connection) -> None:
+        """Add is_coach flag and backfill coach rows from existing sessions."""
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()
+        }
+        if "is_coach" not in columns:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN is_coach INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.execute(
+                """
+                UPDATE users
+                SET is_coach = 1
+                WHERE user_id IN (SELECT DISTINCT user_id FROM sessions)
+                """
+            )
 
     def upsert_user(
         self,
@@ -82,19 +100,50 @@ class MemoryStore:
         *,
         name: Optional[str] = None,
         profile: Optional[Dict[str, Any]] = None,
+        is_coach: Optional[bool] = None,
     ) -> None:
-        profile_json = json.dumps(profile or {}, ensure_ascii=False)
         with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO users (user_id, name, profile_json)
-                VALUES (?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    name=COALESCE(excluded.name, users.name),
-                    profile_json=excluded.profile_json
-                """,
-                (user_id, name, profile_json),
-            )
+            if profile is None and is_coach is None:
+                conn.execute(
+                    """
+                    INSERT INTO users (user_id, name, profile_json)
+                    VALUES (?, ?, '{}')
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        name=COALESCE(excluded.name, users.name)
+                    """,
+                    (user_id, name),
+                )
+                return
+
+            profile_json = json.dumps(profile or {}, ensure_ascii=False)
+            if is_coach is None:
+                conn.execute(
+                    """
+                    INSERT INTO users (user_id, name, profile_json)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        name=COALESCE(excluded.name, users.name),
+                        profile_json=excluded.profile_json
+                    """,
+                    (user_id, name, profile_json),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO users (user_id, name, profile_json, is_coach)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        name=COALESCE(excluded.name, users.name),
+                        profile_json=CASE
+                            WHEN excluded.profile_json != '{}'
+                                OR users.profile_json IS NULL
+                            THEN excluded.profile_json
+                            ELSE users.profile_json
+                        END,
+                        is_coach=excluded.is_coach
+                    """,
+                    (user_id, name, profile_json, int(is_coach)),
+                )
 
     def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
@@ -340,12 +389,17 @@ class MemoryStore:
             for row in rows
         ]
 
-    def list_users(self) -> List[Dict[str, Any]]:
-        """Return all registered users/clients."""
+    def list_users(self, *, clients_only: bool = False) -> List[Dict[str, Any]]:
+        """Return registered users; optionally exclude coach session accounts."""
+        query = (
+            "SELECT user_id, name, profile_json, created_at FROM users "
+            "WHERE COALESCE(is_coach, 0) = 0 "
+            if clients_only
+            else "SELECT user_id, name, profile_json, created_at FROM users "
+        )
+        query += "ORDER BY created_at DESC"
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT user_id, name, profile_json, created_at FROM users ORDER BY created_at DESC"
-            ).fetchall()
+            rows = conn.execute(query).fetchall()
         return [
             {
                 "user_id": row["user_id"],

@@ -472,7 +472,9 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
                     profile,
                     is_update=existing is not None,
                 )
-            store.upsert_user(client_id, name=client_name, profile=profile)
+            store.upsert_user(
+                client_id, name=client_name, profile=profile, is_coach=False
+            )
             return f"✅ Client '{client_name}' (ID: {client_id}) saved successfully."
 
         if name == "add_client_note":
@@ -522,7 +524,7 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             return _format_client_notes(notes)
 
         if name == "list_clients":
-            users = store.list_users()
+            users = store.list_users(clients_only=True)
             if not users:
                 return "No clients registered yet."
             lines = [
