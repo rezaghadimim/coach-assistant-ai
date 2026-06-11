@@ -3,6 +3,7 @@ services:
   # Coach Assistant AI — FastAPI backend
   # ─────────────────────────────────────────────
   coach-api:
+    container_name: coach-assistant-api
     build: .
     ports:
       - "8000:8000"
@@ -29,6 +30,7 @@ services:
   # Open WebUI — Coach Assistant chat front-end
   # ─────────────────────────────────────────────
   open-webui:
+    container_name: coach-assistant-webui
     image: ghcr.io/open-webui/open-webui:main
     ports:
       - "3000:8080"
@@ -52,4 +54,6 @@ services:
 
 volumes:
   coach_data:
+    name: coach-assistant-data
   webui_data:
+    name: coach-assistant-webui-data
