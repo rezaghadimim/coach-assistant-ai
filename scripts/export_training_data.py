@@ -17,8 +17,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="training_data.jsonl",
-        help="Output JSONL file path (default: training_data.jsonl)",
+        default="data/training/sessions.jsonl",
+        help="Output JSONL file path (default: data/training/sessions.jsonl)",
     )
     parser.add_argument(
         "--db-path",

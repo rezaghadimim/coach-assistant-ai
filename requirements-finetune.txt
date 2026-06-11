@@ -1,0 +1,21 @@
+# Fine-tuning dependencies — NOT for production or Docker image.
+# Install manually in your training environment only:
+#   pip install -r requirements-finetune.txt
+#
+# PyTorch is platform-specific — install for your hardware first:
+#   https://pytorch.org/get-started/locally/
+#   e.g. pip install torch  (CPU, MPS, or CUDA build as appropriate)
+#
+# For CUDA (RunPod / Lambda / Colab):
+#   pip install unsloth[colab-new] trl peft transformers datasets accelerate bitsandbytes
+#
+# For Apple Silicon (MPS) — skip unsloth, use transformers directly:
+#   pip install trl peft transformers datasets accelerate
+
+torch>=2.1.0
+datasets>=2.19.0
+transformers>=4.41.0
+trl>=0.9.0
+peft>=0.11.0
+accelerate>=0.30.0
+httpx>=0.27.0

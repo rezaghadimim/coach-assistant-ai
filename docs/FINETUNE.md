@@ -169,3 +169,146 @@ After fine-tuning, verify:
 - [ ] Model handles emotional topics with empathy
 - [ ] Model doesn't hallucinate coaching techniques
 - [ ] Model still refuses to diagnose mental illness
+
+---
+
+## Infinia Life Coach Dataset Integration
+
+The [Infinia Life Coach Dataset](https://huggingface.co/datasets/Infiniaai/infinia-life-coach-dataset)
+(2,842 rows, Apache-2.0) provides poetic, empathy-focused prompt/completion pairs. Use it to give
+the model warmer emotional attunement **before** or alongside real session data.
+
+> **Do NOT store Infinia rows in `docs/knowledge/` (RAG).**
+> They are behavior training data, not retrievable knowledge. See [`RAG.md`](RAG.md).
+
+### When to use each profile
+
+| Profile | When to use | Data |
+|---------|-------------|------|
+| `infinia-only` | First run, no real sessions yet | Adapted Infinia ~2.5k rows |
+| `mixed` | After exporting ≥50 real sessions | 30% Infinia + 70% sessions |
+| `sequential` | Mixed empathy gain is insufficient | Stage 1: Infinia → Stage 2: sessions |
+
+### Expected benchmark deltas
+
+| Variant | Empathy gain | Practicality risk |
+|---------|-------------|-------------------|
+| Infinia-only | +15–30% relative | Slight softening of actionable structure |
+| Mixed (30/70) | +10–20% relative | Minimal; best for production |
+| Sequential | Highest possible | High if stage 2 LR is too high |
+
+Run `eval_coaching_style.py` before deploying to verify tool-routing accuracy
+stays within ~2% of baseline.
+
+### On-demand cadence
+
+Fine-tuning is **manual** — run it when you choose, not on a schedule.
+
+| Trigger | What to do |
+|---------|-----------|
+| First setup | `run_tuning_pipeline.py --profile infinia-only --steps all` |
+| Monthly / when you want | `--profile mixed` if new sessions exist; else skip train |
+| HF dataset revision | `download_infinia_dataset.py --refresh` then re-run |
+| Quality regression | `--steps eval` only first; retrain only if scores justify it |
+
+### Step-by-step
+
+#### 1. Install fine-tune dependencies (once)
+
+```bash
+pip install -r requirements-finetune.txt
+# For CUDA (RunPod/Lambda/Colab): also pip install unsloth[colab-new] bitsandbytes
+```
+
+#### 2. First run — Infinia only
+
+```bash
+# Dry run — verify paths before any GPU work
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps all --dry-run
+
+# Sample 50 rows and review adapted output manually
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps prepare --sample 50
+# Review data/external/infinia/infinia_adapted.jsonl (inspect 10 entries)
+
+# Full prepare + train + eval
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps all
+```
+
+Use `--adapt-backend ollama` for higher quality adaptation (slower, requires Ollama running):
+
+```bash
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps prepare \
+    --adapt-backend ollama --ollama-model llama3.1:8b
+```
+
+#### 3. Later run — mixed (real sessions + Infinia)
+
+```bash
+# Export real coaching sessions first
+python3 scripts/export_training_data.py --output data/training/sessions.jsonl
+
+# Then run mixed pipeline
+python3 scripts/run_tuning_pipeline.py --profile mixed --steps all
+```
+
+#### 4. Evaluate without retraining (quick check)
+
+```bash
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps eval
+```
+
+Default eval compares `baseline` against the profile's Ollama model name
+(`coach-assistant-infinia`, `coach-assistant-mixed`, or `coach-assistant-sequential`).
+
+Or specify models explicitly:
+
+```bash
+python3 scripts/run_tuning_pipeline.py --steps eval \
+    --models baseline,coach-assistant-infinia
+```
+
+This runs `eval_coaching_style.py` (empathy/practicality/metaphor scores) and
+`eval_tool_routing.py` (regression check) without any GPU work.
+
+#### 5. Deploy to Ollama (manual)
+
+After reviewing eval results (model name depends on profile — e.g. `coach-assistant-infinia` for `infinia-only`):
+
+```bash
+ollama create coach-assistant-infinia -f artifacts/lora/<run_id>/Modelfile
+# Update .env:
+# OLLAMA_MODEL=coach-assistant-infinia
+docker compose up --build
+```
+
+### Cloud GPU (if local device is insufficient)
+
+The training script auto-detects your device. If it prints cloud instructions
+(no CUDA ≥12 GB VRAM and no Apple MPS), use a cloud GPU:
+
+| Provider | GPU | Cost | ~Time |
+|----------|-----|------|-------|
+| RunPod | A100 40 GB | $1.5/hr | ~3 hrs |
+| Lambda | A100 80 GB | $1.1/hr | ~2 hrs |
+| Google Colab Pro | A100 | $10/mo | ~4 hrs |
+
+```bash
+# On cloud instance:
+pip install unsloth[colab-new] trl peft transformers datasets accelerate bitsandbytes
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps train --force-local
+```
+
+### Citation
+
+```bibtex
+@misc{infinia_life_coach_dataset_2025,
+  author = {Infinia.ie},
+  title  = {Infinia Life Coach Dataset},
+  year   = {2025},
+  howpublished = {HuggingFace Dataset},
+  url    = {https://huggingface.co/datasets/Infiniaai/infinia-life-coach-dataset}
+}
+```
+
+License: Apache-2.0. Non-clinical use only. Do not deploy in crisis response,
+medical decision-making, or applications representing themselves as licensed professionals.

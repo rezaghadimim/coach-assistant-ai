@@ -55,7 +55,12 @@ python3 -m unittest discover -s tests -p "test_*.py"
 python3 scripts/eval_tool_routing.py --backend token --show-errors
 
 # 6. (Optional, Phase 5) Export sessions for fine-tuning
-python3 scripts/export_training_data.py --output training_data.jsonl
+python3 scripts/export_training_data.py --output data/training/sessions.jsonl
+
+# 7. (Optional, Phase 5) Fine-tune with Infinia dataset (run manually, not on a schedule)
+#    First time: full pipeline (download → adapt → train → eval)
+python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps all --dry-run
+#    See docs/FINETUNE.md for the full Infinia integration guide.
 ```
 
 `docs/knowledge/` is a local-only ingest folder. Keep your real source documents there

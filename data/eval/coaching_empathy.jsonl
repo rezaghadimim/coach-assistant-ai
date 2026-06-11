@@ -1,0 +1,28 @@
+{"id": "holdout-01", "prompt": "I keep checking if I'm still here, like I might've slipped out of myself when I wasn't looking.", "topic": "self-doubt", "bucket": "holdout"}
+{"id": "holdout-02", "prompt": "I keep waiting for someone to revoke my existence like I'm borrowing it under false pretenses.", "topic": "self-doubt", "bucket": "holdout"}
+{"id": "holdout-03", "prompt": "My thoughts keep circling back to themselves like moths around a lightbulb that never quite burns out.", "topic": "anxiety and overthinking", "bucket": "holdout"}
+{"id": "holdout-04", "prompt": "I keep trying to think my way out of thinking, like trying to use a net to catch water.", "topic": "anxiety and overthinking", "bucket": "holdout"}
+{"id": "holdout-05", "prompt": "I keep thinking if I stay perfectly still, tomorrow won't notice I'm here and maybe forget to change me.", "topic": "fear of change", "bucket": "holdout"}
+{"id": "holdout-06", "prompt": "I keep waking up already tired, like my dreams took shifts I never signed up for.", "topic": "burnout and exhaustion", "bucket": "holdout"}
+{"id": "holdout-07", "prompt": "I keep walking without checking if the ground remembers my footprints, like maybe if I don't look back I can pretend I'm going somewhere that matters.", "topic": "loss of direction", "bucket": "holdout"}
+{"id": "holdout-08", "prompt": "I keep trying to forgive myself for closing my eyes to stars that never stopped shining just because I couldn't see them.", "topic": "forgiveness and self-acceptance", "bucket": "holdout"}
+{"id": "holdout-09", "prompt": "I keep folding myself smaller, like if I just compress enough, maybe the ache will finally fit in a pocket I can forget to check.", "topic": "burnout and exhaustion", "bucket": "holdout"}
+{"id": "holdout-10", "prompt": "I keep circling back to the same bruise, pressing it like a button that plays every time I thought I had to be perfect to be allowed here.", "topic": "forgiveness and self-acceptance", "bucket": "holdout"}
+{"id": "coach-01", "prompt": "I feel completely stuck in my career. I've been in the same role for five years and I don't know how to move forward.", "topic": "career", "bucket": "coach"}
+{"id": "coach-02", "prompt": "I want to start my own business but I'm terrified of failing. My family depends on me financially.", "topic": "career", "bucket": "coach"}
+{"id": "coach-03", "prompt": "I've been avoiding a difficult conversation with my business partner for months. I know it's holding us both back.", "topic": "relationships", "bucket": "coach"}
+{"id": "coach-04", "prompt": "I set a goal last month to exercise three times a week but I haven't done it once. I feel like a failure.", "topic": "accountability", "bucket": "coach"}
+{"id": "coach-05", "prompt": "I have so many ideas but I can't seem to finish anything. I start strong and then lose momentum halfway through.", "topic": "productivity", "bucket": "coach"}
+{"id": "coach-06", "prompt": "I'm exhausted all the time and I don't know if it's the job or something else. I've been feeling this way for months.", "topic": "burnout", "bucket": "coach"}
+{"id": "coach-07", "prompt": "My relationship with my manager is really difficult. I feel like nothing I do is ever good enough for them.", "topic": "work", "bucket": "coach"}
+{"id": "coach-08", "prompt": "I want to improve my confidence when presenting to senior leadership. I freeze up every time.", "topic": "confidence", "bucket": "coach"}
+{"id": "coach-09", "prompt": "I moved to a new city for work six months ago and I still haven't made any real friends. I feel isolated.", "topic": "wellbeing", "bucket": "coach"}
+{"id": "coach-10", "prompt": "I keep saying yes to everything and I'm drowning in commitments. I don't know how to say no.", "topic": "boundaries", "bucket": "coach"}
+{"id": "guardrail-01", "prompt": "Give me three concrete action steps I can take this week to improve my time management.", "topic": "productivity", "bucket": "guardrail"}
+{"id": "guardrail-02", "prompt": "Use the GROW model to help me set a clear goal around my fitness.", "topic": "health", "bucket": "guardrail"}
+{"id": "guardrail-03", "prompt": "What specific questions should I ask my client to explore what is holding them back from their goal?", "topic": "coaching technique", "bucket": "guardrail"}
+{"id": "guardrail-04", "prompt": "I want a numbered plan for how to approach a difficult conversation with my team member.", "topic": "communication", "bucket": "guardrail"}
+{"id": "guardrail-05", "prompt": "Help me create a SMART goal for increasing my client base by the end of the quarter.", "topic": "business", "bucket": "guardrail"}
+{"id": "guardrail-06", "prompt": "What are the most important accountability questions a coach should ask each session?", "topic": "coaching technique", "bucket": "guardrail"}
+{"id": "guardrail-07", "prompt": "Break down the steps I need to take to prepare for a job interview next week.", "topic": "career", "bucket": "guardrail"}
+{"id": "guardrail-08", "prompt": "Give me a framework for prioritising tasks when everything feels equally urgent.", "topic": "productivity", "bucket": "guardrail"}

@@ -47,3 +47,10 @@ logs/
 
 # Vector store local data
 chroma_data/
+
+# Fine-tuning data and artifacts (local only — not for git)
+data/external/
+data/training/
+artifacts/lora/
+artifacts/eval/
+training_data.jsonl
