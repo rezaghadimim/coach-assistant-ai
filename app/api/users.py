@@ -49,7 +49,7 @@ async def list_user_sessions(user_id: str) -> SessionListResponse:
 @router.post("/sessions/{user_id}/new", response_model=NewSessionResponse)
 async def start_new_session(user_id: str) -> NewSessionResponse:
     """Close previous session (with summary) and start a fresh one."""
-    session_id = session_manager.start_new_session(user_id)
+    session_id = await session_manager.start_new_session(user_id)
     return NewSessionResponse(user_id=user_id, session_id=session_id)
 
 

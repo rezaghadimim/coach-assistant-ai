@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 50
     rag_top_k: int = 3
     rag_min_score: float = 0.05
+    # backend: "embedding" | "token" | "auto"
+    # "auto" uses E5 embedding when the embed model probe passes, else falls back to token cosine.
+    rag_backend: str = "auto"
+    # On-disk cache for chunk embeddings so restarts don't re-embed unchanged content.
+    rag_index_cache_path: str = "data/rag_index_cache.json"
 
     # Tool Router
     tool_router_enabled: bool = True

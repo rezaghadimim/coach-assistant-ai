@@ -19,7 +19,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 
-from app.rag.retriever import _cosine_similarity, _tokenize
+from app.rag.retriever import _tf_cosine as _cosine_similarity, _tokenize
 
 # Default confidence thresholds. Tuned conservatively so pure coaching talk
 # ("How can I support Ali emotionally?", "What should Ali focus on for his

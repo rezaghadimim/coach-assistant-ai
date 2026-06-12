@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.config import settings
-from app.rag.retriever import _cosine_similarity, _tokenize
+from app.rag.retriever import _tf_cosine as _cosine_similarity, _tokenize
 
 logger = logging.getLogger(__name__)
 

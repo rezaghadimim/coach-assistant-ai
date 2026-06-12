@@ -1,12 +1,21 @@
-"""Session summarization helpers."""
+"""Session summarization helpers.
+
+Uses the LLM (via SUMMARIZER_PROMPT) to produce a structured coaching session
+record. Falls back to a fast heuristic when the LLM is unavailable so session
+rollover never blocks.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from app.core.llm_providers.ollama import OllamaProvider
+
+logger = logging.getLogger(__name__)
 
 
-def summarize_session(messages: list[dict[str, str]]) -> str:
-    """Generate a structured coaching session summary.
-
-    Extracts key topics, decisions, action items, and coach observations
-    from the conversation to serve as a comprehensive session record.
-    """
+def _heuristic_summary(messages: list[dict[str, str]]) -> str:
+    """Fast, offline fallback summary built from message content."""
     user_messages = [
         m["content"].strip()
         for m in messages
@@ -18,13 +27,8 @@ def summarize_session(messages: list[dict[str, str]]) -> str:
         if m["role"] == "assistant" and m["content"].strip()
     ]
 
-    # Key topics from client messages (up to first 5 for more coverage)
     discussed_topics = "; ".join(user_messages[:5]) if user_messages else "No client topics captured."
-
-    # Latest coaching guidance
     coach_focus = assistant_messages[-1] if assistant_messages else "No coach guidance yet."
-
-    # Count engagement
     total_exchanges = min(len(user_messages), len(assistant_messages))
 
     return (
@@ -35,3 +39,38 @@ def summarize_session(messages: list[dict[str, str]]) -> str:
         f"- **Messages from Client**: {len(user_messages)}\n"
         f"- **Coach Responses**: {len(assistant_messages)}"
     )
+
+
+async def summarize_session(messages: list[dict[str, str]]) -> str:
+    """Generate a structured coaching session summary using the LLM.
+
+    Falls back to heuristic summarization when the LLM is unreachable or
+    returns an empty response.
+    """
+    if not messages:
+        return _heuristic_summary(messages)
+
+    from app.core.prompts import SUMMARIZER_PROMPT
+
+    conversation_text = "\n".join(
+        f"{m['role'].upper()}: {m['content']}"
+        for m in messages
+        if m.get("content", "").strip()
+    )
+
+    llm_messages = [
+        {"role": "user", "content": f"{SUMMARIZER_PROMPT}\n\n{conversation_text}"},
+    ]
+
+    try:
+        provider = OllamaProvider()
+        result = await provider.complete(llm_messages)
+        summary = result.content.strip()
+        if summary:
+            logger.info("session summarizer: LLM summary generated (%d chars)", len(summary))
+            return summary
+        logger.warning("session summarizer: LLM returned empty content, using heuristic")
+    except Exception as exc:
+        logger.warning("session summarizer: LLM failed (%s), using heuristic fallback", exc)
+
+    return _heuristic_summary(messages)

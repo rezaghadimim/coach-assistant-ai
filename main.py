@@ -5,6 +5,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 
+from app.api.briefing import router as briefing_router
 from app.api.chat import router as chat_router
 from app.api.ingest import router as ingest_router
 from app.api.openai_compat import router as openai_compat_router
@@ -28,8 +29,35 @@ async def _startup() -> None:
         count = build_index()
         logger.info("tool router: index ready (%d examples)", count)
 
+    if settings.rag_enabled:
+        from pathlib import Path
+        from app.rag.retriever import ingest_and_index_directory
+        from app.core.embeddings import probe_embed_model
+
+        docs_dir = settings.rag_docs_dir
+        if Path(docs_dir).exists():
+            use_embed = settings.rag_backend == "embedding" or (
+                settings.rag_backend == "auto" and probe_embed_model()
+            )
+            docs, chunks = ingest_and_index_directory(
+                docs_dir,
+                chunk_size=settings.rag_chunk_size,
+                chunk_overlap=settings.rag_chunk_overlap,
+                embed=use_embed,
+                cache_path=settings.rag_index_cache_path if use_embed else None,
+            )
+            logger.info(
+                "rag: index ready | backend=%s docs=%d chunks=%d",
+                "embedding" if use_embed else "token",
+                docs,
+                chunks,
+            )
+        else:
+            logger.warning("rag: docs_dir %r not found — index empty", docs_dir)
+
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(ingest_router, prefix="/api", tags=["ingest"])
+app.include_router(briefing_router, prefix="/api", tags=["briefing"])
 app.include_router(users_router, prefix="/api", tags=["users"])
 app.include_router(tools_router, prefix="/api", tags=["tools"])
 app.include_router(openai_compat_router, tags=["openai-compat"])

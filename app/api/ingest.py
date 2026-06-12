@@ -17,10 +17,16 @@ async def ingest(request: IngestRequest) -> IngestResponse:
     chunk_overlap = request.chunk_overlap or settings.rag_chunk_overlap
 
     try:
+        from app.core.embeddings import probe_embed_model
+        use_embed = settings.rag_backend == "embedding" or (
+            settings.rag_backend == "auto" and probe_embed_model()
+        )
         documents_indexed, chunks_indexed = ingest_and_index_directory(
             docs_dir,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            embed=use_embed,
+            cache_path=settings.rag_index_cache_path if use_embed else None,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

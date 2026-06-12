@@ -32,10 +32,12 @@ def build_system_prompt(user_id: str, message: str) -> str:
     sections = [COACH_ASSISTANT_SYSTEM_PROMPT]
 
     if settings.rag_enabled:
+        from app.rag.retriever import Backend
         context_chunks = retrieve(
             message,
             top_k=settings.rag_top_k,
             min_score=settings.rag_min_score,
+            backend=settings.rag_backend,  # type: ignore[arg-type]
         )
         rag_context = format_retrieval_context(context_chunks)
         if rag_context:
@@ -83,7 +85,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         history = store.get_session_messages(session_id)
         _sessions[request.user_id] = history
-        session_manager.maybe_update_summary(
+        await session_manager.maybe_update_summary(
             session_id,
             threshold=settings.summary_trigger_messages,
         )

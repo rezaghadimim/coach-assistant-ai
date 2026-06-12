@@ -122,6 +122,59 @@ class ClientNoteListResponse(BaseModel):
 
 
 # ------------------------------------------------------------------
+# Case briefing (structured coach analysis)
+# ------------------------------------------------------------------
+
+
+class BriefingRequest(BaseModel):
+    """Request payload for generating a structured coaching case briefing."""
+
+    user_id: str = Field(..., min_length=1, description="Coach's user ID.")
+    client_id: Optional[str] = Field(
+        default=None,
+        description="Client user_id to load notes and profile from the store. Optional.",
+    )
+    question: str = Field(
+        ...,
+        min_length=1,
+        description="The coach's question or situation description to analyse.",
+    )
+
+
+class CoachBriefing(BaseModel):
+    """Structured coaching case briefing returned by POST /api/briefing."""
+
+    key_insights: list[str] = Field(
+        default_factory=list,
+        description="Key observations about the client's situation.",
+    )
+    hypotheses: list[str] = Field(
+        default_factory=list,
+        description="Tentative, non-clinical interpretations of underlying dynamics.",
+    )
+    coaching_questions: list[str] = Field(
+        default_factory=list,
+        description="Suggested powerful questions the coach could explore in session.",
+    )
+    recommended_framework: str = Field(
+        default="",
+        description="Suggested coaching framework (e.g. GROW, MI, CBT-informed, Solution-focused).",
+    )
+    framework_rationale: str = Field(
+        default="",
+        description="Brief explanation of why this framework fits the situation.",
+    )
+    action_plan: list[str] = Field(
+        default_factory=list,
+        description="Suggested session agenda or next-step structure for the coach.",
+    )
+    homework: list[str] = Field(
+        default_factory=list,
+        description="Between-session exercises or reflections to suggest to the client.",
+    )
+
+
+# ------------------------------------------------------------------
 # Tool routing
 # ------------------------------------------------------------------
 
