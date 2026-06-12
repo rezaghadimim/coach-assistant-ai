@@ -1,6 +1,7 @@
 """Coach Assistant AI — Application entry point."""
 
 import logging
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
@@ -15,15 +16,9 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    description="AI-powered coaching assistant — manage clients, track stories, and deliver actionable coaching guidance.",
-)
 
-
-@app.on_event("startup")
-async def _startup() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     if settings.tool_router_enabled:
         from app.core.tool_router import build_index
         count = build_index()
@@ -54,6 +49,26 @@ async def _startup() -> None:
             )
         else:
             logger.warning("rag: docs_dir %r not found — index empty", docs_dir)
+
+        if settings.rag_rerank_enabled:
+            from app.rag.reranker import probe_rerank_model
+            if probe_rerank_model():
+                logger.info("rag: rerank ready | model=%s", settings.rag_rerank_model)
+            else:
+                logger.warning(
+                    "rag: rerank unavailable — falling back to bi-encoder order"
+                    " (install with: uv sync --group rag-rerank)"
+                )
+
+    yield
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description="AI-powered coaching assistant — manage clients, track stories, and deliver actionable coaching guidance.",
+    lifespan=lifespan,
+)
 
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(ingest_router, prefix="/api", tags=["ingest"])
@@ -91,6 +106,15 @@ async def health_check():
         "enabled": settings.tool_router_enabled,
     }
 
+    rerank_info: dict = {
+        "enabled": settings.rag_rerank_enabled,
+        "model": settings.rag_rerank_model,
+        "available": False,
+    }
+    if settings.rag_rerank_enabled:
+        from app.rag.reranker import probe_rerank_model
+        rerank_info["available"] = probe_rerank_model()
+
     return {
         "status": "ok",
         "default_model": LOCAL_MODEL_ID,
@@ -102,6 +126,7 @@ async def health_check():
             "openrouter": openrouter_info,
         },
         "embeddings": embed_info,
+        "rerank": rerank_info,
     }
 
 

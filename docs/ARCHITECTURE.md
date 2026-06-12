@@ -29,7 +29,8 @@ The local Ollama provider is always the default.
 
 ### 2) RAG Ingestion + Retrieval (`app/rag/`)
 - `ingest.py`: document discovery + chunking (`.txt`, `.md`, `.pdf`)
-- `retriever.py`: token-based similarity index/query
+- `retriever.py`: two-stage retrieval — bi-encoder or TF cosine (stage 1) followed by optional cross-encoder reranking (stage 2); per-source deduplication before context assembly
+- `reranker.py`: optional cross-encoder reranker (`BAAI/bge-reranker-v2-m3`); graceful fallback when `sentence-transformers` is not installed
 - `POST /api/ingest`: reindex local document directory
 
 ### 3) Memory System (`app/memory/`)
@@ -93,7 +94,7 @@ The local Ollama provider is always the default.
 
 1. Client sends `POST /api/chat {user_id, message}`
 2. Backend gets/creates active session for `user_id`
-3. Backend retrieves top matching chunks from local RAG index
+3. Backend retrieves top matching chunks from local RAG index (stage-1 bi-encoder/token → stage-2 cross-encoder rerank → per-source dedup)
 4. Backend composes system prompt with:
    - base coaching prompt
    - RAG context (if available)
@@ -132,7 +133,8 @@ app/
 │       └── openrouter.py
 ├── rag/
 │   ├── ingest.py
-│   └── retriever.py
+│   ├── retriever.py
+│   └── reranker.py        ← optional cross-encoder reranker (sentence-transformers)
 ├── memory/
 │   ├── session.py
 │   ├── store.py

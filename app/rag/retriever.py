@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Literal
 
+from app.core.config import settings
 from app.rag.ingest import DocumentChunk, ingest_documents_from_dir
 
 logger = logging.getLogger(__name__)
@@ -151,15 +152,28 @@ def retrieve(
     top_k: int = 3,
     min_score: float = 0.05,
     backend: Backend = "auto",
+    retrieve_k: int | None = None,
 ) -> list[RetrievedChunk]:
     """Retrieve top matching chunks for a query from the local index.
 
+    When reranking is enabled (``settings.rag_rerank_enabled``) the pipeline
+    runs in two stages:
+
+    1. Stage-1 retrieval — fetch up to ``retrieve_k`` candidates (defaults to
+       ``settings.rag_retrieve_k``, typically 25) using bi-encoder or token
+       similarity.
+    2. Cross-encoder reranking — score all candidates as (query, passage) pairs
+       and keep the best ``top_k``.  Falls back to stage-1 order silently when
+       the reranker is unavailable.
+
     Args:
-        query:     The coach's message or question.
-        top_k:     Maximum number of chunks to return.
-        min_score: Minimum similarity score threshold.
-        backend:   "auto" | "embedding" | "token". "auto" selects embedding
-                   when the index has dense vectors, otherwise falls back to token.
+        query:      The coach's message or question.
+        top_k:      Maximum number of chunks to return (final context size).
+        min_score:  Minimum similarity score threshold applied to stage-1 scores.
+                    Also applied to rerank scores after reranking.
+        backend:    "auto" | "embedding" | "token".
+        retrieve_k: Override the stage-1 candidate pool size.  Defaults to
+                    ``settings.rag_retrieve_k``.
     """
     if not _index:
         return []
@@ -167,19 +181,52 @@ def retrieve(
     use_embedding = _resolve_backend(backend)
     backend_name = "embedding" if use_embedding else "token"
 
+    # Stage-1: fetch a wider candidate pool for reranking.
+    candidate_k = retrieve_k if retrieve_k is not None else settings.rag_retrieve_k
+    candidate_k = max(candidate_k, top_k)
+
     if use_embedding:
-        chunks = _retrieve_embedding(query, top_k=top_k, min_score=min_score)
+        candidates = _retrieve_embedding(query, top_k=candidate_k, min_score=min_score)
     else:
-        chunks = _retrieve_token(query, top_k=top_k, min_score=min_score)
+        candidates = _retrieve_token(query, top_k=candidate_k, min_score=min_score)
 
     logger.info(
-        "rag retrieve | backend=%s query=%r top_k=%d results=%s",
+        "rag retrieve | backend=%s query=%r candidate_k=%d candidates=%d",
         backend_name,
         query[:80],
-        top_k,
-        [(c.chunk_id, round(c.score, 3)) for c in chunks],
+        candidate_k,
+        len(candidates),
     )
-    return chunks
+
+    # Stage-2: rerank when enabled and there is something to reorder.
+    if settings.rag_rerank_enabled and len(candidates) > top_k:
+        try:
+            from app.rag.reranker import rerank
+            candidates = rerank(query, candidates, top_k=top_k)
+        except Exception as exc:
+            logger.warning("rag rerank: unexpected error (%s) — using stage-1 order", exc)
+            candidates = candidates[:top_k]
+    else:
+        candidates = candidates[:top_k]
+
+    # Deduplicate: keep only the highest-scoring chunk per source file so that
+    # overlapping 512-token windows from the same document don't flood context.
+    seen_sources: set[str] = set()
+    deduped: list[RetrievedChunk] = []
+    for chunk in candidates:
+        if chunk.source_path not in seen_sources:
+            seen_sources.add(chunk.source_path)
+            deduped.append(chunk)
+
+    # Re-apply min_score on final (possibly reranked) scores.
+    final = [c for c in deduped if c.score >= min_score][:top_k]
+
+    logger.info(
+        "rag retrieve | final=%d scores=%s",
+        len(final),
+        [(c.chunk_id, round(c.score, 3)) for c in final],
+    )
+    return final
 
 
 def format_retrieval_context(chunks: list[RetrievedChunk]) -> str:

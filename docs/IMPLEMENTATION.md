@@ -67,6 +67,31 @@
 - Export logic in `app/memory/training_export.py`
 - Tests in `tests/test_training_export.py`
 
+### Phase 2C: RAG Reranker — Cross-Encoder Two-Stage Retrieval
+
+**Problem solved:** single-pass bi-encoder retrieval with `top_k=3` had no opportunity to re-score candidates; a query that was semantically close to several chunks had no second-pass signal to surface the most relevant one.
+
+**Done:**
+- [x] Two-stage `retrieve()`: stage-1 fetches `RAG_RETRIEVE_K=25` candidates; stage-2 cross-encoder reranks to `RAG_TOP_K=3`
+- [x] `app/rag/reranker.py` — thin `sentence-transformers` `CrossEncoder` wrapper, module-level singleton, batch scoring, passage truncation, graceful fallback when package absent
+- [x] Per-source deduplication: only the highest-scoring chunk per source file is kept
+- [x] Configuration: `RAG_RETRIEVE_K`, `RAG_RERANK_ENABLED`, `RAG_RERANK_MODEL`, `RAG_RERANK_BATCH_SIZE`, `RAG_RERANK_MAX_PASSAGE_CHARS`
+- [x] Optional dependency group: `uv sync --group rag-rerank` (or `pip install sentence-transformers`)
+- [x] Startup probe + structured logging (`rag: rerank ready | model=...`)
+- [x] `/health` endpoint gains `rerank: {enabled, model, available}`
+- [x] Tests: `tests/test_rag_rerank.py` (12 tests, all mocked — CI-safe without the dependency group)
+- [x] Docs: `RAG.md`, `ARCHITECTURE.md`, ADR-0008
+
+**To operate:**
+```bash
+uv sync --group rag-rerank   # install sentence-transformers
+RAG_RERANK_ENABLED=true RAG_RETRIEVE_K=25 python main.py
+# startup log: rag: rerank ready | model=BAAI/bge-reranker-v2-m3
+# per-request log: rag rerank | candidates=N final=M top_scores=[...]
+```
+
+See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-cross-encoder-rag-reranker.md) for the rationale.
+
 ### Phase 2B: Tool Routing — Embedding-Based Disambiguation
 
 **Problem solved:** messages like "Ali's age is 23" were reaching `add_client_note` (duplicate note on every message) instead of `create_client` (profile field merge).

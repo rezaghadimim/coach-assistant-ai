@@ -14,6 +14,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+rag-rerank = [
+    "sentence-transformers>=3.0.0",
+]
 finetune = [
     "torch>=2.1.0",
     "datasets>=2.19.0",

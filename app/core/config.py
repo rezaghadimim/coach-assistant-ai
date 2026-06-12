@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     rag_backend: str = "auto"
     # On-disk cache for chunk embeddings so restarts don't re-embed unchanged content.
     rag_index_cache_path: str = "data/rag_index_cache.json"
+    # Stage-1 candidate pool — retrieve this many chunks before reranking, then trim to rag_top_k.
+    rag_retrieve_k: int = 25
+    # Cross-encoder reranker (requires the rag-rerank dependency group: uv sync --group rag-rerank)
+    rag_rerank_enabled: bool = True
+    rag_rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    rag_rerank_batch_size: int = 16
+    rag_rerank_max_passage_chars: int = 2000
 
     # Tool Router
     tool_router_enabled: bool = True

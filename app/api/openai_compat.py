@@ -198,7 +198,7 @@ async def _stream_and_persist(
         await asyncio.sleep(0)
 
     store.add_message(session_id, "assistant", full_reply)
-    session_manager.maybe_update_summary(
+    await session_manager.maybe_update_summary(
         session_id, threshold=settings.summary_trigger_messages
     )
 
@@ -293,7 +293,7 @@ async def chat_completions(
         model_id=model_id,
     )
     store.add_message(session_id, "assistant", reply)
-    session_manager.maybe_update_summary(
+    await session_manager.maybe_update_summary(
         session_id, threshold=settings.summary_trigger_messages
     )
 

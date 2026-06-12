@@ -14,6 +14,7 @@ Each ADR captures a significant architectural or technical decision, its context
 | [0005](0005-openwebui-integration.md) | Open WebUI integration via OpenAI-compatible API | Accepted |
 | [0006](0006-optional-openrouter-provider.md) | Optional cloud LLM provider via OpenRouter | Accepted |
 | [0007](0007-ollama-embedding-tool-routing.md) | Ollama embeddings for tool routing | Accepted |
+| [0008](0008-cross-encoder-rag-reranker.md) | Cross-encoder reranker for two-stage RAG retrieval | Accepted |
 
 ## Template
 
