@@ -34,7 +34,8 @@ class Settings(BaseSettings):
     # RAG
     rag_enabled: bool = True
     rag_docs_dir: str = "docs/knowledge"
-    rag_chunk_size: int = 512
+    # Sized for E5-small (512 subword tokens; ~300 whitespace words is safe).
+    rag_chunk_size: int = 300
     rag_chunk_overlap: int = 50
     rag_top_k: int = 3
     rag_min_score: float = 0.05

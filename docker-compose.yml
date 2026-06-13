@@ -22,7 +22,7 @@ services:
       - ./docs/tool-knowledge:/app/docs/tool-knowledge:ro
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,6 +38,8 @@ services:
     environment:
       # Coach API handles RAG — skip Open WebUI's HuggingFace embedding download at startup.
       BYPASS_EMBEDDING_AND_RETRIEVAL: "true"
+      # Use docker-compose env for connections; ignore stale Admin UI settings in webui.db.
+      ENABLE_PERSISTENT_CONFIG: "false"
       # Disable the built-in Ollama connection; use our backend instead.
       ENABLE_OLLAMA_API: "false"
       # Tell Open WebUI where our OpenAI-compatible endpoint lives.

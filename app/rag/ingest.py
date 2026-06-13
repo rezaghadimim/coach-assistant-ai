@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from typing import List
 
-DEFAULT_CHUNK_SIZE = 512
+DEFAULT_CHUNK_SIZE = 300
 DEFAULT_CHUNK_OVERLAP = 50
 SUPPORTED_FILE_EXTENSIONS = (".txt", ".md", ".pdf")
 

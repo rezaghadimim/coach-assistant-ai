@@ -67,10 +67,16 @@ model. If you have configured `OPENROUTER_API_KEY`, a second model
 
 ## Model Picker Behaviour
 
+Open WebUI stores connection settings in its `webui.db` volume by default. If you
+previously enabled Ollama in the Admin UI, you may see raw Ollama models
+(`llama3.1:8b`, cloud models, etc.) instead of `coach-assistant-ai`. This
+project sets `ENABLE_PERSISTENT_CONFIG=false` in `docker-compose.yml` so
+connection settings always come from environment variables, not stale UI saves.
+
 | Scenario | Models listed in Open WebUI |
 |---|---|
 | No `OPENROUTER_API_KEY` set | `coach-assistant-ai` (local only) |
-| API key set, OpenRouter reachable | Both `coach-assistant-ai` and `coach-assistant-ai-cloud` |
+| API key set, OpenRouter reachable | `coach-assistant-ai` plus each slug in `OPENROUTER_MODELS` |
 | API key set, OpenRouter unreachable | `coach-assistant-ai` (local only) |
 
 The default model is always the local one. Open WebUI remembers your last

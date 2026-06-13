@@ -26,6 +26,22 @@ logger = logging.getLogger(__name__)
 
 _InputType = Literal["query", "passage"]
 
+# multilingual-e5-small uses a 512 *subword* token context. RAG chunks are sized
+# in whitespace-delimited words; markdown-heavy text can exceed 512 subword tokens
+# well before 350 words (see cbt_for_coaching.md / motivational_interviewing.md).
+DEFAULT_EMBED_MAX_WORDS = 300
+_EMBED_RETRY_WORD_LIMITS = (300, 240, 180)
+
+
+def _truncate_for_embed(text: str, *, max_words: int | None = None) -> str:
+    """Trim text so prefixed input stays within the embed model context window."""
+    limit = max_words if max_words is not None else DEFAULT_EMBED_MAX_WORDS
+    words = text.split()
+    if len(words) <= limit:
+        return text
+    logger.debug("truncating embed input from %d to %d words", len(words), limit)
+    return " ".join(words[:limit])
+
 
 def _apply_prefix(text: str, input_type: _InputType) -> str:
     if not settings.tool_router_use_e5_prefix:
@@ -38,6 +54,7 @@ def embed_texts(
     *,
     input_type: _InputType = "passage",
     model: str | None = None,
+    max_words: int | None = None,
 ) -> list[list[float]]:
     """Embed a list of texts using Ollama and return a list of float vectors.
 
@@ -57,21 +74,70 @@ def embed_texts(
     """
     embed_model = model or settings.ollama_embed_model
     results: list[list[float]] = []
+    word_limits = _word_limits_for_embed(max_words)
 
     with httpx.Client(
         base_url=settings.ollama_base_url,
         timeout=settings.ollama_timeout,
     ) as client:
         for text in texts:
-            prefixed = _apply_prefix(text, input_type)
-            response = client.post(
-                "/api/embeddings",
-                json={"model": embed_model, "prompt": prefixed},
+            results.append(
+                _embed_one(client, embed_model, text, input_type, word_limits)
             )
-            response.raise_for_status()
-            results.append(response.json()["embedding"])
 
     return results
+
+
+def _word_limits_for_embed(max_words: int | None) -> tuple[int, ...]:
+    if max_words is None:
+        return _EMBED_RETRY_WORD_LIMITS
+    smaller = tuple(
+        limit
+        for limit in _EMBED_RETRY_WORD_LIMITS
+        if limit < max_words
+    )
+    return (max_words, *smaller)
+
+
+def _context_length_error(response: httpx.Response) -> bool:
+    if response.status_code != 500:
+        return False
+    try:
+        message = response.json().get("error", "")
+    except ValueError:
+        message = response.text
+    return "context length" in message.lower()
+
+
+def _embed_one(
+    client: httpx.Client,
+    embed_model: str,
+    text: str,
+    input_type: _InputType,
+    word_limits: tuple[int, ...],
+) -> list[float]:
+    last_response: httpx.Response | None = None
+    for limit in word_limits:
+        trimmed = _truncate_for_embed(text, max_words=limit)
+        prefixed = _apply_prefix(trimmed, input_type)
+        response = client.post(
+            "/api/embeddings",
+            json={"model": embed_model, "prompt": prefixed},
+        )
+        if response.is_success:
+            return response.json()["embedding"]
+        if _context_length_error(response):
+            last_response = response
+            logger.debug(
+                "embed input exceeded context at %d words — retrying smaller",
+                limit,
+            )
+            continue
+        response.raise_for_status()
+
+    if last_response is not None:
+        last_response.raise_for_status()
+    raise RuntimeError("embed failed without a response")
 
 
 def embed_query(text: str, *, model: str | None = None) -> list[float]:

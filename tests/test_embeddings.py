@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 def _mock_httpx_client(embedding: list[float]):
     """Return a mock httpx.Client context manager that yields a fixed embedding."""
     mock_response = MagicMock()
+    mock_response.is_success = True
     mock_response.raise_for_status = MagicMock()
     mock_response.json.return_value = {"embedding": embedding}
 
@@ -35,6 +36,7 @@ class EmbedTextsTests(unittest.TestCase):
         captured_prompts: list[str] = []
 
         mock_response = MagicMock()
+        mock_response.is_success = True
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"embedding": [0.1]}
 
@@ -64,6 +66,7 @@ class EmbedTextsTests(unittest.TestCase):
         captured_prompts: list[str] = []
 
         mock_response = MagicMock()
+        mock_response.is_success = True
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"embedding": [0.1]}
 
@@ -92,6 +95,7 @@ class EmbedTextsTests(unittest.TestCase):
         captured_prompts: list[str] = []
 
         mock_response = MagicMock()
+        mock_response.is_success = True
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"embedding": [0.1]}
 
@@ -114,6 +118,79 @@ class EmbedTextsTests(unittest.TestCase):
                 embed_texts(["hello"], input_type="query")
 
         self.assertEqual(captured_prompts[0], "hello")
+
+
+class TruncateForEmbedTests(unittest.TestCase):
+    def test_short_text_unchanged(self) -> None:
+        from app.core.embeddings import _truncate_for_embed
+        text = "one two three"
+        self.assertEqual(_truncate_for_embed(text, max_words=10), text)
+
+    def test_long_text_truncated(self) -> None:
+        from app.core.embeddings import _truncate_for_embed
+        words = [f"w{i}" for i in range(20)]
+        text = " ".join(words)
+        self.assertEqual(_truncate_for_embed(text, max_words=5), " ".join(words[:5]))
+
+    def test_embed_texts_truncates_before_prefix(self) -> None:
+        from app.core.embeddings import embed_texts
+        captured_prompts: list[str] = []
+
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"embedding": [0.1]}
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        def capture_post(path, json):  # noqa: A002
+            captured_prompts.append(json["prompt"])
+            return mock_response
+
+        mock_client.post = capture_post
+
+        long_text = " ".join(f"word{i}" for i in range(500))
+        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
+            with patch("app.core.embeddings.settings") as s:
+                s.tool_router_use_e5_prefix = True
+                s.ollama_embed_model = "test-model"
+                s.ollama_base_url = "http://localhost:11434"
+                s.ollama_timeout = 30.0
+                embed_texts([long_text], input_type="passage", max_words=3)
+
+        prompt_words = captured_prompts[0].removeprefix("passage: ").split()
+        self.assertEqual(len(prompt_words), 3)
+
+    def test_retries_on_context_length_error(self) -> None:
+        from app.core.embeddings import embed_texts
+
+        too_long = MagicMock()
+        too_long.is_success = False
+        too_long.status_code = 500
+        too_long.json.return_value = {"error": "the input length exceeds the context length"}
+        too_long.text = ""
+
+        ok = MagicMock()
+        ok.is_success = True
+        ok.json.return_value = {"embedding": [0.5, 0.6]}
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post = MagicMock(side_effect=[too_long, ok])
+
+        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
+            with patch("app.core.embeddings.settings") as s:
+                s.tool_router_use_e5_prefix = False
+                s.ollama_embed_model = "test-model"
+                s.ollama_base_url = "http://localhost:11434"
+                s.ollama_timeout = 30.0
+                results = embed_texts(["hello world"], input_type="passage")
+
+        self.assertEqual(results, [[0.5, 0.6]])
+        self.assertEqual(mock_client.post.call_count, 2)
 
 
 class CosineSimilarityTests(unittest.TestCase):

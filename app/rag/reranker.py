@@ -72,7 +72,8 @@ def _load_model():
 def probe_rerank_model() -> bool:
     """Return True when the reranker model loads and scores a dummy pair.
 
-    Safe to call at startup.  Failures are logged as warnings; never raises.
+    Triggers a model download on first call — avoid in startup hooks and
+    Docker health checks; use :func:`rerank_is_loaded` instead.
     """
     model = _load_model()
     if model is None:
@@ -83,6 +84,20 @@ def probe_rerank_model() -> bool:
     except Exception as exc:
         logger.warning("rag rerank: probe failed (%s)", exc)
         return False
+
+
+def rerank_dependency_installed() -> bool:
+    """Return True when sentence-transformers is importable (no model load)."""
+    try:
+        import sentence_transformers  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def rerank_is_loaded() -> bool:
+    """Return True when the CrossEncoder singleton is already in memory."""
+    return _model is not None and _model_name == settings.rag_rerank_model
 
 
 def rerank(

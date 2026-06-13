@@ -51,14 +51,10 @@ async def lifespan(_app: FastAPI):
             logger.warning("rag: docs_dir %r not found — index empty", docs_dir)
 
         if settings.rag_rerank_enabled:
-            from app.rag.reranker import probe_rerank_model
-            if probe_rerank_model():
-                logger.info("rag: rerank ready | model=%s", settings.rag_rerank_model)
-            else:
-                logger.warning(
-                    "rag: rerank unavailable — falling back to bi-encoder order"
-                    " (install with: uv sync --group rag-rerank)"
-                )
+            logger.info(
+                "rag: rerank enabled | model=%s (loads on first retrieval)",
+                settings.rag_rerank_model,
+            )
 
     yield
 
@@ -76,6 +72,12 @@ app.include_router(briefing_router, prefix="/api", tags=["briefing"])
 app.include_router(users_router, prefix="/api", tags=["users"])
 app.include_router(tools_router, prefix="/api", tags=["tools"])
 app.include_router(openai_compat_router, tags=["openai-compat"])
+
+
+@app.get("/health/live")
+async def health_live():
+    """Lightweight liveness probe for Docker/orchestrators (no external I/O)."""
+    return {"status": "ok"}
 
 
 @app.get("/health")
@@ -110,10 +112,15 @@ async def health_check():
         "enabled": settings.rag_rerank_enabled,
         "model": settings.rag_rerank_model,
         "available": False,
+        "loaded": False,
+        "dependency_installed": False,
     }
     if settings.rag_rerank_enabled:
-        from app.rag.reranker import probe_rerank_model
-        rerank_info["available"] = probe_rerank_model()
+        from app.rag.reranker import rerank_dependency_installed, rerank_is_loaded
+
+        rerank_info["dependency_installed"] = rerank_dependency_installed()
+        rerank_info["loaded"] = rerank_is_loaded()
+        rerank_info["available"] = rerank_info["loaded"]
 
     return {
         "status": "ok",
