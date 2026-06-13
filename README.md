@@ -12,7 +12,7 @@ Runs locally using open-source LLMs.
 |------|--------|
 | LLM | Llama 3.1 8B (via Ollama) |
 | Embed model | multilingual-e5-small (via Ollama, for tool routing) |
-| RAG | Local chunk index + similarity retrieval |
+| RAG | Two-stage retrieval: local chunk index + bi-encoder similarity → cross-encoder rerank (`bge-reranker-v2-m3`) |
 | Tool Routing | Embedding + token similarity for pre-LLM tool disambiguation |
 | Backend | FastAPI (Python) |
 | Database | SQLite (client notes, sessions, memory) |
