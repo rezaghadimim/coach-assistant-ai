@@ -169,7 +169,10 @@ class CloudModelRoutingTests(unittest.TestCase):
         with patch(
             "app.api.openai_compat.generate_response",
             new=AsyncMock(return_value="Local fallback reply."),
-        ) as mock_gen:
+        ) as mock_gen, patch(
+            "app.api.openai_compat.try_direct_reply",
+            return_value=None,
+        ):
             response = self.client.post(
                 "/v1/chat/completions",
                 json={
