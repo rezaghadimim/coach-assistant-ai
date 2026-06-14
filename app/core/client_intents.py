@@ -67,12 +67,24 @@ _AGE_SET = re.compile(
     r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+age\s+(?:to|as)\s+(\d{1,3})\b",
     re.IGNORECASE,
 )
+_PHONE_SET = re.compile(
+    r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+phone(?:\s+number)?\s+(?:to|as)\s+([\d\s\-\+\(\)\.]+)",
+    re.IGNORECASE,
+)
 _AGE_FOR = re.compile(
     r"(?:add|set|update|change)\s+age\s+for\s+(.+?)\s+(?:to\s+)?(\d{1,3})\b",
     re.IGNORECASE,
 )
 _AGE_FOR_REVERSE = re.compile(
     r"(?:add|set|update|change)\s+age\s+(?:to\s+)?(\d{1,3})\s+for\s+(.+?)\s*$",
+    re.IGNORECASE,
+)
+_PHONE_FOR = re.compile(
+    r"(?:add|set|update|change)\s+phone(?:\s+number)?\s+for\s+(.+?)\s+(?:to\s+)?([\d\s\-\+\(\)\.]+)",
+    re.IGNORECASE,
+)
+_PHONE_FOR_REVERSE = re.compile(
+    r"(?:add|set|update|change)\s+phone(?:\s+number)?\s+(?:to\s+)?([\d\s\-\+\(\)\.]+)\s+for\s+(.+?)\s*$",
     re.IGNORECASE,
 )
 _EMAIL_POSSESSIVE = re.compile(
@@ -185,6 +197,7 @@ def detect_profile_update(
         (_AGE_IS, "age", int),
         (_AGE_POSSESSIVE, "age", int),
         (_AGE_SET, "age", int),
+        (_PHONE_SET, "phone", lambda value: value.strip()),
         (_EMAIL_POSSESSIVE, "email", str),
         (_PHONE_POSSESSIVE, "phone", lambda value: value.strip()),
     ):
@@ -201,9 +214,11 @@ def detect_profile_update(
             **{field: transform(match.group(2))},
         )
 
-    for pattern, client_group, age_group in (
-        (_AGE_FOR, 1, 2),
-        (_AGE_FOR_REVERSE, 2, 1),
+    for pattern, client_group, value_group, field, transform in (
+        (_AGE_FOR, 1, 2, "age", int),
+        (_AGE_FOR_REVERSE, 2, 1, "age", int),
+        (_PHONE_FOR, 1, 2, "phone", lambda value: value.strip()),
+        (_PHONE_FOR_REVERSE, 2, 1, "phone", lambda value: value.strip()),
     ):
         match = pattern.search(text)
         if not match:
@@ -215,7 +230,7 @@ def detect_profile_update(
             client_ref,
             store,
             message=text,
-            age=int(match.group(age_group)),
+            **{field: transform(match.group(value_group))},
         )
 
     return None
@@ -285,28 +300,84 @@ def is_coaching_advice_request(message: str) -> bool:
 
 def _extract_tool_payload(data: dict[str, Any]) -> Optional[tuple[str, dict[str, Any]]]:
     tool_name = data.get("tool") or data.get("name") or data.get("function")
-    params = data.get("parameters") or data.get("arguments") or data.get("params")
+    params: Any = None
+    for key in ("parameters", "arguments", "params"):
+        if key in data:
+            params = data[key]
+            break
     if isinstance(tool_name, str) and isinstance(params, dict):
         return tool_name, params
     return None
 
 
+_TOOL_JSON_KEY_PATTERNS = (
+    r"\{[^{}]*\"tool\"\s*:",
+    r"\{[^{}]*\"name\"\s*:",
+    r"\{[^{}]*\"function\"\s*:",
+)
+
+
+def _is_tool_shaped_dict(data: dict[str, Any]) -> bool:
+    tool_keys = {"name", "tool", "function"}
+    param_keys = {"parameters", "arguments", "params"}
+    return bool(set(data.keys()) & tool_keys) and bool(set(data.keys()) & param_keys)
+
+
 def _embedded_tool_json_candidates(content: str) -> list[str]:
     """Collect JSON substrings that may contain a text-based tool call."""
     candidates = [content.strip()]
-    for match in re.finditer(r"\{[^{}]*\"tool\"\s*:", content):
-        start = match.start()
-        depth = 0
-        for index in range(start, len(content)):
-            char = content[index]
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    candidates.append(content[start : index + 1])
-                    break
+    for pattern in _TOOL_JSON_KEY_PATTERNS:
+        for match in re.finditer(pattern, content):
+            start = match.start()
+            depth = 0
+            for index in range(start, len(content)):
+                char = content[index]
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidates.append(content[start : index + 1])
+                        break
     return candidates
+
+
+def looks_like_malformed_tool_call(content: str) -> bool:
+    """True when the model emitted tool-call-shaped JSON without a valid call."""
+    if parse_text_tool_call(content):
+        return False
+
+    stripped = content.strip()
+    if not stripped:
+        return False
+
+    for candidate in _embedded_tool_json_candidates(stripped):
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and _is_tool_shaped_dict(data):
+            if _extract_tool_payload(data) is None:
+                return True
+    return False
+
+
+_SIMPLE_GREETING = re.compile(
+    r"^(?:hi|hello|hey|howdy|greetings|good\s+(?:morning|afternoon|evening))"
+    r"(?:\s+(?:there|coach|everyone|all))?"
+    r"[!.,?\s]*$",
+    re.IGNORECASE,
+)
+
+SIMPLE_GREETING_REPLY = (
+    "Hello! I'm Coach Assistant AI — here to help you with client notes, "
+    "session prep, and coaching strategies. What would you like to work on today?"
+)
+
+
+def is_simple_greeting(message: str) -> bool:
+    """Return True for short social openers that need no tools or LLM routing."""
+    return bool(_SIMPLE_GREETING.match(message.strip()))
 
 
 def parse_text_tool_call(content: str) -> Optional[tuple[str, dict[str, Any]]]:
@@ -550,7 +621,10 @@ def try_direct_client_action(
 
     text_tool = parse_text_tool_call(message)
     if text_tool:
+        from app.core.tools import sanitize_write_confirmation
+
         tool_name, params = text_tool
+        params = sanitize_write_confirmation(tool_name, params, message)
         return execute_tool(tool_name, params, store)
 
     router_result = _tool_router_action(message, store)

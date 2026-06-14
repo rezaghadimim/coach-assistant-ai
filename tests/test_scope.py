@@ -140,6 +140,46 @@ class GenerateWithToolsScopeTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(reply, raw_json)
 
+    async def test_malformed_tool_json_falls_back_to_plain_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            malformed = (
+                "Since your prompt doesn't specify a particular function call, "
+                'I\'ll provide an empty response in the required JSON format.\n'
+                '{"name": null, "parameters": {}}'
+            )
+            plain_reply = "Hello! How can I help with your coaching today?"
+            call_count = 0
+
+            async def fake_post(_url: str, *, json: dict) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if json.get("tools"):
+                    content = malformed
+                else:
+                    content = plain_reply
+                body = {"message": {"role": "assistant", "content": content}}
+                response = MagicMock()
+                response.raise_for_status = MagicMock()
+                response.json = MagicMock(return_value=body)
+                return response
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    [{"role": "user", "content": "Tell me about GROW"}],
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            self.assertEqual(reply, plain_reply)
+            self.assertEqual(call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

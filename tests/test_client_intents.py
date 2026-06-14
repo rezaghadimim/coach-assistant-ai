@@ -11,12 +11,14 @@ from app.core.client_intents import (
     detect_list_clients,
     detect_profile_update,
     is_coaching_advice_request,
+    is_simple_greeting,
+    looks_like_malformed_tool_call,
     parse_text_tool_call,
     profile_update_from_add_note,
     try_direct_client_action,
     try_direct_client_query,
 )
-from app.core.llm import _sanitize_assistant_reply
+from app.core.llm import _sanitize_assistant_reply, try_direct_reply
 from app.core.tools import execute_tool
 
 
@@ -271,6 +273,31 @@ class ClientIntentTests(unittest.TestCase):
         self.assertEqual(tool_name, "create_client")
         self.assertEqual(params["client_id"], "hassan")
 
+    def test_is_simple_greeting(self) -> None:
+        self.assertTrue(is_simple_greeting("Hi"))
+        self.assertTrue(is_simple_greeting("Hello there!"))
+        self.assertTrue(is_simple_greeting("Good morning coach"))
+        self.assertFalse(is_simple_greeting("Hi Ali, add a note"))
+
+    def test_try_direct_reply_handles_greeting(self) -> None:
+        reply = try_direct_reply("Hi", store)
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertIn("Coach Assistant AI", reply)
+
+    def test_looks_like_malformed_tool_call(self) -> None:
+        raw = (
+            "Since your prompt doesn't specify a particular function call, "
+            'I\'ll provide an empty response in the required JSON format.\n'
+            '{"name": null, "parameters": {}}'
+        )
+        self.assertTrue(looks_like_malformed_tool_call(raw))
+        self.assertFalse(
+            looks_like_malformed_tool_call(
+                '{"tool": "list_clients", "parameters": {}}'
+            )
+        )
+
 
 class ToolRouterWiringTests(unittest.TestCase):
     """End-to-end tests confirming the tool router is correctly wired
@@ -324,6 +351,29 @@ class ToolRouterWiringTests(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIn("30", result)
+
+    def test_phone_set_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Set Ali's phone to 9892323442", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("Phone: 9892323442", result)
+        self.assertIn("pending confirmation", result)
+        user = store.get_user("ali")
+        self.assertIsNone(user["profile"].get("phone"))
+
+    def test_add_phone_for_client_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Set phone for ali 9892323442", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("Phone: 9892323442", result)
 
     def test_add_age_for_client_routes_to_create_client_preview(self) -> None:
         self._register_ali()

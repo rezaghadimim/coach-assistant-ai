@@ -101,12 +101,19 @@ def try_direct_reply(
     messages: Optional[list[dict]] = None,
 ) -> Optional[str]:
     """Return a final reply for deterministic client commands, else None."""
-    from app.core.client_intents import try_direct_client_action
+    from app.core.client_intents import (
+        SIMPLE_GREETING_REPLY,
+        is_simple_greeting,
+        try_direct_client_action,
+    )
     from app.core.scope import is_openwebui_task, scope_guard
 
     text = message.strip()
     if not text or is_openwebui_task(text):
         return None
+
+    if is_simple_greeting(text):
+        return SIMPLE_GREETING_REPLY
 
     refusal = scope_guard(text)
     if refusal is not None:
@@ -182,6 +189,7 @@ async def _generate_with_tools(
         NOTE_WRITE_MISFIRE_GUIDANCE,
         detect_client_mention,
         is_coaching_advice_request,
+        looks_like_malformed_tool_call,
         parse_text_tool_call,
         profile_update_from_add_note,
         try_direct_client_action,
@@ -232,12 +240,20 @@ async def _generate_with_tools(
                     if profile_args is not None:
                         tool_name = "create_client"
                         params = profile_args
+                params = sanitize_write_confirmation(tool_name, params, last_user)
                 tool_result = execute_tool(tool_name, params, store)
                 full_messages.append(result.assistant_message)
                 full_messages.append(provider.tool_result_message(tc, tool_result))
                 if tool_result.startswith(("⏳", "✅", "❌")):
                     return tool_result
                 continue
+
+            if looks_like_malformed_tool_call(raw_content):
+                plain_messages = [{"role": "system", "content": system_prompt}] + list(messages)
+                plain_result = await provider.complete(plain_messages)
+                content = _sanitize_assistant_reply(plain_result.content)
+                if content.strip() and not looks_like_malformed_tool_call(content):
+                    return content
 
             content = _sanitize_assistant_reply(raw_content)
             if not content.strip() and last_user:

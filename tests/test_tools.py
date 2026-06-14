@@ -506,6 +506,49 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("She has two children", reply)
             self.assertEqual(len(test_store.get_client_notes("mina")), 0)
 
+    async def test_text_tool_call_strips_premature_confirm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            test_store = type(store)(str(Path(tmp) / "test.db"))
+            execute_tool(
+                "create_client",
+                {"client_id": "ali", "name": "Ali", "confirmed": True},
+                test_store,
+            )
+
+            async def fake_post(_url: str, *, json: dict) -> MagicMock:
+                body = {
+                    "message": {
+                        "role": "assistant",
+                        "content": (
+                            '{"tool": "create_client", "parameters": {'
+                            '"client_id": "ali", "name": "Ali", '
+                            '"phone": "9892323442", "confirmed": true}}'
+                        ),
+                    }
+                }
+                response = MagicMock()
+                response.raise_for_status = MagicMock()
+                response.json = MagicMock(return_value=body)
+                return response
+
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+                reply = await _generate_with_tools(
+                    [{"role": "user", "content": "set phone 9892323442"}],
+                    "system",
+                    TOOL_DEFINITIONS,
+                    test_store,
+                )
+
+            self.assertIn("pending confirmation", reply)
+            self.assertIn("9892323442", reply)
+            user = test_store.get_user("ali")
+            self.assertIsNone(user["profile"].get("phone"))
+
     async def test_profile_age_redirects_add_note_to_update_client(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             test_store = type(store)(str(Path(tmp) / "test.db"))
