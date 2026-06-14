@@ -1,7 +1,8 @@
 """Coach Assistant AI — Application entry point."""
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import FastAPI
@@ -15,6 +16,25 @@ from app.api.users import router as users_router
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _warm_rerank_background() -> None:
+    """Load the cross-encoder after startup so /health/live is not blocked by HF downloads."""
+    from app.core.rerank import fastembed_installed, probe_rerank_model
+
+    if not fastembed_installed():
+        logger.warning(
+            "rag: rerank enabled but fastembed is not installed — "
+            "reranking disabled (pip install fastembed). Falling back to stage-1 order."
+        )
+        return
+
+    available = await asyncio.to_thread(probe_rerank_model)
+    logger.info(
+        "rag: rerank %s | model=%s (local cross-encoder via fastembed)",
+        "ready" if available else "unavailable — falling back to stage-1",
+        settings.rag_rerank_model,
+    )
 
 
 @asynccontextmanager
@@ -50,13 +70,16 @@ async def lifespan(_app: FastAPI):
         else:
             logger.warning("rag: docs_dir %r not found — index empty", docs_dir)
 
-        if settings.rag_rerank_enabled:
-            logger.info(
-                "rag: rerank enabled | model=%s (loads on first retrieval)",
-                settings.rag_rerank_model,
-            )
+    rerank_warm_task: asyncio.Task | None = None
+    if settings.rag_rerank_enabled:
+        rerank_warm_task = asyncio.create_task(_warm_rerank_background())
 
     yield
+
+    if rerank_warm_task is not None:
+        rerank_warm_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await rerank_warm_task
 
 
 app = FastAPI(
@@ -111,16 +134,19 @@ async def health_check():
     rerank_info: dict = {
         "enabled": settings.rag_rerank_enabled,
         "model": settings.rag_rerank_model,
+        "backend": "fastembed",
         "available": False,
-        "loaded": False,
-        "dependency_installed": False,
     }
     if settings.rag_rerank_enabled:
-        from app.rag.reranker import rerank_dependency_installed, rerank_is_loaded
+        from app.core.rerank import rerank_probe_cached
 
-        rerank_info["dependency_installed"] = rerank_dependency_installed()
-        rerank_info["loaded"] = rerank_is_loaded()
-        rerank_info["available"] = rerank_info["loaded"]
+        cached = rerank_probe_cached()
+        if cached is None:
+            # Background warmup is still running — do not trigger a blocking load.
+            rerank_info["available"] = False
+            rerank_info["status"] = "warming"
+        else:
+            rerank_info["available"] = cached is True
 
     return {
         "status": "ok",

@@ -16,7 +16,7 @@ For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](F
 - Local ingestion of `.txt`, `.md`, and `.pdf` documents (`app/rag/ingest.py`)
 - Two-stage in-memory retrieval index (`app/rag/retriever.py`):
   - **Stage 1** — bi-encoder cosine (E5-small via Ollama) or TF cosine fallback; retrieves a wider candidate pool (`RAG_RETRIEVE_K`, default 25)
-  - **Stage 2** — optional cross-encoder reranker (`app/rag/reranker.py`) narrows pool to final `RAG_TOP_K` (default 3)
+  - **Stage 2** — optional local cross-encoder reranker (`app/core/rerank.py` + `app/rag/reranker.py`) narrows pool to final `RAG_TOP_K` (default 3)
 - Source-level deduplication: only the highest-scoring chunk per source file reaches context
 - API endpoint to reindex documents (`POST /api/ingest`)
 - Chat integration that injects retrieved chunks into system prompt
@@ -25,8 +25,8 @@ For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](F
 
 ```
 Query
-  → Stage 1: bi-encoder / TF cosine  (retrieve_k=25 candidates)
-  → Stage 2: cross-encoder reranker  (optional, narrows to top_k=3)
+  → Stage 1: E5 embed / TF cosine  (retrieve_k=25 candidates)
+  → Stage 2: fastembed reranker    (optional, narrows to top_k=3)
   → source deduplication
   → format_retrieval_context()
   → build_system_prompt()
@@ -52,43 +52,61 @@ curl -X POST http://localhost:8000/api/ingest \
 
 ## Reranker setup
 
-The cross-encoder reranker is an **optional dependency group**. Without it the
-pipeline falls back gracefully to stage-1 ordering — no configuration change
-required.
+Stage-2 reranking runs **locally in the API process** via [fastembed](https://github.com/qdrant/fastembed) (ONNX + onnxruntime). No Ollama, no PyTorch.
 
-To enable:
+Default model: `BAAI/bge-reranker-base` (~1 GB). It is downloaded automatically on first use and cached under `RAG_RERANK_CACHE_DIR` (default `data/rerank_cache`).
 
-```bash
-# local / development
-uv sync --group rag-rerank
+Ollama cannot serve cross-encoder reranker models (they crash llama.cpp with `GGML_ASSERT(n_outputs_max …)`; see [ollama/ollama#3368](https://github.com/ollama/ollama/issues/3368)), so reranking is not done through Ollama.
 
-# or with pip
-pip install sentence-transformers
-```
-
-The default model is `BAAI/bge-reranker-v2-m3` (multilingual; aligns with the
-E5-small embedding model used in tool routing). It is downloaded automatically
-on first use.
-
-Docker users who want reranking should add the following line to the `Dockerfile`
-before the `CMD` line:
-
-```dockerfile
-RUN pip install --no-cache-dir sentence-transformers
-```
+When fastembed is missing or the model fails to load, the pipeline falls back to stage-1 ordering — no configuration change required.
 
 ### Key environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RAG_RETRIEVE_K` | `25` | Stage-1 candidate pool size |
-| `RAG_RERANK_ENABLED` | `true` | Enable/disable cross-encoder reranking |
-| `RAG_RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | HuggingFace model ID |
-| `RAG_RERANK_BATCH_SIZE` | `16` | Pairs per forward pass |
+| `RAG_RERANK_ENABLED` | `true` | Enable/disable reranking |
+| `RAG_RERANK_MODEL` | `BAAI/bge-reranker-base` | fastembed cross-encoder model name |
+| `RAG_RERANK_BATCH_SIZE` | `32` | Passages scored per ONNX batch |
 | `RAG_RERANK_MAX_PASSAGE_CHARS` | `2000` | Passage truncation before scoring |
+| `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default) |
 | `RAG_TOP_K` | `3` | Final number of chunks injected into prompt |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings only** (stage 1) |
+
+`OLLAMA_RERANK_MODEL` is still accepted as a legacy alias for `RAG_RERANK_MODEL`.
 
 Reranker availability is reported in the `/health` endpoint under the `rerank` key.
+While the background warmup is in progress, `/health` returns `"status": "warming"` for
+the `rerank` key — the endpoint itself is never blocked by the model download.
+
+### Cache persistence
+
+The model is cached under `RAG_RERANK_CACHE_DIR` and survives normal restarts:
+
+| Action | Cache preserved? |
+|--------|-----------------|
+| `docker compose restart` | Yes |
+| `docker compose down` then `up` (no `-v`) | Yes |
+| `docker compose up --build` | Yes — volumes are independent of image layers |
+| `docker compose down -v` | **No** — wipes the entire named volume |
+
+**Manual warm-up** — run once on a stable network to pre-populate the cache so
+subsequent boots don't download:
+
+```bash
+# Local dev
+python -c "from app.core.rerank import probe_rerank_model; print('rerank_ready=', probe_rerank_model())"
+
+# Docker
+docker compose exec coach-api python -c "from app.core.rerank import probe_rerank_model; print('rerank_ready=', probe_rerank_model())"
+
+# Verify the cache exists
+docker compose exec coach-api ls -lah /app/data/rerank_cache
+```
+
+If a download is interrupted (`.incomplete` blobs appear), the application
+auto-purges the partial cache and re-downloads on next startup — just ensure the
+container is not restarted mid-download.
 
 ## Testing
 
@@ -96,5 +114,6 @@ Reranker availability is reported in the `/health` endpoint under the `rerank` k
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
 
-New reranker-specific tests live in `tests/test_rag_rerank.py`. All tests mock
-`CrossEncoder` so they run in CI without the dependency group installed.
+- `tests/test_rerank.py` — unit tests with a mocked encoder (fast, offline)
+- `tests/test_rag_rerank.py` — two-stage `retrieve()` pipeline tests (mocked reranker)
+- `tests/test_rerank_integration.py` — optional end-to-end test against the real ONNX model (skipped when the model is not cached; set `RUN_RERANK_INTEGRATION=1` to download and run)

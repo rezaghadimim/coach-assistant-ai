@@ -6,6 +6,7 @@ This is a separate, opt-in endpoint that does NOT affect the prose chat flow.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -68,7 +69,7 @@ async def generate_briefing(request: BriefingRequest) -> CoachBriefing:
     briefing — key insights, hypotheses, coaching questions, framework
     recommendation, action plan, and homework suggestions.
     """
-    context = _build_briefing_context(request, _store)
+    context = await asyncio.to_thread(_build_briefing_context, request, _store)
 
     llm_messages = [
         {"role": "system", "content": BRIEFING_PROMPT},

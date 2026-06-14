@@ -12,7 +12,7 @@ Runs locally using open-source LLMs.
 |------|--------|
 | LLM | Llama 3.1 8B (via Ollama) |
 | Embed model | multilingual-e5-small (via Ollama, for tool routing) |
-| RAG | Two-stage retrieval: local chunk index + bi-encoder similarity → cross-encoder rerank (`bge-reranker-v2-m3`) |
+| RAG | Two-stage retrieval: E5 bi-encoder (Ollama) → local cross-encoder rerank (`BAAI/bge-reranker-base` via fastembed) |
 | Tool Routing | Embedding + token similarity for pre-LLM tool disambiguation |
 | Backend | FastAPI (Python) |
 | Database | SQLite (client notes, sessions, memory) |
@@ -34,7 +34,8 @@ Runs locally using open-source LLMs.
 - Python 3.11+
 - [Ollama](https://ollama.com) installed
 - `ollama pull llama3.1:8b`
-- `ollama pull karuniaperjuangan/multilingual-e5-small` — for tool routing (multilingual support)
+- `ollama pull karuniaperjuangan/multilingual-e5-small` — embeddings + tool routing + RAG stage-1
+- RAG stage-2 reranking uses `fastembed` + `BAAI/bge-reranker-base` in-process (downloaded on first run; disable with `RAG_RERANK_ENABLED=false`)
 
 ## Getting Started
 

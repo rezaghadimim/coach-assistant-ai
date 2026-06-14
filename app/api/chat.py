@@ -1,11 +1,12 @@
 """Chat endpoint — POST /chat."""
 
+import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
-from app.core.llm import generate_response
+from app.core.llm import generate_response, try_direct_reply
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
 from app.core.tools import TOOL_DEFINITIONS
 from app.memory import MemoryStore, SessionManager
@@ -75,12 +76,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
         history = store.get_session_messages(session_id)
         _sessions[request.user_id] = history
 
-        reply = await generate_response(
-            messages=history,
-            system_prompt=build_system_prompt(request.user_id, request.message),
-            tools=TOOL_DEFINITIONS,
-            store=store,
-        )
+        reply = try_direct_reply(request.message, store, history)
+        if reply is None:
+            system_prompt = await asyncio.to_thread(
+                build_system_prompt, request.user_id, request.message
+            )
+            reply = await generate_response(
+                messages=history,
+                system_prompt=system_prompt,
+                tools=TOOL_DEFINITIONS,
+                store=store,
+            )
         store.add_message(session_id, "assistant", reply)
 
         history = store.get_session_messages(session_id)

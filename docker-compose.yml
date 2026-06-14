@@ -16,6 +16,10 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODELS: "${OPENROUTER_MODELS:-openai/gpt-4o-mini,openai/gpt-oss-120b:free,openai/gpt-oss-20b:free}"
       OPENROUTER_BASE_URL: "${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
+      # Pin reranker cache to an absolute path inside the named volume so the
+      # model survives container rebuilds and CWD-agnostic restarts.
+      # NOTE: never run `docker compose down -v` unless you want a full cache wipe.
+      RAG_RERANK_CACHE_DIR: "/app/data/rerank_cache"
     volumes:
       - coach_data:/app/data
       - ./docs/knowledge:/app/docs/knowledge:ro
@@ -26,6 +30,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # First boot may still index RAG / warm Ollama embeds before /health/live responds.
+      start_period: 90s
 
   # ─────────────────────────────────────────────
   # Open WebUI — Coach Assistant chat front-end
@@ -38,6 +44,10 @@ services:
     environment:
       # Coach API handles RAG — skip Open WebUI's HuggingFace embedding download at startup.
       BYPASS_EMBEDDING_AND_RETRIEVAL: "true"
+      # Open WebUI still preloads default embedding/rerank/whisper models unless these are off.
+      RAG_EMBEDDING_MODEL_AUTO_UPDATE: "false"
+      RAG_RERANKING_MODEL_AUTO_UPDATE: "false"
+      WHISPER_MODEL_AUTO_UPDATE: "false"
       # Use docker-compose env for connections; ignore stale Admin UI settings in webui.db.
       ENABLE_PERSISTENT_CONFIG: "false"
       # Disable the built-in Ollama connection; use our backend instead.

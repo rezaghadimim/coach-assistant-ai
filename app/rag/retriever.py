@@ -162,9 +162,9 @@ def retrieve(
     1. Stage-1 retrieval — fetch up to ``retrieve_k`` candidates (defaults to
        ``settings.rag_retrieve_k``, typically 25) using bi-encoder or token
        similarity.
-    2. Cross-encoder reranking — score all candidates as (query, passage) pairs
-       and keep the best ``top_k``.  Falls back to stage-1 order silently when
-       the reranker is unavailable.
+    2. Stage-2 reranking — score candidates with a local cross-encoder
+       (``RAG_RERANK_MODEL`` via fastembed) and keep the best ``top_k``.  Falls
+       back to stage-1 order when the reranker is unavailable.
 
     Args:
         query:      The coach's message or question.

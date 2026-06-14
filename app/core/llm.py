@@ -95,6 +95,31 @@ def _format_direct_lookup_reply(tool_result: str) -> str:
     return f"Here are the details on file:\n\n{tool_result}"
 
 
+def try_direct_reply(
+    message: str,
+    store: "MemoryStore",
+    messages: Optional[list[dict]] = None,
+) -> Optional[str]:
+    """Return a final reply for deterministic client commands, else None."""
+    from app.core.client_intents import try_direct_client_action
+    from app.core.scope import is_openwebui_task, scope_guard
+
+    text = message.strip()
+    if not text or is_openwebui_task(text):
+        return None
+
+    refusal = scope_guard(text)
+    if refusal is not None:
+        return refusal
+
+    direct = try_direct_client_action(text, store, messages)
+    if direct is None:
+        return None
+    if direct.startswith(("⏳", "✅", "❌")):
+        return direct
+    return _format_direct_lookup_reply(direct)
+
+
 async def generate_response(
     messages: list[dict[str, str]],
     system_prompt: str = COACH_ASSISTANT_SYSTEM_PROMPT,
@@ -172,15 +197,9 @@ async def _generate_with_tools(
     is_task = bool(last_user) and is_openwebui_task(last_user)
 
     if last_user and not is_task:
-        refusal = scope_guard(last_user)
-        if refusal is not None:
-            return refusal
-
-        direct = try_direct_client_action(last_user, store, messages)
+        direct = try_direct_reply(last_user, store, messages)
         if direct is not None:
-            if direct.startswith(("⏳", "✅", "❌")):
-                return direct
-            return _format_direct_lookup_reply(direct)
+            return direct
 
         client_id = detect_client_mention(last_user, store)
         if client_id:

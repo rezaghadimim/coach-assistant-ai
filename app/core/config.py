@@ -1,4 +1,6 @@
-from pydantic import model_validator
+from pathlib import Path
+
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings
 
 DEFAULT_OPENROUTER_MODELS = (
@@ -46,11 +48,26 @@ class Settings(BaseSettings):
     rag_index_cache_path: str = "data/rag_index_cache.json"
     # Stage-1 candidate pool — retrieve this many chunks before reranking, then trim to rag_top_k.
     rag_retrieve_k: int = 25
-    # Cross-encoder reranker (requires the rag-rerank dependency group: uv sync --group rag-rerank)
+    # Stage-2 cross-encoder reranker — runs locally in-process via fastembed (ONNX,
+    # no PyTorch, no Ollama). Ollama cannot serve reranker models (ollama/ollama #3368).
     rag_rerank_enabled: bool = True
-    rag_rerank_model: str = "BAAI/bge-reranker-v2-m3"
-    rag_rerank_batch_size: int = 16
+    # fastembed TextCrossEncoder model. See TextCrossEncoder.list_supported_models().
+    rag_rerank_model: str = Field(
+        default="BAAI/bge-reranker-base",
+        validation_alias=AliasChoices(
+            "rag_rerank_model",
+            "RAG_RERANK_MODEL",
+            # Back-compat with the previous Ollama-based reranker settings.
+            "ollama_rerank_model",
+            "OLLAMA_RERANK_MODEL",
+        ),
+    )
+    # Passages scored per ONNX inference batch (correctness-neutral; tune for speed).
+    rag_rerank_batch_size: int = 32
     rag_rerank_max_passage_chars: int = 2000
+    # Where fastembed caches the downloaded reranker model. Kept under data/ so it
+    # survives restarts (and lands in the mounted Docker volume) instead of /tmp.
+    rag_rerank_cache_dir: str = "data/rerank_cache"
 
     # Tool Router
     tool_router_enabled: bool = True
@@ -70,17 +87,42 @@ class Settings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def _migrate_openrouter_model(cls, data: object) -> object:
-        """Map legacy OPENROUTER_MODEL to OPENROUTER_MODELS when needed."""
+    def _migrate_legacy_settings(cls, data: object) -> object:
+        """Map legacy env keys to current names."""
         if not isinstance(data, dict):
             return data
-        if data.get("openrouter_models") or data.get("OPENROUTER_MODELS"):
-            return data
-        legacy = data.get("openrouter_model") or data.get("OPENROUTER_MODEL")
-        if legacy:
-            data = dict(data)
-            data["openrouter_models"] = legacy
+        data = dict(data)
+        if not data.get("openrouter_models") and not data.get("OPENROUTER_MODELS"):
+            legacy = data.get("openrouter_model") or data.get("OPENROUTER_MODEL")
+            if legacy:
+                data["openrouter_models"] = legacy
+        rerank_model = (
+            data.get("rag_rerank_model")
+            or data.get("RAG_RERANK_MODEL")
+            or data.get("ollama_rerank_model")
+            or data.get("OLLAMA_RERANK_MODEL")
+        )
+        if isinstance(rerank_model, str):
+            normalized = rerank_model.strip()
+            # Ollama-only reranker IDs are not loadable via fastembed; map to the default.
+            if normalized.startswith("dengcao/") or normalized.endswith("bge-reranker-v2-m3"):
+                data["rag_rerank_model"] = "BAAI/bge-reranker-base"
         return data
+
+    @model_validator(mode="after")
+    def _resolve_relative_paths(self) -> "Settings":
+        """Resolve relative data paths to absolute using the project root.
+
+        This ensures paths like ``data/rerank_cache`` behave the same whether
+        the app is started from the project root, a sub-directory, or a test
+        runner with a different CWD.  Absolute paths (e.g. the Docker env var
+        ``RAG_RERANK_CACHE_DIR=/app/data/rerank_cache``) are left unchanged.
+        """
+        # config.py lives at <project_root>/app/core/config.py
+        project_root = Path(__file__).resolve().parent.parent.parent
+        if self.rag_rerank_cache_dir and not Path(self.rag_rerank_cache_dir).is_absolute():
+            self.rag_rerank_cache_dir = str(project_root / self.rag_rerank_cache_dir)
+        return self
 
     class Config:
         env_file = ".env"

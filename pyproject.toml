@@ -11,12 +11,10 @@ dependencies = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.1.0",
     "pypdf>=4.0.0",
+    "fastembed>=0.8.0",
 ]
 
 [dependency-groups]
-rag-rerank = [
-    "sentence-transformers>=3.0.0",
-]
 finetune = [
     "torch>=2.1.0",
     "datasets>=2.19.0",

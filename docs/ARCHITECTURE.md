@@ -29,8 +29,8 @@ The local Ollama provider is always the default.
 
 ### 2) RAG Ingestion + Retrieval (`app/rag/`)
 - `ingest.py`: document discovery + chunking (`.txt`, `.md`, `.pdf`)
-- `retriever.py`: two-stage retrieval — bi-encoder or TF cosine (stage 1) followed by optional cross-encoder reranking (stage 2); per-source deduplication before context assembly
-- `reranker.py`: optional cross-encoder reranker (`BAAI/bge-reranker-v2-m3`); graceful fallback when `sentence-transformers` is not installed
+- `retriever.py`: two-stage retrieval — bi-encoder or TF cosine (stage 1) followed by optional local cross-encoder reranking (stage 2); per-source deduplication before context assembly
+- `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); graceful fallback when fastembed is unavailable
 - `POST /api/ingest`: reindex local document directory
 
 ### 3) Memory System (`app/memory/`)
@@ -118,6 +118,7 @@ app/
 ├── core/
 │   ├── config.py
 │   ├── embeddings.py      ← Ollama embedding client
+│   ├── rerank.py          ← local fastembed cross-encoder (RAG stage 2)
 │   ├── llm.py
 │   ├── model_registry.py
 │   ├── prompts.py
@@ -134,7 +135,7 @@ app/
 ├── rag/
 │   ├── ingest.py
 │   ├── retriever.py
-│   └── reranker.py        ← optional cross-encoder reranker (sentence-transformers)
+│   └── reranker.py        ← RAG stage-2 reranker (fastembed / ONNX wrapper)
 ├── memory/
 │   ├── session.py
 │   ├── store.py
