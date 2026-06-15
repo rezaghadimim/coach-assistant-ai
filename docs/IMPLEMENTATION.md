@@ -92,31 +92,86 @@ RAG_RERANK_ENABLED=true RAG_RETRIEVE_K=25 python main.py
 
 See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-cross-encoder-rag-reranker.md) for the rationale.
 
-### Phase 2B: Tool Routing — Embedding-Based Disambiguation
+### Phase 2B: Tool Routing — Embedding + Rerank + LLM Fallback
 
-**Problem solved:** messages like "Ali's age is 23" were reaching `add_client_note` (duplicate note on every message) instead of `create_client` (profile field merge).
+**Problem solved:** arbitrary phrasing ("give me all visitors in table", "dump the roster") was failing the fast path entirely, reaching the LLM but getting back follow-up suggestions instead of data — because all fast-path layers were lexical and couldn't handle out-of-vocabulary synonyms. Messages like "Ali's age is 23" were also misrouted to `add_client_note` instead of `create_client`.
 
 **Done:**
-- [x] Tool knowledge corpus: `docs/tool-knowledge/` (9 per-tool markdown docs + `routing.jsonl`)
+- [x] Tool knowledge corpus: `docs/tool-knowledge/` (9 per-tool markdown docs + `routing.jsonl`, now 130 examples)
 - [x] Configuration: `TOOL_ROUTER_BACKEND`, `OLLAMA_EMBED_MODEL`, `TOOL_ROUTER_THRESHOLD`, etc.
 - [x] Embedding client: `app/core/embeddings.py` — Ollama `/api/embeddings` with E5 prefix support
-- [x] Tool router: `app/core/tool_router.py` — token + embedding backends, `classify_tool()`
-- [x] Wiring: `_tool_router_action()` in `client_intents.py`, inserted before LLM tool calling
-- [x] Eval dataset: `data/eval/tool_routing.jsonl` (~60 labeled utterances)
-- [x] Eval script: `scripts/eval_tool_routing.py` — accuracy/precision/recall/F1 per tool
-- [x] API: `POST /api/tools/classify`, `POST /api/tools/reindex`, health embed status
-- [x] Tests: `test_tool_router.py`, `test_embeddings.py`, `test_tools_api.py`, extended `test_client_intents.py`
-- [x] Docs: `TOOL_ROUTING.md`, ADR-0007
+- [x] Domain synonym lexicon: `app/core/lexicon.py` — `normalize_for_routing()` additive query expansion (`visitor→client`, `table→list clients`, `dump→show/list`, etc.); applied in token backend, embedding, and `top_n_tools`; never touches RAG
+- [x] Tool router v2: `app/core/tool_router.py` — three backends (token, embedding, two-stage rerank), `ToolMatch.rerank_score` field, graceful degradation chain
+- [x] Two-stage rerank: stage-1 embedding top-K recall (floor=0.30) → stage-2 fastembed cross-encoder precision (threshold=0.55); reuses `BAAI/bge-reranker-base` and `rag_rerank_cache_dir` from RAG
+- [x] New config: `TOOL_ROUTER_RERANK_ENABLED`, `TOOL_ROUTER_RERANK_TOP_K`, `TOOL_ROUTER_EMBED_FLOOR`, `TOOL_ROUTER_RERANK_THRESHOLD`, `TOOL_ROUTER_RERANK_MARGIN`, `TOOL_ROUTER_RERANK_MODEL`, `TOOL_ROUTER_LLM_FALLBACK_ENABLED`
+- [x] LLM router fallback: `app/core/llm_router.py` — one constrained LLM call returning `{"tool": "<name>"}` JSON; fired only when the message is a data request and all fast-path layers deferred
+- [x] Dead-end fix: `_format_follow_ups_as_text` suppresses follow-up-only responses for data requests; `_empty_reply_fallback` attempts a direct-action rescue first
+- [x] System prompt hardening: explicit `CRITICAL RULE` block in `COACH_ASSISTANT_SYSTEM_PROMPT` biasing tool calls for data retrieval; synonym phrasings added to all tool examples
+- [x] Eval datasets: `data/eval/tool_routing.jsonl` (59 in-distribution rows), `data/eval/tool_routing_hard.jsonl` (34 out-of-vocab held-out rows)
+- [x] Eval script: `scripts/eval_tool_routing.py` — `--backend rerank`, `--hard`, `--latency` flags added
+- [x] Benchmark script: `scripts/benchmark_tool_routing.py` — compares token/embedding/rerank across standard + hard sets with accuracy, deferral rate, p50/p95 latency
+- [x] API: `POST /api/tools/classify` (now exposes `rerank_score` field), `POST /api/tools/reindex`
+- [x] Tests: `test_lexicon.py` (24), `test_tool_router_rerank.py` (12), `test_llm_router.py` (18), extended `test_tool_router.py` (6 out-of-vocab), extended `test_tools_api.py` (data-request guard + schema fields)
 
 **To operate:**
 ```bash
-ollama pull karuniaperjuangan/multilingual-e5-small
+# Minimal (token + lexicon, CI-safe)
 python scripts/eval_tool_routing.py --backend token --show-errors
+
+# With embedding + rerank (best accuracy)
+ollama pull karuniaperjuangan/multilingual-e5-small
+pip install fastembed
+python scripts/eval_tool_routing.py --backend rerank --show-errors
+python scripts/eval_tool_routing.py --backend rerank --hard --show-errors
+
+# Full benchmark comparing all backends
+python scripts/benchmark_tool_routing.py
 ```
 
 See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) for full guide.
 
 ## Remaining
+
+### Tool Routing — Next Steps for Better Coverage
+
+The current stack (lexicon → token → embedding → rerank → LLM fallback) handles the most common routing failures. The following steps would push coverage further.
+
+#### High impact (do first)
+
+- [ ] **Run the benchmark and measure the baseline.** Before further tuning, measure exactly where you stand:
+  ```bash
+  python scripts/benchmark_tool_routing.py
+  python scripts/eval_tool_routing.py --backend token --hard --show-errors
+  python scripts/eval_tool_routing.py --backend rerank --hard --show-errors
+  ```
+  The gap between token and rerank on the hard set quantifies how much the embed+rerank layer is contributing.
+
+- [ ] **Grow `routing.jsonl` with real failure cases.** Add every message that was misrouted or deferred in production. Failures on the hard eval set are the highest-value additions. Use `POST /api/tools/classify` to inspect scores without restarting.
+  ```bash
+  curl -X POST http://localhost:8000/api/tools/classify \
+    -H "Content-Type: application/json" \
+    -d '{"message": "your failing message here"}'
+  ```
+
+- [ ] **Tune `TOOL_ROUTER_RERANK_THRESHOLD`.** The default (0.55) is conservative. Run the benchmark, check the deferred rate on the hard set, and lower the threshold if too many correct queries are being deferred. A value of 0.45–0.50 is worth testing.
+
+- [ ] **Extend `lexicon.py` from production logs.** The current lexicon is hand-crafted. After running in production for a week, grep the logs for messages that were deferred (`_embed_available` probe OK but `classify_tool` returned None) and add any recurring synonym groups.
+
+#### Medium impact
+
+- [ ] **Improve the `_is_data_request` pattern.** The regex is deliberately broad. Log cases where it fires incorrectly (triggers LLM router for coaching questions) or misses (data request not caught). Tighten the pattern based on evidence.
+
+- [ ] **Add an observability endpoint for near-misses.** When `classify_tool` returns None, log the top-3 scores so you can see whether the correct tool was close but below threshold. Wire this into the health/debug API.
+
+- [ ] **Test LLM router fallback accuracy.** `app/core/llm_router.py` is only tested with mocked providers. Run a small manual evaluation: take 20 messages that were deferred by the fast path and check whether the LLM router classifies them correctly. If accuracy is below 90%, improve the `_SYSTEM_PROMPT` in `llm_router.py`.
+
+#### Lower impact / future
+
+- [ ] **Explore a learned threshold.** Rather than a global `TOOL_ROUTER_RERANK_THRESHOLD`, train a simple logistic regression on the hard eval set to learn per-tool or score-distribution-aware thresholds. Requires a larger labeled dataset.
+
+- [ ] **Export routing failures to fine-tuning data.** Any message where the LLM router or tool loop correctly identified the tool (but the fast path deferred) is a candidate training example for further `routing.jsonl` expansion or a future fine-tuned router model.
+
+---
 
 ### Phase 5: Fine-tuning (LoRA) — Behavior Adaptation
 > Fine-tuning is for **how the model behaves**, not what it knows. Use this to teach the model the coach's tone, questioning style, and response patterns — not to inject knowledge that belongs in RAG.
@@ -136,5 +191,7 @@ See [`FINETUNE.md`](FINETUNE.md) for the full guide, export options, and decisio
 ## Test Command
 
 ```bash
+python3 -m pytest tests/
+# or
 python3 -m unittest discover -s tests -p "test_*.py"
 ```

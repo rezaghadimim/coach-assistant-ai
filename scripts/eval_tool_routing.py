@@ -4,10 +4,19 @@ Usage:
     python scripts/eval_tool_routing.py
     python scripts/eval_tool_routing.py --backend token
     python scripts/eval_tool_routing.py --backend embedding
+    python scripts/eval_tool_routing.py --backend rerank
+    python scripts/eval_tool_routing.py --hard
     python scripts/eval_tool_routing.py --eval-file data/eval/tool_routing.jsonl
     python scripts/eval_tool_routing.py --min-accuracy 0.90 --exit-nonzero
 
-Outputs per-tool precision/recall/F1 and overall accuracy.
+Outputs per-tool precision/recall/F1, overall accuracy, deferral rate,
+and per-query latency (when --latency is passed).
+
+The ``--hard`` flag switches the eval set to the held-out
+``data/eval/tool_routing_hard.jsonl`` file which contains out-of-vocabulary
+phrasings not present in ``routing.jsonl``.  This measures the generalization
+capability of the embedding and rerank backends.
+
 Exits with code 1 when accuracy falls below --min-accuracy (default 0.0, CI-safe).
 """
 
@@ -17,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -25,12 +35,20 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate tool routing accuracy.")
     parser.add_argument(
         "--eval-file",
-        default="data/eval/tool_routing.jsonl",
-        help="Path to labeled JSONL eval set (default: data/eval/tool_routing.jsonl)",
+        default=None,
+        help=(
+            "Path to labeled JSONL eval set. "
+            "Defaults to data/eval/tool_routing.jsonl, or the hard set when --hard is passed."
+        ),
+    )
+    parser.add_argument(
+        "--hard",
+        action="store_true",
+        help="Use the held-out hard eval set (data/eval/tool_routing_hard.jsonl).",
     )
     parser.add_argument(
         "--backend",
-        choices=["token", "embedding", "auto"],
+        choices=["token", "embedding", "auto", "rerank"],
         default=None,
         help="Override TOOL_ROUTER_BACKEND setting for this run.",
     )
@@ -56,6 +74,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print mispredicted utterances.",
     )
+    parser.add_argument(
+        "--latency",
+        action="store_true",
+        help="Measure and report per-query classify latency (p50/p95).",
+    )
     return parser.parse_args()
 
 
@@ -75,12 +98,27 @@ def _f1(precision: float, recall: float) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
+def _percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    idx = int(len(sorted_vals) * pct / 100)
+    return sorted_vals[min(idx, len(sorted_vals) - 1)]
+
+
 def main() -> int:
     args = _parse_args()
 
     # Apply overrides before importing settings-dependent modules.
     if args.backend:
-        os.environ["TOOL_ROUTER_BACKEND"] = args.backend
+        backend_env = args.backend
+        # Map "rerank" to "auto" with rerank enabled so the flag is intuitive.
+        if backend_env == "rerank":
+            os.environ["TOOL_ROUTER_BACKEND"] = "auto"
+            os.environ["TOOL_ROUTER_RERANK_ENABLED"] = "true"
+        else:
+            os.environ["TOOL_ROUTER_BACKEND"] = backend_env
+            os.environ["TOOL_ROUTER_RERANK_ENABLED"] = "false"
     if args.threshold is not None:
         os.environ["TOOL_ROUTER_THRESHOLD"] = str(args.threshold)
 
@@ -90,7 +128,14 @@ def main() -> int:
     count = build_index()
     print(f"Index built: {count} examples\n")
 
-    eval_path = Path(args.eval_file)
+    # Determine eval file path.
+    if args.eval_file:
+        eval_path = Path(args.eval_file)
+    elif args.hard:
+        eval_path = Path("data/eval/tool_routing_hard.jsonl")
+    else:
+        eval_path = Path("data/eval/tool_routing.jsonl")
+
     if not eval_path.exists():
         print(f"ERROR: eval file not found: {eval_path}", file=sys.stderr)
         return 1
@@ -100,6 +145,9 @@ def main() -> int:
         print("ERROR: eval file is empty.", file=sys.stderr)
         return 1
 
+    label = "HARD" if args.hard else "STANDARD"
+    print(f"Eval set: {eval_path} ({label}, {len(rows)} examples)\n")
+
     # Collect predictions
     tools = sorted({r["expected_tool"] for r in rows})
     tp: dict[str, int] = defaultdict(int)
@@ -108,12 +156,19 @@ def main() -> int:
     deferred = 0
     correct = 0
     errors: list[tuple[str, str, str]] = []
+    latencies: list[float] = []
 
     for row in rows:
         utterance = row["utterance"]
         expected = row["expected_tool"]
+
+        t0 = time.perf_counter()
         match = classify_tool(utterance, threshold=args.threshold)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        latencies.append(elapsed_ms)
+
         predicted = match.tool if match else "DEFERRED"
+        backend_used = match.backend if match else "—"
 
         if predicted == "DEFERRED":
             deferred += 1
@@ -127,10 +182,11 @@ def main() -> int:
         else:
             fp[predicted] += 1
             fn[expected] += 1
-            errors.append((utterance, expected, predicted))
+            errors.append((utterance, expected, f"{predicted} [{backend_used}]"))
 
     total = len(rows)
     accuracy = correct / total if total > 0 else 0.0
+    deferral_rate = deferred / total if total > 0 else 0.0
 
     # Per-tool metrics
     print(f"{'Tool':<22} {'TP':>4} {'FP':>4} {'FN':>4} {'Prec':>6} {'Rec':>6} {'F1':>6}")
@@ -146,7 +202,12 @@ def main() -> int:
 
     print("-" * 60)
     print(f"\nTotal: {total}  Correct: {correct}  Deferred: {deferred}")
-    print(f"Overall accuracy: {accuracy:.2%}")
+    print(f"Overall accuracy: {accuracy:.2%}  Deferral rate: {deferral_rate:.2%}")
+
+    if args.latency and latencies:
+        p50 = _percentile(latencies, 50)
+        p95 = _percentile(latencies, 95)
+        print(f"Latency — p50: {p50:.1f} ms  p95: {p95:.1f} ms")
 
     if args.show_errors and errors:
         print(f"\nMispredictions ({len(errors)}):")

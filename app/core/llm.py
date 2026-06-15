@@ -1,6 +1,7 @@
 """LLM client — routes requests to the appropriate provider."""
 
 import json
+import re
 from typing import TYPE_CHECKING, AsyncGenerator, Optional, Union
 
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
@@ -13,6 +14,20 @@ _JSON_WRAPPER_KEYS = ("response", "answer", "content", "message")
 _FOLLOW_UP_ONLY_KEYS = frozenset({"follow_ups", "followups", "follow_up_questions"})
 _FOLLOW_UP_LIST_KEYS = ("follow_ups", "followups", "follow_up_questions")
 
+# Patterns that indicate the user is asking for data, not coaching advice.
+# When the LLM returns only follow-ups for these, it is a dead-end to be rescued.
+_DATA_REQUEST_PATTERNS = re.compile(
+    r"\b(?:"
+    r"list|show|give|fetch|get|pull|display|retrieve|dump|print|output|"
+    r"who\s+are|who\s+is|what\s+are|what\s+is|tell\s+me|show\s+me"
+    r")\b.{0,60}\b(?:"
+    r"client|clients|patient|patients|visitor|visitors|contact|contacts|"
+    r"person|people|member|members|roster|database|records|table|notes?|goals?|"
+    r"decisions?|progress|story|stories|details?|info|information|profile|data"
+    r")\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def _last_user_message(messages: list[dict]) -> str:
     for message in reversed(messages):
@@ -22,7 +37,7 @@ def _last_user_message(messages: list[dict]) -> str:
     return ""
 
 
-def _sanitize_assistant_reply(content: str) -> str:
+def _sanitize_assistant_reply(content: str, *, last_user: str = "") -> str:
     """Strip JSON wrappers some models emit instead of plain text."""
     stripped = content.strip()
     if not stripped.startswith("{"):
@@ -42,13 +57,28 @@ def _sanitize_assistant_reply(content: str) -> str:
             return value.strip()
 
     if set(data.keys()) <= _FOLLOW_UP_ONLY_KEYS:
-        return _format_follow_ups_as_text(data)
+        return _format_follow_ups_as_text(data, last_user=last_user)
 
     return content
 
 
-def _format_follow_ups_as_text(data: dict) -> str:
-    """Turn follow-up-only JSON into readable coaching prompts."""
+def _is_data_request(message: str) -> bool:
+    """Return True when *message* looks like a data retrieval request."""
+    return bool(_DATA_REQUEST_PATTERNS.search(message.strip()))
+
+
+def _format_follow_ups_as_text(data: dict, *, last_user: str = "") -> str:
+    """Turn follow-up-only JSON into readable coaching prompts.
+
+    When the last user message looks like a data request (list/show/fetch
+    clients, notes, etc.) the follow-ups are NOT surfaced — they represent a
+    model failure to call a tool.  Return an empty string in that case so the
+    caller falls through to the empty-reply rescue path.
+    """
+    if last_user and _is_data_request(last_user):
+        # Data request → suppress follow-ups; empty triggers rescue in caller.
+        return ""
+
     for key in _FOLLOW_UP_LIST_KEYS:
         items = data.get(key)
         if not isinstance(items, list):
@@ -61,7 +91,17 @@ def _format_follow_ups_as_text(data: dict) -> str:
 
 
 def _empty_reply_fallback(last_user: str, store: "MemoryStore") -> str:
-    from app.core.client_intents import detect_client_mention
+    from app.core.client_intents import detect_client_mention, try_direct_client_action
+
+    # Attempt one more rescue via the direct-action path before giving up.
+    if last_user and _is_data_request(last_user):
+        rescue = try_direct_client_action(last_user, store)
+        if rescue is not None:
+            return rescue
+        return (
+            "I couldn't retrieve that data. "
+            "Could you clarify which client or record you're asking about?"
+        )
 
     if detect_client_mention(last_user, store):
         return (
@@ -93,6 +133,67 @@ def _format_direct_lookup_reply(tool_result: str) -> str:
     if tool_result.startswith("❌"):
         return tool_result
     return f"Here are the details on file:\n\n{tool_result}"
+
+
+async def _try_llm_router_action(
+    message: str,
+    store: "MemoryStore",
+    provider,
+) -> Optional[str]:
+    """Use the LLM router fallback to classify and execute a tool.
+
+    Returns a formatted tool result string when confident, or ``None`` to
+    fall through to the full tool-calling loop.
+    """
+    from app.core.client_intents import (
+        detect_client_lookup,
+        detect_client_mention,
+        detect_create_client,
+        detect_profile_update,
+    )
+    from app.core.llm_router import classify_tool_llm
+    from app.core.tools import execute_tool
+
+    match = await classify_tool_llm(message, provider=provider)
+    if match is None:
+        return None
+
+    tool = match.tool
+
+    if tool == "list_clients":
+        result = execute_tool("list_clients", {}, store)
+        return _format_direct_lookup_reply(result)
+
+    if tool == "create_client":
+        profile_args = detect_profile_update(message, store)
+        if profile_args:
+            return execute_tool("create_client", profile_args, store)
+        create_args = detect_create_client(message)
+        if create_args:
+            return execute_tool("create_client", create_args, store)
+        return None
+
+    if tool in ("get_client", "get_client_full"):
+        client_ref = detect_client_lookup(message)
+        if client_ref:
+            result = execute_tool(tool, {"client_id": client_ref}, store)
+            return _format_direct_lookup_reply(result)
+        client_id = detect_client_mention(message, store)
+        if client_id:
+            result = execute_tool(tool, {"client_id": client_id}, store)
+            return _format_direct_lookup_reply(result)
+        return None
+
+    if tool == "list_client_notes":
+        client_id = detect_client_mention(message, store)
+        if client_id is None:
+            return None
+        result = execute_tool("list_client_notes", {"client_id": client_id}, store)
+        return _format_direct_lookup_reply(result)
+
+    # For write/delete tools, defer to the full LLM loop for param extraction
+    # and confirmation flow.
+    return None
 
 
 def try_direct_reply(
@@ -209,6 +310,17 @@ async def _generate_with_tools(
         if direct is not None:
             return direct
 
+        # LLM router fallback: one constrained call to pick a tool name when all
+        # deterministic layers deferred.  Only fired for data retrieval messages
+        # (_is_data_request); write operations go straight to the tool loop so
+        # their confirmation flow is preserved and no extra call is made.
+        if _is_data_request(last_user):
+            llm_router_result = await _try_llm_router_action(
+                last_user, store, provider
+            )
+            if llm_router_result is not None:
+                return llm_router_result
+
         client_id = detect_client_mention(last_user, store)
         if client_id:
             client_context = _client_context_for_prompt(client_id, store)
@@ -251,11 +363,11 @@ async def _generate_with_tools(
             if looks_like_malformed_tool_call(raw_content):
                 plain_messages = [{"role": "system", "content": system_prompt}] + list(messages)
                 plain_result = await provider.complete(plain_messages)
-                content = _sanitize_assistant_reply(plain_result.content)
+                content = _sanitize_assistant_reply(plain_result.content, last_user=last_user)
                 if content.strip() and not looks_like_malformed_tool_call(content):
                     return content
 
-            content = _sanitize_assistant_reply(raw_content)
+            content = _sanitize_assistant_reply(raw_content, last_user=last_user)
             if not content.strip() and last_user:
                 fallback = try_direct_client_action(last_user, store, messages)
                 if fallback is not None:

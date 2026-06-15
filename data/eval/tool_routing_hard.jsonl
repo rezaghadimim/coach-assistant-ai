@@ -1,0 +1,34 @@
+{"utterance": "Give me all visitors in table", "expected_tool": "list_clients"}
+{"utterance": "Show me everyone in the records", "expected_tool": "list_clients"}
+{"utterance": "Dump the database", "expected_tool": "list_clients"}
+{"utterance": "Pull up the full roster", "expected_tool": "list_clients"}
+{"utterance": "Who are all the people I track?", "expected_tool": "list_clients"}
+{"utterance": "Show me all individuals in the system", "expected_tool": "list_clients"}
+{"utterance": "List all members I coach", "expected_tool": "list_clients"}
+{"utterance": "Display everyone in my roster", "expected_tool": "list_clients"}
+{"utterance": "Who are my attendees?", "expected_tool": "list_clients"}
+{"utterance": "Show me all coachees", "expected_tool": "list_clients"}
+{"utterance": "Save Reza as a coachee", "expected_tool": "create_client"}
+{"utterance": "Enroll Dara as a new member", "expected_tool": "create_client"}
+{"utterance": "Onboard a new participant named Sara", "expected_tool": "create_client"}
+{"utterance": "Reza turned 31 last week", "expected_tool": "create_client"}
+{"utterance": "Log that Ali hit his fitness milestone this month", "expected_tool": "add_client_note"}
+{"utterance": "Jot down that Sara resolved to wake up earlier", "expected_tool": "add_client_note"}
+{"utterance": "Capture Mohammad's story: he emigrated at age 12", "expected_tool": "add_client_note"}
+{"utterance": "Correct note 6 with the updated information", "expected_tool": "update_client_note"}
+{"utterance": "Amend note 9 for Sara", "expected_tool": "update_client_note"}
+{"utterance": "Erase note 4 entirely", "expected_tool": "delete_client_note"}
+{"utterance": "Trash note 11", "expected_tool": "delete_client_note"}
+{"utterance": "Remove all data for Reza", "expected_tool": "delete_client"}
+{"utterance": "Wipe Ali's profile from the system", "expected_tool": "delete_client"}
+{"utterance": "What contact info do we have for Sara?", "expected_tool": "get_client"}
+{"utterance": "Look up Ali's phone", "expected_tool": "get_client"}
+{"utterance": "What do we have on Mohammad?", "expected_tool": "get_client_full"}
+{"utterance": "Show everything on file for Sara", "expected_tool": "get_client_full"}
+{"utterance": "What are Ali's aims?", "expected_tool": "list_client_notes"}
+{"utterance": "What milestones has Sara reached?", "expected_tool": "list_client_notes"}
+{"utterance": "What commitments has Ali made?", "expected_tool": "list_client_notes"}
+{"utterance": "What is Sara's history?", "expected_tool": "list_client_notes"}
+{"utterance": "Tell me Ali's backstory", "expected_tool": "list_client_notes"}
+{"utterance": "Show Ali's advancement updates", "expected_tool": "list_client_notes"}
+{"utterance": "Pull up all entries for Mohammad", "expected_tool": "list_client_notes"}

@@ -74,3 +74,57 @@
 {"utterance": "Show all my patients", "tool": "list_clients", "hint": "all"}
 {"utterance": "Who am I coaching?", "tool": "list_clients", "hint": "all"}
 {"utterance": "Which clients do I have?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Show me all clients", "tool": "list_clients", "hint": "all"}
+{"utterance": "Give me the list of all clients", "tool": "list_clients", "hint": "all"}
+{"utterance": "Display all my clients", "tool": "list_clients", "hint": "all"}
+{"utterance": "List everyone I am working with", "tool": "list_clients", "hint": "all"}
+{"utterance": "Who are all my coachees?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Show me all visitors", "tool": "list_clients", "hint": "all"}
+{"utterance": "List everyone in the table", "tool": "list_clients", "hint": "all"}
+{"utterance": "Dump the roster", "tool": "list_clients", "hint": "all"}
+{"utterance": "Who is in the database?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Give me all people in the records", "tool": "list_clients", "hint": "all"}
+{"utterance": "Fetch all contacts", "tool": "list_clients", "hint": "all"}
+{"utterance": "Pull up all my members", "tool": "list_clients", "hint": "all"}
+{"utterance": "Show all individuals I coach", "tool": "list_clients", "hint": "all"}
+{"utterance": "List all participants", "tool": "list_clients", "hint": "all"}
+{"utterance": "Who are all the people in my database?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Introduce me to Sara as a new coachee", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Save a new client called Dara", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Enroll Hassan as a client", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Onboard Sara as a patient", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Ali's date of birth is 1990", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "Change Ali's email to ali2@example.com", "tool": "create_client", "hint": "profile:email"}
+{"utterance": "Update Ali's email to be ali123@gmail.com", "tool": "create_client", "hint": "profile:email"}
+{"utterance": "Set Sara's email address to sara@company.com", "tool": "create_client", "hint": "profile:email"}
+{"utterance": "Update Sara's phone to 09121112233", "tool": "create_client", "hint": "profile:phone"}
+{"utterance": "Update Sara's phone to be 09121112233", "tool": "create_client", "hint": "profile:phone"}
+{"utterance": "Ali is a software developer", "tool": "create_client", "hint": "profile:occupation"}
+{"utterance": "Write a note for Ali: he struggles with procrastination", "tool": "add_client_note", "hint": "note_type:general"}
+{"utterance": "Jot down that Sara achieved her running goal this week", "tool": "add_client_note", "hint": "note_type:progress"}
+{"utterance": "Capture that Mohammad resolved to quit smoking", "tool": "add_client_note", "hint": "note_type:decision"}
+{"utterance": "Record Ali's background: he was raised by a single parent", "tool": "add_client_note", "hint": "note_type:story"}
+{"utterance": "Correct note 6: Sara now meditates daily", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Amend note 9 for Mohammad", "tool": "update_client_note", "hint": "note_id"}
+{"utterance": "Erase note 2", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "Trash note 8", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "Wipe note 11 from Ali's records", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "Erase client Sara entirely", "tool": "delete_client", "hint": "client"}
+{"utterance": "Remove all data for Hassan", "tool": "delete_client", "hint": "client"}
+{"utterance": "Fetch Ali's contact details", "tool": "get_client", "hint": "profile"}
+{"utterance": "What is Ali's phone?", "tool": "get_client", "hint": "profile:phone"}
+{"utterance": "Look up Sara's email address", "tool": "get_client", "hint": "profile:email"}
+{"utterance": "Retrieve Mohammad's profile", "tool": "get_client", "hint": "profile"}
+{"utterance": "Show me everything on file for Mohammad", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Get me the full record for Ali", "tool": "get_client_full", "hint": "full"}
+{"utterance": "What do we have on Sara?", "tool": "get_client_full", "hint": "full"}
+{"utterance": "All info about Hassan please", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Show Ali's milestones", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What are Ali's aims?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "List the commitments Ali has made", "tool": "list_client_notes", "hint": "note_type:decision"}
+{"utterance": "What choices has Sara committed to?", "tool": "list_client_notes", "hint": "note_type:decision"}
+{"utterance": "Show me Ali's advancement updates", "tool": "list_client_notes", "hint": "note_type:progress"}
+{"utterance": "What is Sara's history?", "tool": "list_client_notes", "hint": "note_type:story"}
+{"utterance": "Tell me Ali's backstory", "tool": "list_client_notes", "hint": "note_type:story"}
+{"utterance": "Pull up all memos for Ali", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "Show all entries for Mohammad", "tool": "list_client_notes", "hint": "note_type:general"}

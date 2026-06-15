@@ -762,7 +762,14 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
 
             async def fake_post(_url: str, *, json: dict) -> MagicMock:
                 captured_payloads.append(json)
-                if len(captured_payloads) == 1:
+                # Return tool_calls only for the first tool-loop call (with tools
+                # and no prior tool messages). All other calls (LLM router, and
+                # the continuation after the tool result) get a plain reply.
+                has_tools = bool(json.get("tools"))
+                has_tool_msg = any(
+                    m.get("role") == "tool" for m in json.get("messages", [])
+                )
+                if has_tools and not has_tool_msg:
                     body = {
                         "message": {
                             "role": "assistant",
@@ -803,11 +810,13 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             self.assertEqual(reply, "You have no clients yet.")
-            tool_messages = [
-                m
-                for m in captured_payloads[1]["messages"]
-                if m.get("role") == "tool"
-            ]
+            # Find the first payload that was sent with a tool result message.
+            tool_messages = []
+            for payload in captured_payloads:
+                msgs = [m for m in payload.get("messages", []) if m.get("role") == "tool"]
+                if msgs:
+                    tool_messages = msgs
+                    break
             self.assertEqual(len(tool_messages), 1)
             self.assertEqual(tool_messages[0]["tool_name"], "list_clients")
 

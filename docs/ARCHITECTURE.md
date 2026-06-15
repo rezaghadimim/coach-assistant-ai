@@ -21,6 +21,7 @@ The local Ollama provider is always the default.
 ## Implemented Components
 
 ### 1) Chat API (`app/api/chat.py`)
+
 - Main endpoint: `POST /api/chat`
 - Loads active session history from SQLite
 - Injects optional RAG context, client profile, client notes, and session summary into system prompt
@@ -28,36 +29,42 @@ The local Ollama provider is always the default.
 - LLM tool calling for client management (create client, add notes, look up profiles)
 
 ### 2) RAG Ingestion + Retrieval (`app/rag/`)
+
 - `ingest.py`: document discovery + chunking (`.txt`, `.md`, `.pdf`)
 - `retriever.py`: two-stage retrieval — bi-encoder or TF cosine (stage 1) followed by optional local cross-encoder reranking (stage 2); per-source deduplication before context assembly
 - `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); graceful fallback when fastembed is unavailable
 - `POST /api/ingest`: reindex local document directory
 
 ### 3) Memory System (`app/memory/`)
+
 - `store.py`: SQLite schema + CRUD for users/sessions/messages/client_notes
 - `session.py`: active session lifecycle and rollover
 - `summarizer.py`: structured coaching session summary generation
 - `app/api/users.py`: user, session, and client notes endpoints
 
 ### 4) Client Notes System
+
 - Per-client documentation: stories, decisions, goals, progress notes
 - CRUD API: create, list (with type filter), update, delete
 - Auto-injected into system prompt for conversation continuity
 - Decisions can be updated when revised
 
 ### 5) LLM Tool Calling (`app/core/tools.py`, `app/core/llm.py`)
+
 - Provider-agnostic agentic loop (up to 5 iterations)
 - Tools: `create_client`, `add_client_note`, `get_client`, `get_client_full`, `list_client_notes`, `list_clients`, `update_client_note`, `delete_client_note`, `delete_client`
 - Tool results formatted per provider (Ollama uses `tool_name`; OpenRouter uses `tool_call_id`)
 - Profile updates merge with existing client data (partial updates do not wipe fields)
 
 ### 6) LLM Provider Abstraction (`app/core/llm_providers/`)
+
 - `types.py`: `LLMProvider` protocol, `CompletionResult`, `ToolCall` dataclasses
 - `ollama.py`: Ollama `/api/chat` client (always active)
 - `openrouter.py`: OpenRouter `/chat/completions` client (optional, opt-in via `OPENROUTER_API_KEY`)
 - `app/core/model_registry.py`: virtual model IDs, provider resolution, and cached availability probe
 
 ### 7) Open WebUI Integration (`app/api/openai_compat.py`)
+
 - `GET /v1/models`: dynamic model list — local always, cloud when probe passes
 - `POST /v1/chat/completions`: routes by `model` field to the appropriate provider
 - Streaming resolves tool calls first, then streams the final reply in chunks
@@ -67,28 +74,35 @@ The local Ollama provider is always the default.
 - Coach-branded UI via WEBUI_NAME environment variable
 
 ### 8) Coaching Scope Guardrails (`app/core/scope.py`)
+
 - Deterministic off-topic detection before LLM calls
 - Open WebUI auto-generated task prompts (follow-ups, title, tags) bypass the guard
 - Fixed coaching-focused redirect for clearly non-coaching requests
 
 ### 9) Client Intent Detection (`app/core/client_intents.py`)
+
 - Regex fast path for common client-management commands (lookup, create, notes)
 - Write confirmation previews via `app/core/confirmations.py`
 - Falls back to LLM tool calling when no intent matches
 
 ### 10) Fine-tuning Export (`app/memory/training_export.py`)
-- `scripts/export_training_data.py`: export closed sessions from SQLite to JSONL
-- Used as Phase 5 prep — see [`FINETUNE.md`](FINETUNE.md)
 
-### 11) Tool Router (`app/core/tool_router.py`, `app/core/embeddings.py`)
-- Classifies a coach message into the best-matching tool *before* the LLM using example-based similarity
-- Two backends: **token** (TF cosine, offline/CI-safe) and **embedding** (Ollama dense vectors, multilingual)
-- Backend selection via `TOOL_ROUTER_BACKEND`: `"token"` | `"embedding"` | `"auto"` (default)
-- Corpus: `docs/tool-knowledge/examples/routing.jsonl` — labeled utterances per tool
-- API: `POST /api/tools/classify`, `POST /api/tools/reindex`
-- Fixes misrouting of profile updates (e.g. age) to `add_client_note` instead of `create_client`
-- Embed model: `karuniaperjuangan/multilingual-e5-small` via Ollama; supports Farsi/Persian input
-- See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)
+- `scripts/export_training_data.py`: export closed sessions from SQLite to JSONL
+- Used as Phase 5 prep — see `[FINETUNE.md](FINETUNE.md)`
+
+### 11) Tool Router (`app/core/tool_router.py`, `app/core/embeddings.py`, `app/core/lexicon.py`, `app/core/llm_router.py`)
+
+- Classifies a coach message into the best-matching tool *before* the LLM using a layered approach
+- **Synonym normalization** (`lexicon.py`): `normalize_for_routing()` expands out-of-vocabulary terms (visitor→client, table→list clients, dump→show/list) before any backend sees the query — additive, never destructive, router-local only
+- **Three backends** (tried in order, fall-through on low confidence or error):
+  - **rerank** — stage-1 embedding top-K recall + stage-2 fastembed cross-encoder precision (best for arbitrary phrasing)
+  - **embedding** — Ollama dense cosine (multilingual, paraphrase-sensitive)
+  - **token** — TF cosine (offline/CI-safe, always available)
+- Backend selection via `TOOL_ROUTER_BACKEND`: `"token"` | `"embedding"` | `"auto"` (default; probes Ollama and fastembed at startup)
+- **LLM router fallback** (`llm_router.py`): when all fast-path layers defer on a data-retrieval message, one compact LLM call picks a tool name (`{"tool": "..."}`) before falling into the full tool loop
+- Corpus: `docs/tool-knowledge/examples/routing.jsonl` (130 examples); eval sets in `data/eval/`
+- API: `POST /api/tools/classify` (exposes `rerank_score`, `backend`), `POST /api/tools/reindex`
+- See `[TOOL_ROUTING.md](TOOL_ROUTING.md)` and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)
 
 ## Data Flow
 
@@ -96,14 +110,21 @@ The local Ollama provider is always the default.
 2. Backend gets/creates active session for `user_id`
 3. Backend retrieves top matching chunks from local RAG index (stage-1 bi-encoder/token → stage-2 cross-encoder rerank → per-source dedup)
 4. Backend composes system prompt with:
-   - base coaching prompt
-   - RAG context (if available)
-   - user profile
-   - client notes/stories/decisions
-   - previous session summary
+  - base coaching prompt
+  - RAG context (if available)
+  - user profile
+  - client notes/stories/decisions
+  - previous session summary
 5. Backend resolves provider (Ollama or OpenRouter) from the virtual model ID
-6. **Tool Router** classifies the message; if confident, executes the tool directly (skips LLM for this step)
-7. Provider executes the tool-calling loop for remaining cases and returns a final reply; result is stored in SQLite
+6. **Deterministic fast path** (in order, first match wins and returns):
+  a. Pending write confirmation → confirm/cancel
+   b. Regex extractors → profile update, create client, known read patterns
+   c. Tool Router: synonym normalize → embedding top-K → cross-encoder rerank → embedding cosine → token cosine → param extract → execute_tool
+   d. Intent KB (read-only patterns)
+   e. LLM router fallback (one constrained call, data requests only) → param extract → execute_tool
+7. Full LLM tool-calling loop (hardened system prompt, max 5 iterations) for remaining cases
+8. Dead-end guard: if the LLM returns only follow-up questions for a data request, rescues via direct-action path or returns a targeted clarification
+9. Result is stored in SQLite
 
 ## Current File Map
 
@@ -113,17 +134,19 @@ app/
 │   ├── chat.py
 │   ├── ingest.py
 │   ├── openai_compat.py
-│   ├── tools.py           ← tool routing API
+│   ├── tools.py           ← tool routing API (classify + reindex)
 │   └── users.py
 ├── core/
 │   ├── config.py
-│   ├── embeddings.py      ← Ollama embedding client
-│   ├── rerank.py          ← local fastembed cross-encoder (RAG stage 2)
-│   ├── llm.py
+│   ├── embeddings.py      ← Ollama embedding client (E5 prefix, retry)
+│   ├── lexicon.py         ← domain synonym normalization (router-local)
+│   ├── llm_router.py      ← constrained LLM tool classifier (fallback)
+│   ├── rerank.py          ← local fastembed cross-encoder (RAG + tool router)
+│   ├── llm.py             ← tool loop, LLM router wiring, dead-end guard
 │   ├── model_registry.py
 │   ├── prompts.py
 │   ├── scope.py
-│   ├── tool_router.py     ← tool classification (token + embedding)
+│   ├── tool_router.py     ← tool classification (token + embedding + rerank)
 │   ├── tools.py
 │   ├── client_intents.py
 │   ├── confirmations.py
@@ -142,10 +165,10 @@ app/
 │   ├── summarizer.py
 │   └── training_export.py
 └── models/
-    └── schemas.py
+    └── schemas.py         ← ToolMatchItem/ToolClassifyResponse include rerank_score
 
 docs/
-├── tool-knowledge/        ← per-tool docs + routing corpus
+├── tool-knowledge/        ← per-tool docs + routing corpus (130 examples)
 │   ├── create_client.md
 │   ├── add_client_note.md
 │   ├── ... (one per tool)
@@ -154,10 +177,20 @@ docs/
 
 data/
 └── eval/
-    └── tool_routing.jsonl ← labeled eval set
+    ├── tool_routing.jsonl       ← in-distribution eval set (59 rows)
+    └── tool_routing_hard.jsonl  ← held-out out-of-vocab eval set (34 rows)
 
 scripts/
 ├── ingest.py
 ├── export_training_data.py
-└── eval_tool_routing.py   ← accuracy/F1 evaluation script
+├── eval_tool_routing.py         ← accuracy/F1/latency eval (--backend rerank, --hard)
+└── benchmark_tool_routing.py   ← cross-backend comparison (token/embedding/rerank)
+
+tests/
+├── test_lexicon.py              ← 24 normalization + token backend regression tests
+├── test_tool_router_rerank.py   ← 12 rerank unit + integration tests (mocked)
+├── test_llm_router.py           ← 18 LLM router parser + classify tests (mocked)
+├── test_tool_router.py          ← token backend + 6 out-of-vocab cases via lexicon
+└── test_tools_api.py            ← API schema fields + data-request guard tests
 ```
+

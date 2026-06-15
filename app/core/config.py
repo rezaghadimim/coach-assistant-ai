@@ -80,6 +80,21 @@ class Settings(BaseSettings):
     tool_router_margin: float = 0.08
     # Prepend "query: " / "passage: " prefixes required by multilingual-e5 models.
     tool_router_use_e5_prefix: bool = True
+    # Two-stage rerank: stage-1 embedding recall -> stage-2 cross-encoder precision.
+    # Runs only when both the embed model and fastembed cross-encoder are available.
+    tool_router_rerank_enabled: bool = True
+    # Stage-1 candidate pool size (how many embed-similar examples to pass to reranker).
+    tool_router_rerank_top_k: int = 10
+    # Low cosine floor for stage-1 to avoid scoring completely irrelevant candidates.
+    tool_router_embed_floor: float = 0.30
+    # Stage-2 sigmoid acceptance threshold (cross-encoder distribution differs from e5).
+    tool_router_rerank_threshold: float = 0.55
+    # Minimum margin between top and runner-up tool in cross-encoder scores.
+    tool_router_rerank_margin: float = 0.10
+    # Cross-encoder model reused from RAG; shares rag_rerank_cache_dir.
+    tool_router_rerank_model: str = "BAAI/bge-reranker-base"
+    # LLM router fallback: one constrained LLM call when all fast-path layers defer.
+    tool_router_llm_fallback_enabled: bool = True
 
     # Memory
     memory_db_path: str = "data/coach_assistant.db"

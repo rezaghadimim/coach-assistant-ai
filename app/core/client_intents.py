@@ -68,7 +68,11 @@ _AGE_SET = re.compile(
     re.IGNORECASE,
 )
 _PHONE_SET = re.compile(
-    r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+phone(?:\s+number)?\s+(?:to|as)\s+([\d\s\-\+\(\)\.]+)",
+    r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+phone(?:\s+number)?\s+(?:to\s+be|to|as)\s+([\d\s\-\+\(\)\.]+)",
+    re.IGNORECASE,
+)
+_EMAIL_SET = re.compile(
+    r"(?:update|set|change|save)\s+(.+?)(?:'s|'s)\s+email(?:\s+address)?\s+(?:to\s+be|to|as)\s+(\S+@\S+)",
     re.IGNORECASE,
 )
 _AGE_FOR = re.compile(
@@ -87,6 +91,14 @@ _PHONE_FOR_REVERSE = re.compile(
     r"(?:add|set|update|change)\s+phone(?:\s+number)?\s+(?:to\s+)?([\d\s\-\+\(\)\.]+)\s+for\s+(.+?)\s*$",
     re.IGNORECASE,
 )
+_EMAIL_FOR = re.compile(
+    r"(?:add|set|update|change)\s+email(?:\s+address)?\s+for\s+(.+?)\s+(?:to\s+be\s+|to\s+)?(\S+@\S+)",
+    re.IGNORECASE,
+)
+_EMAIL_FOR_REVERSE = re.compile(
+    r"(?:add|set|update|change)\s+email(?:\s+address)?\s+(?:to\s+be\s+|to\s+)?(\S+@\S+)\s+for\s+(.+?)\s*$",
+    re.IGNORECASE,
+)
 _EMAIL_POSSESSIVE = re.compile(
     r"^(.+?)(?:'s|'s)\s+email\s+is\s+(\S+@\S+)\.?\s*$",
     re.IGNORECASE,
@@ -96,6 +108,21 @@ _PHONE_POSSESSIVE = re.compile(
     re.IGNORECASE,
 )
 _AGE_ONLY = re.compile(r"^(\d{1,3})\s+years?\s+old\.?\s*$", re.IGNORECASE)
+
+# A message that clearly mutates a profile field but that the deterministic
+# extractors above could not parse. Used as a last-resort guard so such
+# messages defer to the LLM tool loop instead of leaking into the read-only
+# query path (which would wrongly return a profile card). Intentionally broad
+# on the verb side and anchored on a profile-field keyword to avoid catching
+# pure coaching talk.
+_PROFILE_WRITE_INTENT = re.compile(
+    r"\b(?:update|set|change|modify|edit|make|assign|correct|fix|"
+    r"save|store|put|record|register)\b"
+    r"[^.!?]{0,40}?\b(?:e-?mail|phone|mobile|number|age|name|"
+    r"occupation|job|profession|background|address|birthday|dob|"
+    r"date\s+of\s+birth)\b",
+    re.IGNORECASE,
+)
 
 _PREFIXES_TO_STRIP = re.compile(r"^(?:the|patient|client)\s+", re.IGNORECASE)
 _PRONOUN_PLACEHOLDERS = frozenset(
@@ -160,6 +187,17 @@ def detect_list_clients(message: str) -> bool:
     return bool(_LIST_CLIENTS.search(message.strip()))
 
 
+def looks_like_unhandled_profile_write(message: str) -> bool:
+    """True when the message clearly edits a profile field.
+
+    Used to keep mutation requests away from the read-only query path when the
+    deterministic extractors could not parse them: such messages should defer
+    to the LLM (which extracts params from arbitrary phrasing) rather than
+    return a profile card.
+    """
+    return bool(_PROFILE_WRITE_INTENT.search(message.strip()))
+
+
 def _strip_profile_context(text: str) -> str:
     return _PROFILE_CONTEXT_SUFFIX.sub("", text.strip()).strip(" .")
 
@@ -198,6 +236,7 @@ def detect_profile_update(
         (_AGE_POSSESSIVE, "age", int),
         (_AGE_SET, "age", int),
         (_PHONE_SET, "phone", lambda value: value.strip()),
+        (_EMAIL_SET, "email", lambda value: value.rstrip(".").strip()),
         (_EMAIL_POSSESSIVE, "email", str),
         (_PHONE_POSSESSIVE, "phone", lambda value: value.strip()),
     ):
@@ -219,6 +258,8 @@ def detect_profile_update(
         (_AGE_FOR_REVERSE, 2, 1, "age", int),
         (_PHONE_FOR, 1, 2, "phone", lambda value: value.strip()),
         (_PHONE_FOR_REVERSE, 2, 1, "phone", lambda value: value.strip()),
+        (_EMAIL_FOR, 1, 2, "email", lambda value: value.rstrip(".").strip()),
+        (_EMAIL_FOR_REVERSE, 2, 1, "email", lambda value: value.rstrip(".").strip()),
     ):
         match = pattern.search(text)
         if not match:
@@ -630,5 +671,14 @@ def try_direct_client_action(
     router_result = _tool_router_action(message, store)
     if router_result is not None:
         return router_result
+
+    # A clear profile-edit request that no extractor above could parse must go
+    # to the LLM tool loop (which handles arbitrary phrasing), not the
+    # read-only query path — otherwise it would wrongly return a profile card.
+    if looks_like_unhandled_profile_write(message):
+        logger.debug(
+            "client_intents: unhandled profile-write detected; deferring to LLM"
+        )
+        return None
 
     return try_direct_client_query(message, store)

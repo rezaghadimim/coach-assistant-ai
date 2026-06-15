@@ -1,17 +1,26 @@
 # ADR-0007: Ollama Embeddings for Tool Routing
 
 **Date:** 2026-06-11
-**Status:** Accepted
+**Status:** Accepted (extended by ADR-0009 — see below)
+
+> **Update (2026-06-15):** The original two-backend design (token + embedding) proved
+> insufficient for out-of-vocabulary phrasings such as "give me all visitors in table".
+> ADR-0009 extends this decision with: a domain synonym lexicon (`lexicon.py`), a
+> three-backend chain that adds a two-stage cross-encoder rerank path
+> (embedding top-K → fastembed `BAAI/bge-reranker-base`), and an LLM router
+> fallback (`llm_router.py`) for data-retrieval messages that all fast-path layers
+> defer.  The `classify_tool()` interface and corpus format (`routing.jsonl`) are
+> unchanged.  See [ADR-0009](0009-tool-routing-synonym-rerank-llm-fallback.md).
 
 ## Context
 
 The coach assistant has a set of client-management tools (`create_client`, `add_client_note`, `update_client_note`, etc.) that the LLM must choose between for each message. Misrouting is a real production problem: messages like "Ali's age is 23" are frequently sent to `add_client_note` (which inserts a duplicate note row) instead of `create_client` (which merges the age into the profile).
 
-Existing defenses — prompt instructions, `detect_profile_update()` regex, `profile_update_from_add_note()` redirect — work for exact phrasing but miss paraphrases, multilingual input (Farsi), and novel constructions.
+Existing defenses — prompt instructions, `detect_profile_update()` regex, `profile_update_from_add_note()` redirect — work for exact phrasing but miss paraphrases, multilingual input, and novel constructions.
 
 The system needs a semantic pre-classifier that:
 - Fires *before* the LLM to prevent misrouting at the source
-- Handles multilingual input (coaches may write in Farsi or mixed Farsi/English)
+- Handles multilingual input and varied phrasing
 - Requires no new Python ML dependencies
 - Is testable offline (CI must not require a running Ollama)
 - Follows the same pattern as the existing in-memory RAG retriever (ADR-0003)
@@ -58,6 +67,6 @@ The router returns a `ToolMatch(tool, score, hint)` and is inserted into `try_di
 
 ## Future Direction
 
-- Add Farsi examples to `routing.jsonl` as coaches report misroutes.
+- Expand `routing.jsonl` with production misroutes as they are reported.
 - Replace token backend with embedding backend as the primary once the eval baseline is established.
 - If the corpus grows beyond ~1,000 examples, consider switching from brute-force cosine to an ANN index (e.g. `hnswlib`) inside the same module — the `classify_tool()` interface is stable.

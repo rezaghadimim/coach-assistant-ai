@@ -31,12 +31,14 @@ async def classify_tool_endpoint(request: ToolClassifyRequest) -> ToolClassifyRe
         score=match.score if match else None,
         hint=match.hint if match else None,
         backend=match.backend if match else None,
+        rerank_score=match.rerank_score if match else None,
         top_n=[
             ToolMatchItem(
                 tool=m.tool,
                 score=m.score,
                 hint=m.hint,
                 utterance=m.utterance,
+                rerank_score=m.rerank_score if hasattr(m, "rerank_score") else None,
             )
             for m in top
         ],

@@ -228,3 +228,58 @@ def build_router() -> None:
     from app.core.tool_router import _index_built, build_index
     if not _index_built:
         build_index()
+
+
+class OutOfVocabWithLexiconTests(unittest.TestCase):
+    """Token-backend tests for out-of-vocab phrasings helped by the lexicon."""
+
+    def setUp(self) -> None:
+        from app.core.tool_router import reset_index
+        reset_index()
+        build_router()
+
+    def tearDown(self) -> None:
+        from app.core.tool_router import reset_index
+        reset_index()
+
+    def test_visitors_in_table_routes_list_clients(self) -> None:
+        from app.core.tool_router import classify_tool
+        match = classify_tool("Give me all visitors in table", threshold=0.15, margin=0.05)
+        self.assertIsNotNone(match, "Lexicon expansion should match list_clients")
+        assert match is not None
+        self.assertEqual(match.tool, "list_clients")
+
+    def test_roster_routes_list_clients(self) -> None:
+        from app.core.tool_router import classify_tool
+        match = classify_tool("Dump the roster", threshold=0.15, margin=0.05)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.tool, "list_clients")
+
+    def test_database_routes_list_clients(self) -> None:
+        from app.core.tool_router import classify_tool
+        match = classify_tool("Who is in the database?", threshold=0.15, margin=0.05)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.tool, "list_clients")
+
+    def test_contacts_routes_list_clients(self) -> None:
+        from app.core.tool_router import classify_tool
+        match = classify_tool("Fetch all contacts", threshold=0.15, margin=0.05)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.tool, "list_clients")
+
+    def test_aims_routes_list_client_notes(self) -> None:
+        from app.core.tool_router import classify_tool
+        match = classify_tool("What are Ali's aims?", threshold=0.15, margin=0.05)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.tool, "list_client_notes")
+
+    def test_memos_routes_list_client_notes(self) -> None:
+        from app.core.tool_router import classify_tool
+        match = classify_tool("Pull up all memos for Ali", threshold=0.15, margin=0.05)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(match.tool, "list_client_notes")

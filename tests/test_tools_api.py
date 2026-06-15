@@ -124,3 +124,70 @@ class ToolsClassifyEndpointTests(unittest.TestCase):
         self.client.post("/api/tools/reindex")
         r2 = self.client.post("/api/tools/classify", json={"message": "List my clients"})
         self.assertEqual(r1.json()["tool"], r2.json()["tool"])
+
+    def test_classify_response_has_rerank_score_field(self) -> None:
+        """rerank_score must be present in the response (may be null for token backend)."""
+        response = self.client.post(
+            "/api/tools/classify",
+            json={"message": "Who are my clients?"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("rerank_score", body)
+
+    def test_classify_response_has_backend_field(self) -> None:
+        response = self.client.post(
+            "/api/tools/classify",
+            json={"message": "Who are my clients?"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("backend", body)
+
+    def test_top_n_items_have_rerank_score_field(self) -> None:
+        response = self.client.post(
+            "/api/tools/classify",
+            json={"message": "Who are my clients?"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        for item in body.get("top_n", []):
+            self.assertIn("rerank_score", item)
+
+
+class DataRequestGuardTests(unittest.TestCase):
+    """Assert that data retrieval messages never return the 'angles to explore' dead-end."""
+
+    def test_data_request_pattern_detected(self) -> None:
+        from app.core.llm import _is_data_request
+
+        self.assertTrue(_is_data_request("Give me all visitors in table"))
+        self.assertTrue(_is_data_request("Show all clients"))
+        self.assertTrue(_is_data_request("List my patients"))
+        self.assertTrue(_is_data_request("Who is in the database?"))
+        self.assertTrue(_is_data_request("Fetch all contacts"))
+        self.assertTrue(_is_data_request("Show me all notes for Ali"))
+        self.assertTrue(_is_data_request("What are Ali's goals?"))
+
+    def test_coaching_question_not_flagged_as_data_request(self) -> None:
+        from app.core.llm import _is_data_request
+
+        self.assertFalse(_is_data_request("How can I support Ali?"))
+        self.assertFalse(_is_data_request("What should I ask my client?"))
+        self.assertFalse(_is_data_request("Help me with the GROW model"))
+
+    def test_follow_ups_suppressed_for_data_request(self) -> None:
+        from app.core.llm import _format_follow_ups_as_text
+
+        data = {"follow_ups": ["Can we add another client?", "What's next with our clients' profiles?"]}
+        result = _format_follow_ups_as_text(data, last_user="Give me all visitors in table")
+        # Must return empty string so rescue path is triggered, not the dead-end.
+        self.assertEqual(result, "")
+
+    def test_follow_ups_still_shown_for_coaching_questions(self) -> None:
+        from app.core.llm import _format_follow_ups_as_text
+
+        data = {"follow_ups": ["What is Ali feeling right now?", "What does Ali want to achieve?"]}
+        result = _format_follow_ups_as_text(data, last_user="How can I support Ali emotionally?")
+        self.assertIn("angles to explore", result)
+        self.assertIn("Ali", result)

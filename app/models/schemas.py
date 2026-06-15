@@ -192,6 +192,7 @@ class ToolMatchItem(BaseModel):
     score: float
     hint: Optional[str] = None
     utterance: Optional[str] = None
+    rerank_score: Optional[float] = None
 
 
 class ToolClassifyResponse(BaseModel):
@@ -202,6 +203,7 @@ class ToolClassifyResponse(BaseModel):
     score: Optional[float] = None
     hint: Optional[str] = None
     backend: Optional[str] = None
+    rerank_score: Optional[float] = None
     top_n: list[ToolMatchItem] = Field(default_factory=list)
     deferred: bool = False
 

@@ -352,6 +352,76 @@ class ToolRouterWiringTests(unittest.TestCase):
         assert result is not None
         self.assertIn("30", result)
 
+    def test_email_set_routes_to_create_client_preview(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Update Ali's email to be ali123@gmail.co", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("Update client", result)
+        self.assertIn("ali123@gmail.co", result)
+        self.assertIn("pending confirmation", result)
+        user = store.get_user("ali")
+        self.assertIsNone(user["profile"].get("email"))
+
+    def test_email_set_change_form(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Change Ali's email to ali2@example.com", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("ali2@example.com", result)
+
+    def test_email_set_address_variant(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Set Ali's email address to ali@company.io", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("ali@company.io", result)
+
+    def test_email_for_client(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Set email for Ali to ali@work.com", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("ali@work.com", result)
+
+    def test_email_set_does_not_return_profile_lookup(self) -> None:
+        """Regression: 'update email to be' must not fall through to get_client."""
+        self._register_ali()
+        result = try_direct_client_action(
+            "Update Ali's email to be ali123@gmail.co", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        # Must be a write preview, NOT a read-only profile card
+        self.assertNotIn("Here are the details on file", result)
+        self.assertNotIn("Profile\nClient ID", result)
+
+    def test_unhandled_profile_write_defers_to_llm(self) -> None:
+        """A profile-edit phrasing no extractor parses must defer to the LLM.
+
+        It must NOT leak into the read-only path and return a profile card.
+        """
+        self._register_ali()
+        # "make ... email ..." is not covered by any extractor regex.
+        result = try_direct_client_action(
+            "Make Ali's email ali@x.com", store
+        )
+        self.assertIsNone(result)
+
+    def test_profile_read_still_works_after_write_guard(self) -> None:
+        """The write guard must not block legitimate read lookups."""
+        self._register_ali()
+        result = try_direct_client_action("Show me Ali's details", store)
+        self.assertIsNotNone(result)
+
     def test_phone_set_routes_to_create_client_preview(self) -> None:
         self._register_ali()
         result = try_direct_client_action(
@@ -364,6 +434,15 @@ class ToolRouterWiringTests(unittest.TestCase):
         self.assertIn("pending confirmation", result)
         user = store.get_user("ali")
         self.assertIsNone(user["profile"].get("phone"))
+
+    def test_phone_set_to_be_form(self) -> None:
+        self._register_ali()
+        result = try_direct_client_action(
+            "Update Ali's phone to be 09123456789", store
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("09123456789", result)
 
     def test_add_phone_for_client_routes_to_create_client_preview(self) -> None:
         self._register_ali()

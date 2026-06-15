@@ -57,7 +57,7 @@ The chosen default model is `BAAI/bge-reranker-base` (via fastembed):
   `<project_root>/data/rerank_cache`; absolute `/app/data/rerank_cache` in Docker).
 - Corrupt/incomplete HuggingFace blobs are detected and purged before load so a
   failed first download does not leave the cache in a broken state permanently.
-- Multilingual support covers the Farsi/English coaching use case.
+- Multilingual support covers varied coaching phrasing.
 
 A **per-source deduplication** step is applied after reranking: only the
 highest-scoring chunk per `source_path` is kept before the `top_k` cut.  This
@@ -71,7 +71,7 @@ context window.
   committing to 3 with a coarser scorer.
 - Precision improves because the cross-encoder can distinguish near-duplicate
   candidates that the bi-encoder scores identically.
-- Multilingual queries (Farsi/English) are handled correctly by `bge-reranker-base`.
+- Multilingual queries are handled correctly by `bge-reranker-base`.
 - Fully opt-in: `RAG_RERANK_ENABLED=false` (or fastembed absent) silently
   reverts to the original single-stage behaviour — no request failures, no
   configuration changes required for existing deployments.
@@ -98,7 +98,7 @@ context window.
 |--------|------------------|
 | Ollama LLM pointwise rerank (prompt-based) | Higher latency and token cost; inconsistent score calibration |
 | Hybrid RRF (embedding + token merge) before rerank | Adds recall but also complexity; deferred to v2 — start with single-backend widening |
-| `cross-encoder/ms-marco-MiniLM-L-6-v2` | English-only; misses Farsi coaching input |
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` | English-only; weaker on non-English coaching input |
 | `jina-reranker-v2-base-multilingual` | Strong quality but heavier; `bge-reranker-base` is already available in fastembed and sufficient for v1 |
 | `bge-reranker-v2-m3` via sentence-transformers | Requires PyTorch (+1–2 GB); not yet in fastembed's supported models list |
 | Reranker as a separate Docker service | Unnecessary RPC overhead at single-app scale; keep in-process for simplicity |

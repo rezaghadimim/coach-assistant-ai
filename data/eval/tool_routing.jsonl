@@ -48,3 +48,8 @@
 {"utterance": "List my clients", "expected_tool": "list_clients"}
 {"utterance": "Show all my patients", "expected_tool": "list_clients"}
 {"utterance": "Who am I coaching?", "expected_tool": "list_clients"}
+{"utterance": "Give me the list of all clients", "expected_tool": "list_clients"}
+{"utterance": "Show me all visitors", "expected_tool": "list_clients"}
+{"utterance": "List everyone in the table", "expected_tool": "list_clients"}
+{"utterance": "Who is in the database?", "expected_tool": "list_clients"}
+{"utterance": "Fetch all contacts", "expected_tool": "list_clients"}

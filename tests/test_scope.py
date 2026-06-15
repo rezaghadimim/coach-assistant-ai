@@ -178,6 +178,8 @@ class GenerateWithToolsScopeTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             self.assertEqual(reply, plain_reply)
+            # main tool call (malformed) + plain fallback = 2 (LLM router skipped
+            # because "Tell me about GROW" is not a data retrieval request)
             self.assertEqual(call_count, 2)
 
 

@@ -4,6 +4,8 @@
 
 The tool router classifies a coach message into the best-matching tool *before* it reaches the LLM, using example-based similarity. This fixes the most common misrouting error: messages like **"Ali's age is 23"** being sent to `add_client_note` (inserts a new row every time) instead of `create_client` (merges profile fields).
 
+It also handles **out-of-vocabulary synonyms** like "give me all visitors in table" → `list_clients` through a combination of domain synonym normalization, embedding similarity, and cross-encoder reranking.
+
 ## Routing pipeline
 
 ```
@@ -13,15 +15,25 @@ User message
   │
   ├─ Regex: profile fields, create/list patterns ─────────── execute_tool directly
   │
-  ├─ Tool Router (embedding + token) ─────────────────────── classify_tool()
+  ├─ Synonym normalization (lexicon.py) ───────────────────── expand query in-place
+  │
+  ├─ Tool Router ──────────────────────────────────────────── classify_tool()
+  │     ├─ Stage 1: Embedding top-K recall (floor=0.30)
+  │     ├─ Stage 2: Cross-encoder rerank (threshold=0.55)  ← best precision
+  │     ├─ Embedding-only cosine (threshold=0.75)
+  │     ├─ Token-frequency cosine (threshold=0.75)
   │     └─ param extractor ──────────────────────────────── execute_tool or defer
   │
   ├─ Regex + Intent KB (read-only queries) ───────────────── execute_tool or defer
   │
-  └─ LLM tool calling ─────────────────────────────────────── last resort
+  ├─ LLM router fallback (constrained tool pick) ─────────── one compact LLM call
+  │     └─ param extractor ──────────────────────────────── execute_tool or defer
+  │
+  └─ LLM tool calling loop (hardened prompt) ─────────────── last resort
+        └─ data-request guard (no follow-ups-only dead-end)
 ```
 
-**Key principle:** the router picks the *tool*; existing regex helpers extract *parameters*. If a tool is identified confidently but parameters cannot be parsed, the message falls through to the LLM — behavior is unchanged.
+**Key principle:** the router picks the *tool*; existing regex helpers extract *parameters*. If a tool is identified confidently but parameters cannot be parsed, the message falls through to the LLM — behavior is unchanged. Each layer degrades gracefully; no layer can hard-fail a request.
 
 ## Corpus
 
@@ -42,7 +54,7 @@ docs/tool-knowledge/
     routing.jsonl           ← labeled utterances (source of truth)
 ```
 
-Each `.md` explains **Use when** / **Do NOT use when** for that tool, with Farsi examples included for multilingual coaches.
+Each `.md` explains **Use when** / **Do NOT use when** for that tool.
 
 ### routing.jsonl format
 
@@ -67,7 +79,27 @@ To add examples, edit `routing.jsonl` and call `POST /api/tools/reindex` (no res
 |---------|-------------|-------------|
 | `token` | Token-frequency cosine similarity (same math as RAG retriever) | Always available; CI default; no Ollama needed |
 | `embedding` | Dense cosine over Ollama-generated vectors | More accurate for paraphrases and multilingual text; requires embed model |
-| `auto` | Probes Ollama at startup; uses `embedding` if available, else `token` | **Recommended default** |
+| `auto` | Probes Ollama at startup; uses `embedding` if available, else `token`; adds rerank stage when fastembed is installed | **Recommended default** |
+
+### Two-stage rerank (best coverage)
+
+When `TOOL_ROUTER_RERANK_ENABLED=true` (default) and both Ollama embed model and `fastembed` are available, `auto` backend adds a rerank stage on top of embedding:
+
+1. **Stage 1 — Embedding top-K recall**: embed the query, score all examples, take the top `TOOL_ROUTER_RERANK_TOP_K` (default 10) with cosine ≥ `TOOL_ROUTER_EMBED_FLOOR` (0.30).
+2. **Stage 2 — Cross-encoder rerank**: run `BAAI/bge-reranker-base` (local ONNX via fastembed, no Ollama) over the stage-1 candidates. Accept if sigmoid score ≥ `TOOL_ROUTER_RERANK_THRESHOLD` (0.55) with `TOOL_ROUTER_RERANK_MARGIN` (0.10) over the runner-up tool.
+
+The cross-encoder reads query + candidate utterance **jointly**, giving it far better synonym/paraphrase sensitivity than cosine alone. This is why "visitors in table" → `list_clients` works even when the embedding cosine is weak.
+
+### Domain synonym normalization (lexicon)
+
+`app/core/lexicon.py` expands out-of-vocabulary terms **before** matching:
+
+- `visitor/person/people/contact/attendee/coachee/participant/patient` → appends `client clients`
+- `table/database/db/records/roster/everyone/everybody` → appends `clients list list clients`
+- Retrieval verbs: `dump/fetch/pull/grab/retrieve/display` → appends `show get list`
+- And more (see `lexicon.py`)
+
+Expansion is **additive** (original text preserved), router-local only (does not touch RAG).
 
 ## Setup
 
@@ -84,7 +116,15 @@ curl http://localhost:11434/api/embeddings \
   -d '{"model":"karuniaperjuangan/multilingual-e5-small","prompt":"query: Ali age is 23"}'
 ```
 
-### 2. Configure (optional overrides in `.env`)
+### 2. Install fastembed for cross-encoder reranking (optional but recommended)
+
+```bash
+pip install fastembed
+```
+
+The cross-encoder model (`BAAI/bge-reranker-base`) downloads automatically on first use and is cached under `data/rerank_cache/` (same as RAG reranker).
+
+### 3. Configure (optional overrides in `.env`)
 
 ```env
 TOOL_ROUTER_ENABLED=true
@@ -94,6 +134,17 @@ TOOL_KNOWLEDGE_DIR=docs/tool-knowledge
 TOOL_ROUTER_THRESHOLD=0.75
 TOOL_ROUTER_MARGIN=0.08
 TOOL_ROUTER_USE_E5_PREFIX=true
+
+# Two-stage rerank settings
+TOOL_ROUTER_RERANK_ENABLED=true
+TOOL_ROUTER_RERANK_TOP_K=10
+TOOL_ROUTER_EMBED_FLOOR=0.30
+TOOL_ROUTER_RERANK_THRESHOLD=0.55
+TOOL_ROUTER_RERANK_MARGIN=0.10
+TOOL_ROUTER_RERANK_MODEL=BAAI/bge-reranker-base
+
+# LLM router fallback (constrained single-call after fast path defers)
+TOOL_ROUTER_LLM_FALLBACK_ENABLED=true
 ```
 
 Docker users: the embed model must be pulled on the **host** Ollama. The API reaches it via `host.docker.internal:11434`. The `docs/tool-knowledge/` directory is mounted read-only into the container.
@@ -170,11 +221,25 @@ python scripts/eval_tool_routing.py --backend token --show-errors
 # Embedding backend
 python scripts/eval_tool_routing.py --backend embedding --show-errors
 
-# Compare and fail if accuracy < 90%
+# Rerank backend (requires Ollama + fastembed)
+python scripts/eval_tool_routing.py --backend rerank --show-errors
+
+# Hard held-out set (out-of-vocab phrasing — best measured with rerank)
+python scripts/eval_tool_routing.py --backend rerank --hard --show-errors
+
+# Fail if accuracy < 90%
 python scripts/eval_tool_routing.py --backend token --min-accuracy 0.90 --exit-nonzero
 ```
 
-Target accuracy: **≥ 90%** on token backend, **≥ 92%** on embedding backend.
+Target accuracy: **≥ 90%** on token backend, **≥ 92%** on embedding backend, **≥ 85%** on hard set with rerank backend.
+
+### Full benchmark (compare all backends)
+
+```bash
+python scripts/benchmark_tool_routing.py
+```
+
+Prints accuracy, stage-1 recall, deferral rate, and p50/p95 latency per backend across standard and hard eval sets. Skips backends whose dependencies (Ollama, fastembed) are unavailable.
 
 ## Tuning thresholds
 
@@ -194,6 +259,7 @@ Good examples to add:
 - **Hard negatives** — same subject, different tool (most valuable for disambiguation)
   - `"Ali's age is 23"` → `create_client` vs `"Note that Ali is 23"` → `add_client_note`
 - **Paraphrases** of existing examples in other phrasing styles
-- **Farsi/Persian** variants of high-frequency commands
 
 Keep `routing.jsonl` and `data/eval/tool_routing.jsonl` in sync: add eval examples for any new training pattern you add.
+
+For out-of-vocabulary phrasings that test generalization (synonyms, unusual verbs, non-domain vocabulary), add them **only** to `data/eval/tool_routing_hard.jsonl` — not to `routing.jsonl`. This preserves the hard set as a true held-out measure of the embed+rerank layer's generalization.
