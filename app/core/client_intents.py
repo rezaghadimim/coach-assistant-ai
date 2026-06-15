@@ -364,6 +364,39 @@ def _is_tool_shaped_dict(data: dict[str, Any]) -> bool:
     return bool(set(data.keys()) & tool_keys) and bool(set(data.keys()) & param_keys)
 
 
+# Some models (e.g. llama3.1) emit Python-style literals instead of JSON-standard
+# ones: ``True``/``False``/``None`` instead of ``true``/``false``/``null``.
+# These patterns normalise them so ``json.loads`` can parse the output.
+_PY_TRUE = re.compile(r"\bTrue\b")
+_PY_FALSE = re.compile(r"\bFalse\b")
+_PY_NONE = re.compile(r"\bNone\b")
+
+
+def _loads_json_tolerant(s: str) -> Optional[dict[str, Any]]:
+    """Parse *s* as a JSON object, falling back to Python-literal normalisation.
+
+    ``json.loads`` is tried first.  If it fails, Python-style literals
+    (``True`` / ``False`` / ``None``) are replaced with their JSON equivalents
+    (``true`` / ``false`` / ``null``) and parsing is retried.  Returns the
+    parsed ``dict`` on success, or ``None`` on failure.
+
+    The normalisation is applied only as a fallback to avoid altering string
+    values in well-formed JSON.
+    """
+    try:
+        data = json.loads(s)
+        return data if isinstance(data, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    normalized = _PY_FALSE.sub("false", _PY_TRUE.sub("true", _PY_NONE.sub("null", s)))
+    try:
+        data = json.loads(normalized)
+        return data if isinstance(data, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+
 def _embedded_tool_json_candidates(content: str) -> list[str]:
     """Collect JSON substrings that may contain a text-based tool call."""
     candidates = [content.strip()]
@@ -393,11 +426,8 @@ def looks_like_malformed_tool_call(content: str) -> bool:
         return False
 
     for candidate in _embedded_tool_json_candidates(stripped):
-        try:
-            data = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict) and _is_tool_shaped_dict(data):
+        data = _loads_json_tolerant(candidate)
+        if data is not None and _is_tool_shaped_dict(data):
             if _extract_tool_payload(data) is None:
                 return True
     return False
@@ -422,17 +452,19 @@ def is_simple_greeting(message: str) -> bool:
 
 
 def parse_text_tool_call(content: str) -> Optional[tuple[str, dict[str, Any]]]:
-    """Parse tool calls some models emit as JSON text instead of native tool_calls."""
+    """Parse tool calls some models emit as JSON text instead of native tool_calls.
+
+    Handles both well-formed JSON and the Python-style literals (``True`` /
+    ``False`` / ``None``) that some local models (e.g. llama3.1) emit instead
+    of the JSON-standard ``true`` / ``false`` / ``null``.
+    """
     stripped = content.strip()
     if not stripped:
         return None
 
     for candidate in _embedded_tool_json_candidates(stripped):
-        try:
-            data = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(data, dict):
+        data = _loads_json_tolerant(candidate)
+        if data is None:
             continue
 
         payload = _extract_tool_payload(data)
@@ -442,11 +474,8 @@ def parse_text_tool_call(content: str) -> Optional[tuple[str, dict[str, Any]]]:
         error_text = data.get("error")
         if isinstance(error_text, str):
             for nested in _embedded_tool_json_candidates(error_text):
-                try:
-                    nested_data = json.loads(nested)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(nested_data, dict):
+                nested_data = _loads_json_tolerant(nested)
+                if nested_data is not None:
                     payload = _extract_tool_payload(nested_data)
                     if payload:
                         return payload

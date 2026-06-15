@@ -96,6 +96,19 @@ class Settings(BaseSettings):
     # LLM router fallback: one constrained LLM call when all fast-path layers defer.
     tool_router_llm_fallback_enabled: bool = True
 
+    # Response Formatter: optional LLM pass for human-friendly data replies.
+    # When enabled, fast-path read results are rephrased by a compact LLM call
+    # before being returned.  PII validation runs after formatting; on failure
+    # the deterministic template is used instead.
+    # Uses the same Ollama model as the main chat (ollama_model).
+    response_formatter_enabled: bool = Field(
+        default=True,
+        description=(
+            "Pass fast-path data replies through an LLM for human-friendly formatting. "
+            "Disable with RESPONSE_FORMATTER_ENABLED=false."
+        ),
+    )
+
     # Memory
     memory_db_path: str = "data/coach_assistant.db"
     summary_trigger_messages: int = 20

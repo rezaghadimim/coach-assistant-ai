@@ -273,6 +273,101 @@ class ClientIntentTests(unittest.TestCase):
         self.assertEqual(tool_name, "create_client")
         self.assertEqual(params["client_id"], "hassan")
 
+    def test_parse_text_tool_call_python_false_confirmed(self) -> None:
+        """llama3.1 emits ``False`` (Python bool) instead of JSON ``false``."""
+        raw = (
+            '{"name": "create_client", "parameters": {"client_id": "ali", '
+            '"name": "Ali", "email": "ali123@gmail.comk", "confirmed": False}}'
+        )
+        parsed = parse_text_tool_call(raw)
+        self.assertIsNotNone(parsed, "parse_text_tool_call must handle Python-style False")
+        assert parsed is not None
+        tool_name, params = parsed
+        self.assertEqual(tool_name, "create_client")
+        self.assertEqual(params["client_id"], "ali")
+        self.assertIs(params["confirmed"], False)
+
+    def test_parse_text_tool_call_python_true_confirmed(self) -> None:
+        """Python-style ``True`` (confirm reply) must also be parsed correctly."""
+        raw = (
+            '{"name": "create_client", "parameters": {"client_id": "ali", '
+            '"name": "Ali", "confirmed": True}}'
+        )
+        parsed = parse_text_tool_call(raw)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        tool_name, params = parsed
+        self.assertEqual(tool_name, "create_client")
+        self.assertIs(params["confirmed"], True)
+
+    def test_parse_text_tool_call_python_none_field(self) -> None:
+        """Python ``None`` in optional fields must be parsed as ``null``."""
+        raw = (
+            '{"name": "add_client_note", "parameters": {"client_id": "ali", '
+            '"content": "Great session", "note_type": "general", "title": None}}'
+        )
+        parsed = parse_text_tool_call(raw)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        tool_name, params = parsed
+        self.assertEqual(tool_name, "add_client_note")
+        self.assertIsNone(params["title"])
+
+    def test_python_false_confirmed_executes_preview_not_raw_json(self) -> None:
+        """When the LLM emits ``confirmed: False`` (Python style), the tool is
+        executed and a ⏳ preview is returned — NOT the raw JSON string."""
+        from app.core.client_intents import parse_text_tool_call
+        from app.core.tools import execute_tool, sanitize_write_confirmation
+
+        raw = (
+            '{"name": "create_client", "parameters": {"client_id": "ali", '
+            '"name": "Ali", "email": "ali123@gmail.comk", "confirmed": False}}'
+        )
+        result = parse_text_tool_call(raw)
+        self.assertIsNotNone(result, "Tool call with Python False must be parseable")
+        assert result is not None
+        tool_name, params = result
+        params = sanitize_write_confirmation(tool_name, params, "update Ali's email")
+        tool_result = execute_tool(tool_name, params, store)
+        self.assertTrue(
+            tool_result.startswith("⏳"),
+            f"Expected ⏳ preview, got: {tool_result!r}",
+        )
+
+    def test_confirm_flow_after_python_false_preview(self) -> None:
+        """Full confirm flow: Python-False tool call → ⏳ → 'yes' → ✅."""
+        from app.core.client_intents import try_direct_client_action
+
+        reset_runtime_state()
+        store.upsert_user("ali", name="Ali", profile={"phone": "9892323442"}, is_coach=False)
+
+        raw = (
+            '{"name": "create_client", "parameters": {"client_id": "ali", '
+            '"name": "Ali", "email": "ali123@gmail.comk", "phone": "9892323442", '
+            '"confirmed": False}}'
+        )
+        result = parse_text_tool_call(raw)
+        self.assertIsNotNone(result)
+        assert result is not None
+        tool_name, params = result
+        from app.core.tools import sanitize_write_confirmation, execute_tool
+        params = sanitize_write_confirmation(tool_name, params, "update Ali's email")
+        preview = execute_tool(tool_name, params, store)
+        self.assertTrue(preview.startswith("⏳"), f"Expected ⏳, got {preview!r}")
+
+        history = [
+            {"role": "user", "content": "update Ali's email to be ali123@gmail.comk"},
+            {"role": "assistant", "content": preview},
+            {"role": "user", "content": "yes"},
+        ]
+        confirmed = try_direct_client_action("yes", store, history)
+        self.assertIsNotNone(confirmed)
+        assert confirmed is not None
+        self.assertTrue(
+            confirmed.startswith("✅"),
+            f"Expected ✅ after confirm, got: {confirmed!r}",
+        )
+
     def test_is_simple_greeting(self) -> None:
         self.assertTrue(is_simple_greeting("Hi"))
         self.assertTrue(is_simple_greeting("Hello there!"))

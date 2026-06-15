@@ -16,6 +16,7 @@ Each ADR captures a significant architectural or technical decision, its context
 | [0007](0007-ollama-embedding-tool-routing.md) | Ollama embeddings for tool routing | Accepted (extended by 0009) |
 | [0008](0008-cross-encoder-rag-reranker.md) | Cross-encoder reranker for two-stage RAG retrieval | Accepted |
 | [0009](0009-tool-routing-synonym-rerank-llm-fallback.md) | Tool routing overhaul — synonym lexicon, rerank, LLM fallback | Accepted |
+| [0010](0010-llm-response-formatter.md) | Optional LLM formatting pass for human-friendly data replies | Accepted |
 
 ## Template
 

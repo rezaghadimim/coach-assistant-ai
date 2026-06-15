@@ -263,3 +263,39 @@ Good examples to add:
 Keep `routing.jsonl` and `data/eval/tool_routing.jsonl` in sync: add eval examples for any new training pattern you add.
 
 For out-of-vocabulary phrasings that test generalization (synonyms, unusual verbs, non-domain vocabulary), add them **only** to `data/eval/tool_routing_hard.jsonl` — not to `routing.jsonl`. This preserves the hard set as a true held-out measure of the embed+rerank layer's generalization.
+
+## Response Formatting (post-routing)
+
+After the fast path executes a tool and returns the raw result, an **optional LLM formatting pass** can rephrase the data into natural, human-friendly text.
+
+```
+execute_tool() → raw result
+      │
+      ▼
+is_formattable(reply)?  (only successful read results qualify)
+      │ yes
+      ▼
+format_data_reply()  ← compact LLM call with focused prompt
+      │
+      ▼
+PII validation  →  fallback to deterministic template on failure
+      │
+      ▼
+human-friendly reply
+```
+
+This sits **outside** the routing pipeline — routing, tool selection, and parameter extraction remain fully deterministic. The LLM only decides how to present data that has already been fetched.
+
+Enable with:
+
+```env
+RESPONSE_FORMATTER_ENABLED=true
+```
+
+Benchmark before enabling to measure latency overhead:
+
+```bash
+python scripts/benchmark_response_formatter.py
+```
+
+See [ADR-0010](adr/0010-llm-response-formatter.md) for the full design and trade-offs.

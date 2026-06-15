@@ -190,5 +190,69 @@ class Phase4OpenAICompatTests(unittest.TestCase):
         self.assertEqual("".join(content_tokens), "Think about your goal.")
 
 
+class Phase4ResponseFormatterWiringTests(unittest.TestCase):
+    """The optional formatter must be applied to fast-path replies in the Open WebUI path."""
+
+    def setUp(self) -> None:
+        reset_runtime_state()
+        self.client = TestClient(app)
+
+    def test_direct_reply_is_formatted_when_enabled(self) -> None:
+        from app.core.response_formatter import _DATA_REPLY_PREFIX
+
+        data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nEmail: ali@example.com"
+
+        with (
+            patch("app.api.openai_compat.try_direct_reply", return_value=data_reply),
+            patch("app.core.config.settings.response_formatter_enabled", True),
+            patch(
+                "app.core.response_formatter.format_data_reply",
+                new=AsyncMock(return_value="Ali's email is ali@example.com."),
+            ) as mock_fmt,
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai",
+                    "messages": [{"role": "user", "content": "what is ali's email"}],
+                    "stream": False,
+                    "user": "coach-1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.json()["choices"][0]["message"]["content"]
+        self.assertEqual(content, "Ali's email is ali@example.com.")
+        mock_fmt.assert_awaited_once()
+
+    def test_direct_reply_not_formatted_when_disabled(self) -> None:
+        from app.core.response_formatter import _DATA_REPLY_PREFIX
+
+        data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nEmail: ali@example.com"
+
+        with (
+            patch("app.api.openai_compat.try_direct_reply", return_value=data_reply),
+            patch("app.core.config.settings.response_formatter_enabled", False),
+            patch(
+                "app.core.response_formatter.format_data_reply",
+                new=AsyncMock(return_value="should not be used"),
+            ) as mock_fmt,
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai",
+                    "messages": [{"role": "user", "content": "what is ali's email"}],
+                    "stream": False,
+                    "user": "coach-1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.json()["choices"][0]["message"]["content"]
+        self.assertEqual(content, data_reply)
+        mock_fmt.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -92,6 +92,32 @@ RAG_RERANK_ENABLED=true RAG_RETRIEVE_K=25 python main.py
 
 See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-cross-encoder-rag-reranker.md) for the rationale.
 
+### Phase 2D: Response Formatter — Human-Friendly Data Replies
+
+**Problem solved:** fast-path data replies were accurate but mechanical ("Here are the details on file:\n\nClient ID: ali\n..."). A coach asking "what is Ali's email?" received a full profile block. The small-model risk of letting the LLM decide *what* to fetch was eliminated by keeping routing and tool execution deterministic and adding an optional LLM pass only for *presentation*.
+
+**Done:**
+- [x] Formatter module: `app/core/response_formatter.py` — `format_data_reply()`, `is_formattable()`, PII validation (`_EMAIL_RE`, `_PHONE_RE`), deterministic fallback
+- [x] Config flag: `RESPONSE_FORMATTER_ENABLED` (default `false`) in `app/core/config.py`
+- [x] Formatter wired into `app/core/llm.py` — applied after `try_direct_reply` and `_try_llm_router_action` fast-path returns
+- [x] Formatter wired into `app/api/chat.py` — applied on the `try_direct_reply` early-return path
+- [x] Tests: `tests/test_response_formatter.py` — 19 tests covering `is_formattable`, `format_data_reply`, PII drop fallback, LLM error fallback, flag integration
+- [x] Benchmark: `scripts/benchmark_response_formatter.py` — 8-sample built-in eval set, latency OFF/ON, PII preservation, char delta
+- [x] Docs: `ARCHITECTURE.md` (component 12, data flow step 6f, file map), `TOOL_ROUTING.md` (Response Formatting section), ADR-0010
+
+**To operate:**
+```bash
+# Enabled by default — no configuration needed.
+# Disable if needed:
+RESPONSE_FORMATTER_ENABLED=false
+
+# Benchmark to measure latency overhead for your hardware:
+python scripts/benchmark_response_formatter.py --samples 8
+# Target: PII preservation 100%; overhead typically 500-2000 ms per reply.
+```
+
+See [ADR-0010](adr/0010-llm-response-formatter.md) for the rationale and design constraints.
+
 ### Phase 2B: Tool Routing — Embedding + Rerank + LLM Fallback
 
 **Problem solved:** arbitrary phrasing ("give me all visitors in table", "dump the roster") was failing the fast path entirely, reaching the LLM but getting back follow-up suggestions instead of data — because all fast-path layers were lexical and couldn't handle out-of-vocabulary synonyms. Messages like "Ali's age is 23" were also misrouted to `add_client_note` instead of `create_client`.
@@ -131,6 +157,22 @@ python scripts/benchmark_tool_routing.py
 See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) for full guide.
 
 ## Remaining
+
+### Response Formatter — Next Steps
+
+- [ ] **Run the benchmark and baseline latency overhead.** Before enabling in production, measure the real overhead for your model and hardware:
+  ```bash
+  python scripts/benchmark_response_formatter.py
+  ```
+  Target: PII preservation 100%; latency overhead < 2000 ms per reply.
+
+- [ ] **Tune or replace the formatter system prompt** if the model produces poor rephrasing. Inspect outputs with `RESPONSE_FORMATTER_ENABLED=true` and one test message. If the model ignores the "answer only what was asked" rule, add a few-shot example to the prompt.
+
+- [ ] **Add per-tool formatter hints** for special cases (e.g. a multi-client list → compact table, or a notes list → numbered list). Wire them through `format_data_reply()` as an optional `hint` argument.
+
+- [ ] **Extend `_PHONE_RE`** to cover regional formats used by the coach's clients.
+
+---
 
 ### Tool Routing — Next Steps for Better Coverage
 

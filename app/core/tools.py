@@ -527,9 +527,13 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             users = store.list_users(clients_only=True)
             if not users:
                 return "No clients registered yet."
-            lines = [
-                f"- {u['name'] or u['user_id']} (ID: {u['user_id']})" for u in users
-            ]
+            lines = []
+            for u in users:
+                profile = u.get("profile") or {}
+                email = profile.get("email") or "(not set)"
+                lines.append(
+                    f"- {u['name'] or u['user_id']} (ID: {u['user_id']}, Email: {email})"
+                )
             return "Registered clients:\n" + "\n".join(lines)
 
         if name == "update_client_note":

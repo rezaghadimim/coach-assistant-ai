@@ -104,6 +104,17 @@ The local Ollama provider is always the default.
 - API: `POST /api/tools/classify` (exposes `rerank_score`, `backend`), `POST /api/tools/reindex`
 - See `[TOOL_ROUTING.md](TOOL_ROUTING.md)` and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)
 
+### 12) Response Formatter (`app/core/response_formatter.py`)
+
+- Optional LLM pass that rephrases fast-path data replies into natural, human-friendly text
+- Applied after the deterministic fast path fetches data — **only presentation changes, not data selection**
+- Wired into **both** API entry points: `/api/chat` (`chat.py`) and `/v1/chat/completions` (`openai_compat.py`, used by Open WebUI)
+- `is_formattable(reply)` gates the call: only successful read results (starting with the template prefix) are eligible; write previews (⏳/✅/❌), errors, greetings, and scope refusals pass through unchanged
+- **PII validation**: every email and phone number in the source data must appear verbatim in the formatted output; any failure falls back to the deterministic template
+- Gated by `RESPONSE_FORMATTER_ENABLED` (default `true`) — disable with `RESPONSE_FORMATTER_ENABLED=false`
+- Benchmark: `scripts/benchmark_response_formatter.py` — measures latency overhead, PII preservation rate, and output length delta between OFF and ON modes
+- See [ADR-0010](adr/0010-llm-response-formatter.md)
+
 ## Data Flow
 
 1. Client sends `POST /api/chat {user_id, message}`
@@ -122,6 +133,7 @@ The local Ollama provider is always the default.
    c. Tool Router: synonym normalize → embedding top-K → cross-encoder rerank → embedding cosine → token cosine → param extract → execute_tool
    d. Intent KB (read-only patterns)
    e. LLM router fallback (one constrained call, data requests only) → param extract → execute_tool
+   f. **Response Formatter** (optional, `RESPONSE_FORMATTER_ENABLED=true`): LLM rephrases the raw tool output into a natural reply; PII validation runs; falls back to template on failure
 7. Full LLM tool-calling loop (hardened system prompt, max 5 iterations) for remaining cases
 8. Dead-end guard: if the LLM returns only follow-up questions for a data request, rescues via direct-action path or returns a targeted clarification
 9. Result is stored in SQLite
@@ -142,7 +154,8 @@ app/
 │   ├── lexicon.py         ← domain synonym normalization (router-local)
 │   ├── llm_router.py      ← constrained LLM tool classifier (fallback)
 │   ├── rerank.py          ← local fastembed cross-encoder (RAG + tool router)
-│   ├── llm.py             ← tool loop, LLM router wiring, dead-end guard
+│   ├── llm.py             ← tool loop, LLM router wiring, dead-end guard, formatter wiring
+│   ├── response_formatter.py ← optional LLM formatting pass (PII validation, fallback)
 │   ├── model_registry.py
 │   ├── prompts.py
 │   ├── scope.py
@@ -183,14 +196,16 @@ data/
 scripts/
 ├── ingest.py
 ├── export_training_data.py
-├── eval_tool_routing.py         ← accuracy/F1/latency eval (--backend rerank, --hard)
-└── benchmark_tool_routing.py   ← cross-backend comparison (token/embedding/rerank)
+├── eval_tool_routing.py              ← accuracy/F1/latency eval (--backend rerank, --hard)
+├── benchmark_tool_routing.py        ← cross-backend comparison (token/embedding/rerank)
+└── benchmark_response_formatter.py  ← formatter OFF vs ON: latency, PII preservation, char delta
 
 tests/
-├── test_lexicon.py              ← 24 normalization + token backend regression tests
-├── test_tool_router_rerank.py   ← 12 rerank unit + integration tests (mocked)
-├── test_llm_router.py           ← 18 LLM router parser + classify tests (mocked)
-├── test_tool_router.py          ← token backend + 6 out-of-vocab cases via lexicon
-└── test_tools_api.py            ← API schema fields + data-request guard tests
+├── test_lexicon.py                ← 24 normalization + token backend regression tests
+├── test_tool_router_rerank.py     ← 12 rerank unit + integration tests (mocked)
+├── test_llm_router.py             ← 18 LLM router parser + classify tests (mocked)
+├── test_tool_router.py            ← token backend + 6 out-of-vocab cases via lexicon
+├── test_tools_api.py              ← API schema fields + data-request guard tests
+└── test_response_formatter.py    ← 19 formatter unit + integration tests (mocked provider)
 ```
 

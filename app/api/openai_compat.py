@@ -93,6 +93,34 @@ def _llm_unavailable_message(model_id: str, exc: Optional[Exception] = None) -> 
     return f"{base} ({hint})" if hint else base
 
 
+async def _maybe_format_direct_reply(
+    user_message: str,
+    direct_reply: Optional[str],
+    model_id: str,
+) -> Optional[str]:
+    """Apply the optional LLM formatter to a fast-path data reply.
+
+    Returns *direct_reply* unchanged when the formatter is disabled, the reply
+    is not a formattable data result, or formatting fails (the formatter itself
+    falls back to the deterministic template internally).
+    """
+    if direct_reply is None:
+        return None
+    if not settings.response_formatter_enabled:
+        logger.info("response_formatter: DISABLED (RESPONSE_FORMATTER_ENABLED=false)")
+        return direct_reply
+
+    from app.core.model_registry import resolve_provider
+    from app.core.response_formatter import format_data_reply, is_formattable
+
+    if not is_formattable(direct_reply):
+        logger.info("response_formatter: SKIP (not a formattable fast-path reply)")
+        return direct_reply
+
+    provider = resolve_provider(model_id)
+    return await format_data_reply(user_message, direct_reply, provider)
+
+
 async def _generate_reply_or_unavailable(
     *,
     history: list[dict],
@@ -295,6 +323,9 @@ async def chat_completions(
 
     history = store.get_session_messages(session_id)
     direct_reply = try_direct_reply(last_user_message, store, history)
+    direct_reply = await _maybe_format_direct_reply(
+        last_user_message, direct_reply, model_id
+    )
 
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
