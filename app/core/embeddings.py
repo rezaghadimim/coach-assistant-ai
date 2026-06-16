@@ -21,6 +21,7 @@ from typing import Literal
 import httpx
 
 from app.core.config import settings
+from app.core.observability import log_step
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,10 @@ def probe_embed_model(*, model: str | None = None) -> bool:
     """
     try:
         embed_texts(["ping"], input_type="query", model=model)
+        log_step(logger, "embed.probe", "ok", level=logging.DEBUG,
+                 model=model or settings.ollama_embed_model)
         return True
     except Exception as exc:
-        logger.debug("embed probe failed: %s", exc)
+        log_step(logger, "embed.probe", "fail", level=logging.DEBUG,
+                 model=model or settings.ollama_embed_model, exc=type(exc).__name__)
         return False

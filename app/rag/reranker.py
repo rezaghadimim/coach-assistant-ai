@@ -12,6 +12,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from app.core.config import settings
+from app.core.observability import log_step
 from app.core.rerank import (
     fastembed_installed,
     probe_rerank_model,
@@ -63,18 +64,17 @@ def rerank(
             max_passage_chars=max_chars,
         )
     except Exception as exc:
-        logger.warning("rag rerank: scoring failed (%s) — returning stage-1 order", exc)
+        log_step(logger, "rag.rerank", "fail", level=logging.WARNING,
+                 exc=type(exc).__name__)
         return chunks[:top_k]
 
     scored = sorted(zip(scores, chunks), key=lambda t: t[0], reverse=True)
     reranked = [replace(chunk, score=score) for score, chunk in scored]
+    final = reranked[:top_k]
 
-    logger.info(
-        "rag rerank | backend=fastembed model=%s candidates=%d final=%d top_scores=%s",
-        settings.rag_rerank_model,
-        len(chunks),
-        min(top_k, len(reranked)),
-        [round(c.score, 3) for c in reranked[:top_k]],
-    )
+    log_step(logger, "rag.rerank", "ok",
+             model=settings.rag_rerank_model,
+             candidates=len(chunks), final=len(final),
+             top_score=round(final[0].score, 3) if final else 0.0)
 
-    return reranked[:top_k]
+    return final

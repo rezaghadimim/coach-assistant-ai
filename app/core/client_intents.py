@@ -12,6 +12,7 @@ from app.core.confirmations import (
     is_user_confirmation,
     parse_pending_write,
 )
+from app.core.observability import log_step
 from app.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
@@ -533,13 +534,9 @@ def _tool_router_action(message: str, store: MemoryStore) -> Optional[str]:
 
     tool = match.tool
     hint = match.hint or ""
-    logger.debug(
-        "client_intents: tool_router matched tool=%s score=%.2f hint=%r backend=%s",
-        tool,
-        match.score,
-        hint,
-        match.backend,
-    )
+    log_step(logger, "tool_router.action", "executing", tool=tool,
+             score=match.score, backend=match.backend, hint=hint or None,
+             level=logging.DEBUG)
 
     if tool == "list_clients":
         return execute_tool("list_clients", {}, store)
@@ -610,12 +607,12 @@ def try_direct_client_query(message: str, store: MemoryStore) -> Optional[str]:
     from app.core.tools import execute_tool
 
     if detect_list_clients(message):
-        logger.debug("client_intents: regex list_clients matched")
+        log_step(logger, "intent.regex", "hit", pattern="list_clients")
         return execute_tool("list_clients", {}, store)
 
     client_ref = detect_client_lookup(message)
     if client_ref:
-        logger.debug("client_intents: regex lookup matched ref=%r", client_ref)
+        log_step(logger, "intent.regex", "hit", pattern="client_lookup", ref=client_ref)
         return execute_tool("get_client_full", {"client_id": client_ref}, store)
 
     return _kb_client_query(message, store)
@@ -628,35 +625,26 @@ def _kb_client_query(message: str, store: MemoryStore) -> Optional[str]:
 
     match = classify(message)
     if match is None:
-        logger.debug("client_intents: KB deferred (no confident intent)")
+        log_step(logger, "intent_kb", "miss", level=logging.DEBUG)
         return None
 
     if not match.requires_client:
-        logger.debug(
-            "client_intents: KB matched intent=%s score=%.2f", match.intent, match.score
-        )
+        log_step(logger, "intent_kb", "hit", intent=match.intent, score=match.score)
         return execute_tool(match.tool, {}, store)
 
     client_id = detect_client_mention(message, store)
     if client_id is None:
         # Confident about the intent but cannot tie it to a known client;
         # defer to the LLM rather than guessing.
-        logger.debug(
-            "client_intents: KB intent=%s but no known client mentioned; deferring",
-            match.intent,
-        )
+        log_step(logger, "intent_kb", "defer", level=logging.DEBUG,
+                 intent=match.intent, reason="no_client_mentioned")
         return None
 
     params: dict[str, Any] = {"client_id": client_id}
     if match.note_type:
         params["note_type"] = match.note_type
-    logger.debug(
-        "client_intents: KB matched intent=%s score=%.2f client=%s note_type=%s",
-        match.intent,
-        match.score,
-        client_id,
-        match.note_type,
-    )
+    log_step(logger, "intent_kb", "hit", intent=match.intent,
+             score=match.score, client=client_id, note_type=match.note_type)
     return execute_tool(match.tool, params, store)
 
 
@@ -675,18 +663,24 @@ def try_direct_client_action(
         # Resolve the pending write first so a decline cancels it instead of
         # falling through to the LLM, which would re-propose the same preview.
         if is_user_cancellation(message):
-            logger.debug("client_intents: pending write cancelled by user")
+            log_step(logger, "confirmation", "cancel")
             return _CANCEL_REPLY
         if is_user_confirmation(message):
             tool_name, params = pending
+            log_step(logger, "confirmation", "confirm", tool=tool_name)
             return execute_tool(tool_name, {**params, "confirmed": True}, store)
+        log_step(logger, "confirmation", "none", level=logging.DEBUG)
 
     profile_args = detect_profile_update(message, store)
     if profile_args:
+        log_step(logger, "intent.regex", "hit", pattern="profile_update",
+                 client=profile_args.get("client_id", "?"))
         return execute_tool("create_client", profile_args, store)
 
     create_args = detect_create_client(message)
     if create_args:
+        log_step(logger, "intent.regex", "hit", pattern="create_client",
+                 client=create_args.get("client_id", "?"))
         return execute_tool("create_client", create_args, store)
 
     text_tool = parse_text_tool_call(message)
@@ -694,8 +688,11 @@ def try_direct_client_action(
         from app.core.tools import sanitize_write_confirmation
 
         tool_name, params = text_tool
+        log_step(logger, "intent.regex", "hit", pattern="text_tool_call", tool=tool_name)
         params = sanitize_write_confirmation(tool_name, params, message)
         return execute_tool(tool_name, params, store)
+
+    log_step(logger, "intent.regex", "miss", level=logging.DEBUG)
 
     router_result = _tool_router_action(message, store)
     if router_result is not None:
@@ -705,9 +702,7 @@ def try_direct_client_action(
     # to the LLM tool loop (which handles arbitrary phrasing), not the
     # read-only query path — otherwise it would wrongly return a profile card.
     if looks_like_unhandled_profile_write(message):
-        logger.debug(
-            "client_intents: unhandled profile-write detected; deferring to LLM"
-        )
+        log_step(logger, "intent.profile_write_guard", "defer", level=logging.DEBUG)
         return None
 
     return try_direct_client_query(message, store)

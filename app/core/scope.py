@@ -8,8 +8,13 @@ task prompts (follow-up suggestions, title, tags) are always allowed through.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
+
+from app.core.observability import log_step
+
+logger = logging.getLogger(__name__)
 
 OFF_TOPIC_REFUSAL = (
     "I'm your coaching assistant, so I keep our work focused on coaching, "
@@ -76,7 +81,10 @@ def scope_guard(message: str) -> Optional[str]:
     follow-up suggestions, titles, and tags keep working.
     """
     if is_openwebui_task(message):
+        log_step(logger, "scope", "skip", level=logging.DEBUG, reason="openwebui_task")
         return None
     if is_off_topic(message):
+        log_step(logger, "scope", "block")
         return OFF_TOPIC_REFUSAL
+    log_step(logger, "scope", "pass", level=logging.DEBUG)
     return None

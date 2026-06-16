@@ -20,6 +20,7 @@ import logging
 import re
 
 from app.core.config import settings
+from app.core.observability import log_step
 
 logger = logging.getLogger(__name__)
 
@@ -77,9 +78,8 @@ def _pii_preserved(source: str, formatted: str) -> bool:
     """
     for token in _extract_pii(formatted):
         if token not in source:
-            logger.warning(
-                "response_formatter: hallucinated PII token in output: %r", token
-            )
+            log_step(logger, "formatter.pii", "hallucination",
+                     level=logging.WARNING, token=token)
             return False
     return True
 
@@ -108,24 +108,18 @@ async def format_data_reply(
         A human-friendly string, or *reply* unchanged when formatting fails.
     """
     if not reply or reply.startswith(("❌", "⏳", "✅")):
-        logger.info(
-            "response_formatter: SKIP (write/error/empty reply) — returning as-is"
-        )
+        log_step(logger, "formatter", "skip", level=logging.DEBUG,
+                 reason="write_error_or_empty")
         return reply
 
     if not reply.startswith(_DATA_REPLY_PREFIX):
-        # Not a fast-path data reply — return unchanged without an LLM call.
-        logger.info(
-            "response_formatter: SKIP (no data prefix) — not a formattable reply"
-        )
+        log_step(logger, "formatter", "skip", level=logging.DEBUG,
+                 reason="no_data_prefix")
         return reply
 
     raw_data = reply.removeprefix(_DATA_REPLY_PREFIX)
-    logger.info(
-        "response_formatter: FORMATTING question=%r (%d chars of raw data)",
-        user_message,
-        len(raw_data),
-    )
+    log_step(logger, "formatter", "start", level=logging.DEBUG,
+             raw_chars=len(raw_data))
 
     try:
         messages = [
@@ -146,24 +140,20 @@ async def format_data_reply(
         formatted = result.content.strip()
 
         if not formatted:
-            logger.warning(
-                "response_formatter: FALLBACK — LLM returned empty reply, using template"
-            )
+            log_step(logger, "formatter", "fallback", level=logging.WARNING,
+                     reason="llm_empty_reply")
             return reply
 
         if not _pii_preserved(raw_data, formatted):
-            logger.warning(
-                "response_formatter: FALLBACK — hallucinated PII detected, using template "
-                "(output=%r)",
-                formatted,
-            )
+            log_step(logger, "formatter", "fallback", level=logging.WARNING,
+                     reason="hallucinated_pii")
             return reply
 
-        logger.info("response_formatter: SUCCESS — returning formatted reply")
+        log_step(logger, "formatter", "ok", chars=len(formatted))
         return formatted
 
     except Exception:
-        logger.exception(
-            "response_formatter: FALLBACK — LLM call failed, using deterministic template"
-        )
+        logger.exception("response_formatter: LLM call failed, using template")
+        log_step(logger, "formatter", "fallback", level=logging.WARNING,
+                 reason="llm_exception")
         return reply

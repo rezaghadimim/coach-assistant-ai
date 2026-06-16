@@ -14,6 +14,9 @@ from app.api.openai_compat import router as openai_compat_router
 from app.api.tools import router as tools_router
 from app.api.users import router as users_router
 from app.core.config import settings
+from app.core.observability import setup_logging
+
+setup_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -164,4 +167,4 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_config=None)

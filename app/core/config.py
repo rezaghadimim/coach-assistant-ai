@@ -130,6 +130,12 @@ class Settings(BaseSettings):
     memory_db_path: str = "data/coach_assistant.db"
     summary_trigger_messages: int = 20
 
+    # Logging
+    log_level: str = "INFO"
+    # When True, message/reply text snippets are included in step logs.
+    # Set to False to suppress content previews (e.g. for privacy).
+    log_step_payloads: bool = True
+
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_settings(cls, data: object) -> object:

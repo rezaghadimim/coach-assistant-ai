@@ -24,6 +24,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 from app.core.config import settings
+from app.core.observability import log_step
 
 if TYPE_CHECKING:
     from app.core.tool_router import ToolMatch
@@ -158,15 +159,17 @@ async def classify_tool_llm(
         )
         content = result.content if hasattr(result, "content") else str(result)
     except Exception as exc:
-        logger.debug("llm_router: provider call failed: %s", exc)
+        log_step(logger, "llm_router", "fail", level=logging.WARNING,
+                 exc=type(exc).__name__)
         return None
 
     tool_name = _parse_tool_from_response(content)
     if tool_name is None:
-        logger.debug("llm_router: no valid tool extracted from %r", content[:100])
+        log_step(logger, "llm_router", "miss", level=logging.DEBUG,
+                 raw=content[:60])
         return None
 
-    logger.debug("llm_router: classified message as tool=%s", tool_name)
+    log_step(logger, "llm_router", "hit", tool=tool_name)
     return ToolMatch(
         tool=tool_name,
         score=1.0,

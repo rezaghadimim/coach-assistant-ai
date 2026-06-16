@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, AsyncGenerator, Optional
 
 import httpx
 
 from app.core.config import settings
 from app.core.llm_providers.types import CompletionResult, ToolCall
+from app.core.observability import log_step
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaProvider:
@@ -58,16 +63,28 @@ class OllamaProvider:
             num_predict=num_predict,
             format=format,
         )
-        async with httpx.AsyncClient(
-            base_url=settings.ollama_base_url,
-            timeout=settings.ollama_timeout,
-        ) as client:
-            response = await client.post("/api/chat", json=payload)
-            response.raise_for_status()
-            data = response.json()
+        t0 = time.monotonic()
+        try:
+            async with httpx.AsyncClient(
+                base_url=settings.ollama_base_url,
+                timeout=settings.ollama_timeout,
+            ) as client:
+                response = await client.post("/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except Exception as exc:
+            ms = int((time.monotonic() - t0) * 1000)
+            log_step(logger, "llm.provider", "fail", level=logging.ERROR,
+                     provider="ollama", model=settings.ollama_model,
+                     ms=ms, exc=type(exc).__name__)
+            raise
 
+        ms = int((time.monotonic() - t0) * 1000)
         assistant_msg = data["message"]
         raw_tool_calls = assistant_msg.get("tool_calls") or []
+        log_step(logger, "llm.provider", "ok",
+                 provider="ollama", model=settings.ollama_model,
+                 ms=ms, tool_calls=len(raw_tool_calls))
 
         tool_calls = []
         for i, tc in enumerate(raw_tool_calls):

@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.core.config import settings
+from app.core.observability import log_step
 from app.rag.retriever import _tf_cosine as _cosine_similarity, _tokenize
 
 logger = logging.getLogger(__name__)
@@ -295,23 +296,27 @@ def _rerank_candidates(
     from app.core.rerank import rerank_documents
 
     if not candidates:
+        log_step(logger, "tool_router.rerank", "skip", level=logging.DEBUG,
+                 reason="no_candidates")
         return None
 
     utterances = [ex.utterance for ex, _ in candidates]
     embed_scores = [score for _, score in candidates]
 
+    log_step(logger, "tool_router.embed_recall", "ok", level=logging.DEBUG,
+             candidates=len(candidates))
+
     try:
         rerank_scores = rerank_documents(message, utterances, model=model, batch_size=32)
     except Exception as exc:
-        logger.warning("tool router rerank: scoring failed (%s) — falling through", exc)
+        log_step(logger, "tool_router.rerank", "fail", level=logging.WARNING,
+                 exc=type(exc).__name__)
         return None
 
     if len(rerank_scores) != len(candidates):
-        logger.warning(
-            "tool router rerank: score count mismatch (%d != %d) — falling through",
-            len(rerank_scores),
-            len(candidates),
-        )
+        log_step(logger, "tool_router.rerank", "fail", level=logging.WARNING,
+                 reason="score_count_mismatch",
+                 expected=len(candidates), got=len(rerank_scores))
         return None
 
     # Find best and runner-up across tools using rerank scores.
@@ -323,6 +328,8 @@ def _rerank_candidates(
 
     best_rerank, best_embed, best_ex = scored[0]
     if best_rerank < threshold:
+        log_step(logger, "tool_router.rerank", "miss", level=logging.DEBUG,
+                 best_tool=best_ex.tool, score=best_rerank, threshold=threshold)
         return None
 
     # Runner-up: best score from a *different* tool.
@@ -333,15 +340,14 @@ def _rerank_candidates(
             break
 
     if best_rerank - runner_up_rerank < margin:
+        log_step(logger, "tool_router.rerank", "miss", level=logging.DEBUG,
+                 best_tool=best_ex.tool, score=best_rerank,
+                 margin=best_rerank - runner_up_rerank, required_margin=margin)
         return None
 
-    logger.debug(
-        "tool router rerank: tool=%s rerank_score=%.3f embed_score=%.3f runner_up=%.3f",
-        best_ex.tool,
-        best_rerank,
-        best_embed,
-        runner_up_rerank,
-    )
+    log_step(logger, "tool_router.rerank", "hit",
+             tool=best_ex.tool, score=best_rerank,
+             embed_score=best_embed, margin=best_rerank - runner_up_rerank)
 
     return ToolMatch(
         tool=best_ex.tool,
@@ -540,23 +546,34 @@ def classify_tool(
                 model=settings.tool_router_rerank_model,
             )
             if result is not None:
-                logger.debug(
-                    "tool router: rerank matched tool=%s rerank_score=%.3f",
-                    result.tool,
-                    result.rerank_score,
-                )
+                log_step(logger, "tool_router", "hit",
+                         backend="rerank", tool=result.tool,
+                         score=result.rerank_score or result.score)
                 return result
             # Fall through to embedding-only on low confidence.
+        else:
+            log_step(logger, "tool_router.embed_recall", "miss", level=logging.DEBUG,
+                     reason="below_floor")
 
     # --- Embedding-only path ---
     if use_embed and len(_embed_backend) > 0:
         result = _embed_backend.classify(message, threshold=t, margin=m)
         if result is not None:
+            log_step(logger, "tool_router", "hit",
+                     backend="embedding", tool=result.tool, score=result.score)
             return result
+        log_step(logger, "tool_router.embed_fallback", "miss", level=logging.DEBUG)
         # Fall through to token on low confidence.
 
     # --- Token path ---
-    return _token_backend.classify(message, threshold=t, margin=m)
+    result = _token_backend.classify(message, threshold=t, margin=m)
+    if result is not None:
+        log_step(logger, "tool_router", "hit",
+                 backend="token", tool=result.tool, score=result.score)
+    else:
+        log_step(logger, "tool_router", "miss", level=logging.DEBUG,
+                 backend="token")
+    return result
 
 
 def top_n_tools(

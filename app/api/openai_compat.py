@@ -26,6 +26,8 @@ import time
 import uuid
 from typing import AsyncGenerator, Optional
 
+from app.core.observability import bind_message, log_step, preview, reset_message
+
 import httpx
 from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -311,9 +313,20 @@ async def chat_completions(
     user_id = _resolve_user_id(request.user, x_user_id, x_openwebui_user_id)
     coach_name = (x_openwebui_user_name or "").strip() or None
 
+    msg_id = bind_message(user_id)
+    t0 = time.monotonic()
+
     # Extract the latest user message for RAG retrieval and persistence.
     user_messages = [m for m in request.messages if m.role == "user"]
     last_user_message = user_messages[-1].content if user_messages else ""
+
+    if settings.log_step_payloads:
+        log_step(logger, "message", "received", endpoint="/v1/chat/completions",
+                 stream=request.stream, model=model_id,
+                 len=len(last_user_message), text=preview(last_user_message))
+    else:
+        log_step(logger, "message", "received", endpoint="/v1/chat/completions",
+                 stream=request.stream, model=model_id, len=len(last_user_message))
 
     session_id = session_manager.get_or_create_session_id(
         user_id, coach_name=coach_name
@@ -336,6 +349,11 @@ async def chat_completions(
             system_prompt = await asyncio.to_thread(
                 build_system_prompt, user_id, last_user_message
             )
+        path = "direct" if direct_reply is not None else "llm"
+        ms = int((time.monotonic() - t0) * 1000)
+        log_step(logger, "message", "done", endpoint="/v1/chat/completions",
+                 path=path, stream=True, ms=ms)
+        reset_message()
         return StreamingResponse(
             _stream_and_persist(
                 history,
@@ -351,6 +369,7 @@ async def chat_completions(
 
     if direct_reply is not None:
         reply = direct_reply
+        path = "direct"
     else:
         system_prompt = await asyncio.to_thread(
             build_system_prompt, user_id, last_user_message
@@ -360,10 +379,16 @@ async def chat_completions(
             system_prompt=system_prompt,
             model_id=model_id,
         )
+        path = "llm"
     store.add_message(session_id, "assistant", reply)
     await session_manager.maybe_update_summary(
         session_id, threshold=settings.summary_trigger_messages
     )
+
+    ms = int((time.monotonic() - t0) * 1000)
+    log_step(logger, "message", "done", endpoint="/v1/chat/completions",
+             path=path, ms=ms)
+    reset_message()
 
     return {
         "id": completion_id,

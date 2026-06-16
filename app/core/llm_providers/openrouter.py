@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 import uuid
 from typing import AsyncGenerator, Optional
 
@@ -10,6 +12,9 @@ import httpx
 
 from app.core.config import settings
 from app.core.llm_providers.types import CompletionResult, ToolCall
+from app.core.observability import log_step
+
+logger = logging.getLogger(__name__)
 
 
 class OpenRouterProvider:
@@ -69,19 +74,32 @@ class OpenRouterProvider:
         payload = self._build_payload(
             messages, stream=False, tools=tools, temperature=temperature
         )
-        async with httpx.AsyncClient(
-            base_url=settings.openrouter_base_url,
-            timeout=settings.openrouter_timeout,
-            headers=self._headers(),
-        ) as client:
-            response = await client.post("/chat/completions", json=payload)
-            response.raise_for_status()
-            data = response.json()
+        t0 = time.monotonic()
+        try:
+            async with httpx.AsyncClient(
+                base_url=settings.openrouter_base_url,
+                timeout=settings.openrouter_timeout,
+                headers=self._headers(),
+            ) as client:
+                response = await client.post("/chat/completions", json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except Exception as exc:
+            ms = int((time.monotonic() - t0) * 1000)
+            log_step(logger, "llm.provider", "fail", level=logging.ERROR,
+                     provider="openrouter", model=self._model,
+                     ms=ms, exc=type(exc).__name__)
+            raise
 
+        ms = int((time.monotonic() - t0) * 1000)
         choice = data["choices"][0]
         assistant_msg = choice["message"]
 
         raw_tool_calls = assistant_msg.get("tool_calls") or []
+        log_step(logger, "llm.provider", "ok",
+                 provider="openrouter", model=self._model,
+                 ms=ms, tool_calls=len(raw_tool_calls))
+
         tool_calls = []
         for tc in raw_tool_calls:
             func = tc.get("function", {})

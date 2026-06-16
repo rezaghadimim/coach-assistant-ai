@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 from app.core.llm_providers.ollama import OllamaProvider
+from app.core.observability import log_step
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,12 @@ async def summarize_session(messages: list[dict[str, str]]) -> str:
         result = await provider.complete(llm_messages)
         summary = result.content.strip()
         if summary:
-            logger.info("session summarizer: LLM summary generated (%d chars)", len(summary))
+            log_step(logger, "summary", "ok", chars=len(summary))
             return summary
-        logger.warning("session summarizer: LLM returned empty content, using heuristic")
+        log_step(logger, "summary", "fallback", level=logging.WARNING,
+                 reason="llm_empty_reply")
     except Exception as exc:
-        logger.warning("session summarizer: LLM failed (%s), using heuristic fallback", exc)
+        log_step(logger, "summary", "fallback", level=logging.WARNING,
+                 reason="llm_exception", exc=type(exc).__name__)
 
     return _heuristic_summary(messages)

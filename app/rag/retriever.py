@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Iterable, Literal
 
 from app.core.config import settings
+from app.core.observability import log_step
 from app.rag.ingest import DocumentChunk, ingest_documents_from_dir
 
 logger = logging.getLogger(__name__)
@@ -190,13 +191,8 @@ def retrieve(
     else:
         candidates = _retrieve_token(query, top_k=candidate_k, min_score=min_score)
 
-    logger.info(
-        "rag retrieve | backend=%s query=%r candidate_k=%d candidates=%d",
-        backend_name,
-        query[:80],
-        candidate_k,
-        len(candidates),
-    )
+    log_step(logger, "rag.stage1", "ok", level=logging.DEBUG,
+             backend=backend_name, candidates=len(candidates))
 
     # Stage-2: rerank when enabled and there is something to reorder.
     if settings.rag_rerank_enabled and len(candidates) > top_k:
@@ -204,7 +200,8 @@ def retrieve(
             from app.rag.reranker import rerank
             candidates = rerank(query, candidates, top_k=top_k)
         except Exception as exc:
-            logger.warning("rag rerank: unexpected error (%s) — using stage-1 order", exc)
+            log_step(logger, "rag.rerank", "fail", level=logging.WARNING,
+                     exc=type(exc).__name__)
             candidates = candidates[:top_k]
     else:
         candidates = candidates[:top_k]
@@ -221,11 +218,9 @@ def retrieve(
     # Re-apply min_score on final (possibly reranked) scores.
     final = [c for c in deduped if c.score >= min_score][:top_k]
 
-    logger.info(
-        "rag retrieve | final=%d scores=%s",
-        len(final),
-        [(c.chunk_id, round(c.score, 3)) for c in final],
-    )
+    outcome = "ok" if final else "empty"
+    log_step(logger, "rag", outcome, backend=backend_name,
+             chunks=len(final), top_score=round(final[0].score, 3) if final else 0.0)
     return final
 
 

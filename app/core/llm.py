@@ -1,11 +1,15 @@
 """LLM client — routes requests to the appropriate provider."""
 
 import json
+import logging
 import re
 from typing import TYPE_CHECKING, AsyncGenerator, Optional, Union
 
 from app.core.config import settings
+from app.core.observability import log_step
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.memory.store import MemoryStore
@@ -212,18 +216,24 @@ def try_direct_reply(
 
     text = message.strip()
     if not text or is_openwebui_task(text):
+        log_step(logger, "direct_reply", "skip", level=logging.DEBUG, reason="empty_or_task")
         return None
 
     if is_simple_greeting(text):
+        log_step(logger, "direct_reply", "hit", reason="greeting")
         return SIMPLE_GREETING_REPLY
 
     refusal = scope_guard(text)
     if refusal is not None:
+        log_step(logger, "direct_reply", "hit", reason="scope_block")
         return refusal
 
     direct = try_direct_client_action(text, store, messages)
     if direct is None:
+        log_step(logger, "direct_reply", "miss", level=logging.DEBUG)
         return None
+    outcome = "preview" if direct.startswith("⏳") else ("ok" if direct.startswith("✅") else "hit")
+    log_step(logger, "direct_reply", outcome)
     if direct.startswith(("⏳", "✅", "❌")):
         return direct
     return _format_direct_lookup_reply(direct)
@@ -340,7 +350,9 @@ async def _generate_with_tools(
 
     full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
 
-    for _ in range(_MAX_TOOL_ITERATIONS):
+    for iteration in range(_MAX_TOOL_ITERATIONS):
+        log_step(logger, "llm.iteration", "start", level=logging.DEBUG,
+                 n=iteration + 1, max=_MAX_TOOL_ITERATIONS)
         result = await provider.complete(
             full_messages,
             tools=tools,
@@ -350,13 +362,21 @@ async def _generate_with_tools(
         if not result.has_tool_calls:
             raw_content = result.content
             if is_task:
+                log_step(logger, "llm", "final", reason="task_complete",
+                         iteration=iteration + 1)
                 return raw_content
 
             text_tool = parse_text_tool_call(raw_content)
             if text_tool:
                 tool_name, params = text_tool
+                log_step(logger, "llm.tool_call", "text_parsed",
+                         level=logging.DEBUG, tool=tool_name,
+                         iteration=iteration + 1)
                 tc = ToolCall(id=f"call_text_{tool_name}", name=tool_name, arguments=params)
                 if tool_name == "add_client_note" and is_coaching_advice_request(last_user):
+                    log_step(logger, "llm.tool_call", "blocked",
+                             tool=tool_name, reason="coaching_advice_misfire",
+                             iteration=iteration + 1)
                     full_messages.append(result.assistant_message)
                     full_messages.append(
                         provider.tool_result_message(tc, NOTE_WRITE_MISFIRE_GUIDANCE)
@@ -365,6 +385,9 @@ async def _generate_with_tools(
                 if tool_name == "add_client_note":
                     profile_args = profile_update_from_add_note(params, store)
                     if profile_args is not None:
+                        log_step(logger, "llm.tool_call", "redirected",
+                                 level=logging.DEBUG,
+                                 from_tool=tool_name, to_tool="create_client")
                         tool_name = "create_client"
                         params = profile_args
                 params = sanitize_write_confirmation(tool_name, params, last_user)
@@ -372,32 +395,45 @@ async def _generate_with_tools(
                 full_messages.append(result.assistant_message)
                 full_messages.append(provider.tool_result_message(tc, tool_result))
                 if tool_result.startswith(("⏳", "✅", "❌")):
+                    log_step(logger, "llm", "final", reason="write_outcome",
+                             iteration=iteration + 1)
                     return tool_result
                 continue
 
             if looks_like_malformed_tool_call(raw_content):
+                log_step(logger, "llm", "fallback", level=logging.WARNING,
+                         reason="malformed_tool_call", iteration=iteration + 1)
                 plain_messages = [{"role": "system", "content": system_prompt}] + list(messages)
                 plain_result = await provider.complete(
                     plain_messages, temperature=settings.temperature_tool
                 )
                 content = _sanitize_assistant_reply(plain_result.content, last_user=last_user)
                 if content.strip() and not looks_like_malformed_tool_call(content):
+                    log_step(logger, "llm", "final", reason="malformed_retry_ok",
+                             iteration=iteration + 1)
                     return content
 
             content = _sanitize_assistant_reply(raw_content, last_user=last_user)
             if not content.strip() and last_user:
+                log_step(logger, "llm", "fallback", level=logging.WARNING,
+                         reason="empty_reply", iteration=iteration + 1)
                 fallback = try_direct_client_action(last_user, store, messages)
                 if fallback is not None:
                     if fallback.startswith(("⏳", "✅", "❌")):
                         return fallback
                     return _format_direct_lookup_reply(fallback)
                 return _empty_reply_fallback(last_user, store)
+            log_step(logger, "llm", "final", reason="content",
+                     iteration=iteration + 1)
             return content
 
         full_messages.append(result.assistant_message)
 
         for tc in result.tool_calls:
             if tc.name == "add_client_note" and is_coaching_advice_request(last_user):
+                log_step(logger, "llm.tool_call", "blocked",
+                         tool=tc.name, reason="coaching_advice_misfire",
+                         iteration=iteration + 1)
                 full_messages.append(
                     provider.tool_result_message(tc, NOTE_WRITE_MISFIRE_GUIDANCE)
                 )
@@ -407,14 +443,23 @@ async def _generate_with_tools(
             if tool_name == "add_client_note":
                 profile_args = profile_update_from_add_note(arguments, store)
                 if profile_args is not None:
+                    log_step(logger, "llm.tool_call", "redirected",
+                             level=logging.DEBUG,
+                             from_tool=tool_name, to_tool="create_client")
                     tool_name = "create_client"
                     arguments = profile_args
+            log_step(logger, "llm.tool_call", "executing",
+                     tool=tool_name, iteration=iteration + 1)
             arguments = sanitize_write_confirmation(tool_name, arguments, last_user)
             tool_result = execute_tool(tool_name, arguments, store)
             full_messages.append(provider.tool_result_message(tc, tool_result))
             # Stop after write previews, outcomes, and errors so the coach
             # must reply yes/confirm before anything is saved or deleted.
             if tool_result.startswith(("⏳", "✅", "❌")):
+                log_step(logger, "llm", "final", reason="write_outcome",
+                         iteration=iteration + 1)
                 return tool_result
 
+    log_step(logger, "llm", "fail", level=logging.WARNING,
+             reason="max_iterations_reached", max=_MAX_TOOL_ITERATIONS)
     return "I was unable to complete the action within the allowed steps."

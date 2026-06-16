@@ -20,6 +20,11 @@ services:
       # model survives container rebuilds and CWD-agnostic restarts.
       # NOTE: never run `docker compose down -v` unless you want a full cache wipe.
       RAG_RERANK_CACHE_DIR: "/app/data/rerank_cache"
+      # Logging: set to DEBUG to see every pipeline step (scope, intent, embed, rerank, LLM)
+      # Trace a single message: docker compose logs coach-api | grep "msg=<id>"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      # Set to false to suppress message/reply text in step logs (privacy)
+      LOG_STEP_PAYLOADS: "${LOG_STEP_PAYLOADS:-true}"
     volumes:
       - coach_data:/app/data
       - ./docs/knowledge:/app/docs/knowledge:ro
