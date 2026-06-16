@@ -32,3 +32,40 @@
 {"utterance": "Tell me Ali's backstory", "expected_tool": "list_client_notes"}
 {"utterance": "Show Ali's advancement updates", "expected_tool": "list_client_notes"}
 {"utterance": "Pull up all entries for Mohammad", "expected_tool": "list_client_notes"}
+{"utterance": "can you delete that note, the one with id 7, it's wrong", "expected_tool": "delete_client_note"}
+{"utterance": "Remove note 15 — it's outdated", "expected_tool": "delete_client_note"}
+{"utterance": "note 13 for Sara should be removed", "expected_tool": "delete_client_note"}
+{"utterance": "I'd like to update note 10 — the information changed", "expected_tool": "update_client_note"}
+{"utterance": "note 3 needs updating — Ali revised his decision", "expected_tool": "update_client_note"}
+{"utterance": "please revise note 5 — Sara's goal has changed", "expected_tool": "update_client_note"}
+{"utterance": "Can you modify note 17 for Maryam?", "expected_tool": "update_client_note"}
+{"utterance": "ok so Ali just told me his new number is 09120001234, save it", "expected_tool": "create_client"}
+{"utterance": "Sara is a nurse now, update her occupation", "expected_tool": "create_client"}
+{"utterance": "Dara just changed jobs — she's a consultant now", "expected_tool": "create_client"}
+{"utterance": "I have a new patient starting today, his name is Cyrus", "expected_tool": "create_client"}
+{"utterance": "can you quickly create a file for my new client, name Farid", "expected_tool": "create_client"}
+{"utterance": "before the session let me add Nadia as a client", "expected_tool": "create_client"}
+{"utterance": "Maryam is 45", "expected_tool": "create_client"}
+{"utterance": "before we start, pull up everything we have on Sara", "expected_tool": "get_client_full"}
+{"utterance": "I need to review everything we have on Nadia before today's call", "expected_tool": "get_client_full"}
+{"utterance": "get me everything on Dara — profile and all session notes", "expected_tool": "get_client_full"}
+{"utterance": "Full summary for Reza — profile plus every note", "expected_tool": "get_client_full"}
+{"utterance": "show me Sara's profile only without notes", "expected_tool": "get_client"}
+{"utterance": "just the contact info for Sara, not her full file", "expected_tool": "get_client"}
+{"utterance": "I need Cyrus's email before the next session", "expected_tool": "get_client"}
+{"utterance": "What does Dara do for work?", "expected_tool": "get_client"}
+{"utterance": "show Ali's notes but not his profile fields", "expected_tool": "list_client_notes"}
+{"utterance": "what notes do we have on Sara", "expected_tool": "list_client_notes"}
+{"utterance": "What are Nadia's coaching goals?", "expected_tool": "list_client_notes"}
+{"utterance": "What decisions has Farid made so far?", "expected_tool": "list_client_notes"}
+{"utterance": "Show Maryam's progress updates", "expected_tool": "list_client_notes"}
+{"utterance": "Who do I have on my books right now?", "expected_tool": "list_clients"}
+{"utterance": "How many clients are currently in the system?", "expected_tool": "list_clients"}
+{"utterance": "Give me a roster of all my clients", "expected_tool": "list_clients"}
+{"utterance": "I no longer work with Farid — delete his file", "expected_tool": "delete_client"}
+{"utterance": "Remove Cyrus and all records associated with him", "expected_tool": "delete_client"}
+{"utterance": "document that Ali made progress this week — he ran every day", "expected_tool": "add_client_note"}
+{"utterance": "Sara told me she finally committed to the new morning routine, note it down", "expected_tool": "add_client_note"}
+{"utterance": "save a goal for Reza: get promoted within 12 months", "expected_tool": "add_client_note"}
+{"utterance": "put a note on Ali's file that he's feeling anxious about the promotion", "expected_tool": "add_client_note"}
+{"utterance": "quick note on Sara — she mentioned feeling stuck in her relationship", "expected_tool": "add_client_note"}

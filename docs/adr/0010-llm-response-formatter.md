@@ -99,15 +99,17 @@ return formatted       return deterministic reply
 **`app/api/chat.py` — `chat` endpoint**:
 3. After the `try_direct_reply` early-return branch that bypasses `generate_response`.
 
-### 4. Feature flag (`app/core/config.py`)
+### 4. Feature flag and temperature (`app/core/config.py`)
 
-The formatter is **enabled by default** because the application is used by a single coach with human end-users:
+The formatter is **disabled by default** to prevent small-model hallucination.  The deterministic template is already correct and PII-safe; the formatter adds latency with no correctness benefit when the LLM is unreliable:
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `RESPONSE_FORMATTER_ENABLED` | `true` | Enable LLM formatting pass for fast-path data replies |
+| `RESPONSE_FORMATTER_ENABLED` | `false` | Enable LLM formatting pass for fast-path data replies |
+| `TEMPERATURE_GROUNDED` | `0.0` | Temperature used for the formatter LLM call |
+| `MAX_TOKENS_CLASSIFY` | `64` | Token budget for the formatter call |
 
-Disable with `RESPONSE_FORMATTER_ENABLED=false` if Ollama is under load, the model produces poor reformatting, or PII preservation rate falls below an acceptable threshold.  All tests patch the flag explicitly, so the default does not affect the test suite (the formatter falls back gracefully when Ollama is unavailable).
+Enable with `RESPONSE_FORMATTER_ENABLED=true` when you have verified the model produces reliable rephrasing (benchmark with `scripts/benchmark_response_formatter.py` first).  The formatter call always runs at `TEMPERATURE_GROUNDED=0.0` for deterministic output — the global `TEMPERATURE` setting does not apply to it.
 
 ### 5. Benchmark script (`scripts/benchmark_response_formatter.py`)
 
@@ -138,9 +140,9 @@ python scripts/benchmark_response_formatter.py --samples 4 --model llama3.1:8b
 - 19 unit and integration tests cover all code paths including PII drop, LLM error, and the flag.
 
 **Negative:**
-- Each formatted fast-path reply adds one LLM round-trip (~500–2000 ms on a local small model). This is acceptable for a single-user deployment where latency is less critical than quality.
+- Each formatted fast-path reply adds one LLM round-trip (~500–2000 ms on a local small model). Acceptable only when enabled explicitly.
 - Small models may occasionally drop or rephrase phone numbers in unusual formats; the `_PHONE_RE` extractor may not catch all variants, so the PII check is not 100% exhaustive.
-- `RESPONSE_FORMATTER_ENABLED=true` is the default — operators must opt out with `RESPONSE_FORMATTER_ENABLED=false` when using the system in a strict-accuracy or low-latency context.
+- `RESPONSE_FORMATTER_ENABLED=false` is the default — operators must opt in with `RESPONSE_FORMATTER_ENABLED=true` after verifying model quality.
 - The formatter system prompt is a single shared prompt for all tools.  Unusual tool outputs (e.g. multi-client tables with notes) may produce inconsistent formatting on smaller models.
 
 ## Alternatives Considered

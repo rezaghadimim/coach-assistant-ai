@@ -268,9 +268,9 @@ async def generate_response(
     full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
 
     if stream:
-        return provider.stream(full_messages)
+        return provider.stream(full_messages, temperature=settings.temperature_advice)
 
-    result = await provider.complete(full_messages)
+    result = await provider.complete(full_messages, temperature=settings.temperature_advice)
     return result.content
 
 
@@ -341,7 +341,11 @@ async def _generate_with_tools(
     full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
 
     for _ in range(_MAX_TOOL_ITERATIONS):
-        result = await provider.complete(full_messages, tools=tools)
+        result = await provider.complete(
+            full_messages,
+            tools=tools,
+            temperature=settings.temperature_tool,
+        )
 
         if not result.has_tool_calls:
             raw_content = result.content
@@ -373,7 +377,9 @@ async def _generate_with_tools(
 
             if looks_like_malformed_tool_call(raw_content):
                 plain_messages = [{"role": "system", "content": system_prompt}] + list(messages)
-                plain_result = await provider.complete(plain_messages)
+                plain_result = await provider.complete(
+                    plain_messages, temperature=settings.temperature_tool
+                )
                 content = _sanitize_assistant_reply(plain_result.content, last_user=last_user)
                 if content.strip() and not looks_like_malformed_tool_call(content):
                     return content

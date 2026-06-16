@@ -64,12 +64,17 @@ One JSON object per line:
 {"utterance": "Ali's age is 23", "tool": "create_client", "hint": "profile:age"}
 {"utterance": "Note that Ali decided to change careers", "tool": "add_client_note", "hint": "note_type:decision"}
 {"utterance": "What are Ali's goals?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "How can I help Ali feel less overwhelmed?", "tool": "none", "hint": "advice"}
 ```
 
 Fields:
 - `utterance` — example coach message (required)
-- `tool` — correct tool name (required)
-- `hint` — optional metadata, e.g. `"profile:age"`, `"note_type:goal"` — used by param extraction
+- `tool` — correct tool name, or `"none"` for advice/general questions that must NOT fire a tool (required)
+- `hint` — optional metadata, e.g. `"profile:age"`, `"note_type:goal"`, `"advice"` — used by param extraction
+
+**Negative (`tool:"none"`) examples are critical.** Without them the router cannot learn the boundary between "save a goal for Ali" and "what's a good exercise for goal-setting?" — and the LLM gets called for advice questions unnecessarily.
+
+The corpus is **English-only**.  `multilingual-e5-small` is the embed model for diverse English phrasing.
 
 To add examples, edit `routing.jsonl` and call `POST /api/tools/reindex` (no restart required).
 
@@ -131,7 +136,8 @@ TOOL_ROUTER_ENABLED=true
 TOOL_ROUTER_BACKEND=auto
 OLLAMA_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
 TOOL_KNOWLEDGE_DIR=docs/tool-knowledge
-TOOL_ROUTER_THRESHOLD=0.75
+# Tuned to 0.65 against 307-example corpus: 95.77% hard-set accuracy, precision 1.00.
+TOOL_ROUTER_THRESHOLD=0.65
 TOOL_ROUTER_MARGIN=0.08
 TOOL_ROUTER_USE_E5_PREFIX=true
 
@@ -157,7 +163,7 @@ Docker users: the embed model must be pulled on the **host** Ollama. The API rea
 
 Set `TOOL_ROUTER_USE_E5_PREFIX=false` when using a model that does not expect these prefixes.
 
-> The corpus is English-only. `multilingual-e5-small` is still the recommended model because it handles diverse English phrasing well and can be extended with other languages later simply by adding examples to `routing.jsonl`.
+> The corpus is **English-only**. `multilingual-e5-small` is the recommended embed model because it handles diverse English phrasing well.
 
 ## API
 
@@ -231,7 +237,9 @@ python scripts/eval_tool_routing.py --backend rerank --hard --show-errors
 python scripts/eval_tool_routing.py --backend token --min-accuracy 0.90 --exit-nonzero
 ```
 
-Target accuracy: **≥ 90%** on token backend, **≥ 92%** on embedding backend, **≥ 85%** on hard set with rerank backend.
+Target accuracy: **≥ 94%** on token backend (standard set), **≥ 95%** on hard set with token backend at threshold 0.65, **≥ 97%** with rerank backend.
+
+Note: all deferrals (router not confident) are benign — they fall through to the LLM router and full tool loop.  Precision (no wrong-tool fires) is more important than recall.
 
 ### Full benchmark (compare all backends)
 
@@ -256,8 +264,15 @@ If the router is overriding the LLM too aggressively:
 ## Extending the corpus
 
 Good examples to add:
-- **Hard negatives** — same subject, different tool (most valuable for disambiguation)
-  - `"Ali's age is 23"` → `create_client` vs `"Note that Ali is 23"` → `add_client_note`
+- **Negative (`tool:"none"`) examples** — advice questions that must NOT fire a tool (highest value for preventing misroutes)
+  - `"How can I help Ali feel less overwhelmed?"` → `none`
+  - `"What is a good coaching technique for procrastination?"` → `none`
+- **Confusable pairs** — minimal-pair examples that share words but map to different tools:
+  - `"Ali's age is 23"` → `create_client` vs `"Note that Ali is 23 years old"` → `add_client_note`
+  - `"Show me Ali's profile"` → `get_client` vs `"Show me everything about Ali"` → `get_client_full`
+- **Multi-clause / noisy real phrasing** — how coaches actually type, not textbook sentences
+  - `"ok so Ali just told me his new number is 0912…, save it"` → `create_client`
+- **More client names** — add Reza, Dara, Hassan, Maryam, Nadia, Cyrus, Farid beyond Ali/Sara/Mohammad
 - **Paraphrases** of existing examples in other phrasing styles
 
 Keep `routing.jsonl` and `data/eval/tool_routing.jsonl` in sync: add eval examples for any new training pattern you add.

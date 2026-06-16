@@ -66,10 +66,41 @@ Respond with ONLY valid JSON and no extra text:
 Rules:
 - Use "none" if the message is a general coaching question or does not map to any tool.
 - Prefer specific tools over general ones when the intent is clear.
-- "give me all visitors in table" → list_clients
-- "what is Ali's age?" → get_client
-- "show me everything about Sara" → get_client_full
+
+Examples:
+- "give me all visitors in table" → {"tool": "list_clients"}
+- "what is Ali's age?" → {"tool": "get_client"}
+- "show me everything about Sara" → {"tool": "get_client_full"}
+- "what are Ali's goals?" → {"tool": "list_client_notes"}
+- "how can I help Ali feel less overwhelmed?" → {"tool": "none"}
+- "what's a good question to ask about procrastination?" → {"tool": "none"}
+- "in general how do I run a GROW session?" → {"tool": "none"}
+- "I want to know one way to build trust with a new client" → {"tool": "none"}
 """
+
+# JSON schema for constrained decoding via Ollama's format= parameter.
+# Forces the model to emit exactly {"tool": "<one of the valid names>"}.
+_ROUTER_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "tool": {
+            "type": "string",
+            "enum": [
+                "create_client",
+                "add_client_note",
+                "update_client_note",
+                "delete_client_note",
+                "delete_client",
+                "get_client",
+                "get_client_full",
+                "list_client_notes",
+                "list_clients",
+                "none",
+            ],
+        }
+    },
+    "required": ["tool"],
+}
 
 
 def _parse_tool_from_response(content: str) -> Optional[str]:
@@ -119,7 +150,12 @@ async def classify_tool_llm(
     full_messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + messages
 
     try:
-        result = await provider.complete(full_messages)
+        result = await provider.complete(
+            full_messages,
+            temperature=settings.temperature_tool,
+            num_predict=settings.max_tokens_classify,
+            format=_ROUTER_SCHEMA,
+        )
         content = result.content if hasattr(result, "content") else str(result)
     except Exception as exc:
         logger.debug("llm_router: provider call failed: %s", exc)

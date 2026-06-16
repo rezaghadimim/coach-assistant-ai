@@ -43,12 +43,13 @@ class OpenRouterProvider:
         *,
         stream: bool = False,
         tools: Optional[list[dict]] = None,
+        temperature: Optional[float] = None,
     ) -> dict:
         payload: dict = {
             "model": self._model,
             "messages": messages,
             "stream": stream,
-            "temperature": settings.temperature,
+            "temperature": temperature if temperature is not None else settings.temperature,
             "max_tokens": settings.max_tokens,
         }
         if tools:
@@ -60,8 +61,14 @@ class OpenRouterProvider:
         messages: list[dict],
         *,
         tools: Optional[list[dict]] = None,
+        temperature: Optional[float] = None,
+        # format and num_predict are Ollama-specific; accepted here for interface compatibility.
+        format: Optional[dict] = None,
+        num_predict: Optional[int] = None,
     ) -> CompletionResult:
-        payload = self._build_payload(messages, stream=False, tools=tools)
+        payload = self._build_payload(
+            messages, stream=False, tools=tools, temperature=temperature
+        )
         async with httpx.AsyncClient(
             base_url=settings.openrouter_base_url,
             timeout=settings.openrouter_timeout,
@@ -97,8 +104,14 @@ class OpenRouterProvider:
     async def stream(
         self,
         messages: list[dict],
+        *,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
-        payload = self._build_payload(messages, stream=True)
+        payload = self._build_payload(
+            messages,
+            stream=True,
+            temperature=temperature if temperature is not None else settings.temperature_advice,
+        )
         async with httpx.AsyncClient(
             base_url=settings.openrouter_base_url,
             timeout=settings.openrouter_timeout,

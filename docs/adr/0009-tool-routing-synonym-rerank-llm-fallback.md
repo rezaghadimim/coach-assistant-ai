@@ -119,6 +119,27 @@ The LLM is given only the tool names (no descriptions) so the call is cheap.  If
 | Always call the LLM router for every message | Higher latency and cost; the fast-path layers handle the vast majority of messages without an LLM call |
 | Use a separate ANN index for the tool router | Corpus is ~130 examples; brute-force cosine is O(130) and fast enough; ANN adds infrastructure complexity |
 
+## Amendment — Structured Output LLM Router (2026-06-17)
+
+The LLM router fallback (`app/core/llm_router.py`) was updated to use Ollama's `format=` constrained decoding with a JSON schema that restricts the model output to one of the known tool names or `"none"`:
+
+```json
+{"type":"object","properties":{"tool":{"type":"string","enum":["create_client","add_client_note",...]}},"required":["tool"]}
+```
+
+This eliminates the JSON wrapper leakage (empty `{}`, garbage JSON) that occurred when the small model's free-form `{"tool":"..."}` attempt failed.  The call now runs at `TEMPERATURE_TOOL=0.0` and is capped at `MAX_TOKENS_CLASSIFY=64` tokens.
+
+Four to eight few-shot `none` examples were added to the LLM router system prompt so the model learns to return `{"tool":"none"}` for advice questions rather than hallucinating a tool name.
+
+The routing corpus was also expanded from ~131 to **307 examples** adding negative/`none`, multi-clause/noisy, and confusable-pair rows.  `TOOL_ROUTER_THRESHOLD` was retuned from `0.75` → `0.65` based on eval results:
+
+| Backend | Standard | Hard set |
+|---|---|---|
+| Token (threshold 0.75) | 94.55% | 85.92% |
+| Token (threshold 0.65) | 94.55% | **95.77%** |
+
+Precision remains 1.00 (zero wrong-tool fires) at the lower threshold.
+
 ## Future Direction
 
 - Run `scripts/benchmark_tool_routing.py` after deployment to establish an accuracy baseline on the hard set; use it to tune `TOOL_ROUTER_RERANK_THRESHOLD`.

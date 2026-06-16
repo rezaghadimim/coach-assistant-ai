@@ -230,15 +230,31 @@ def retrieve(
 
 
 def format_retrieval_context(chunks: list[RetrievedChunk]) -> str:
-    """Format retrieved chunks for inclusion in a system prompt."""
+    """Format retrieved chunks for inclusion in a system prompt.
+
+    Each chunk is tagged with its source path so the model can attribute
+    answers rather than fabricate.  A strict grounding contract is prepended
+    so the model abstains when the retrieved knowledge does not contain the
+    answer instead of hallucinating.
+    """
     if not chunks:
         return ""
 
-    lines = ["## Relevant Coaching Knowledge"]
+    lines = [
+        "## Relevant Coaching Knowledge",
+        (
+            "Use ONLY the passages below to answer factual questions about "
+            "coaching methods, frameworks, or techniques. "
+            "If the answer is not contained in these passages, say you do not "
+            "have that in your knowledge base and continue from general coaching "
+            "principles — never invent sources, studies, statistics, or quotes."
+        ),
+        "",
+    ]
     for index, chunk in enumerate(chunks, start=1):
-        lines.append(
-            f"[{index}] {chunk.source_path} ({chunk.chunk_id}, score={chunk.score:.2f})"
-        )
+        import os
+        source_name = os.path.basename(chunk.source_path)
+        lines.append(f"[{index}] Source: {source_name} (score={chunk.score:.2f})")
         lines.append(chunk.text)
         lines.append("")
     return "\n".join(lines).strip()

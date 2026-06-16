@@ -30,8 +30,19 @@ class Settings(BaseSettings):
     openrouter_app_name: str = "Coach Assistant AI"
 
     # Generation parameters
-    temperature: float = 0.7
+    # Per-task temperatures: keep low for deterministic tasks, higher only for free-form advice.
+    temperature_tool: float = 0.0       # Tool-calling loop, LLM router, profile extraction
+    temperature_grounded: float = 0.0   # RAG-grounded answers, data reply formatting
+    temperature_advice: float = 0.5     # Open coaching advice (free-form prose)
+    # Legacy alias kept for external callers / env var compatibility.
+    # Defaults to temperature_advice; overridden per-call by the task-specific settings above.
+    temperature: float = 0.5
     max_tokens: int = 1024
+    # Sampling options applied to all Ollama completions.
+    top_p: float = 0.9
+    repeat_penalty: float = 1.1
+    # Reduced token budget for single-purpose classify calls (LLM router, formatter).
+    max_tokens_classify: int = 64
 
     # RAG
     rag_enabled: bool = True
@@ -40,7 +51,10 @@ class Settings(BaseSettings):
     rag_chunk_size: int = 300
     rag_chunk_overlap: int = 50
     rag_top_k: int = 3
-    rag_min_score: float = 0.05
+    # Minimum similarity score to include a chunk in the context window.
+    # 0.15 prevents near-zero relevance matches from priming hallucinations while
+    # remaining safe for both token-cosine and E5-embedding backends.
+    rag_min_score: float = 0.15
     # backend: "embedding" | "token" | "auto"
     # "auto" uses E5 embedding when the embed model probe passes, else falls back to token cosine.
     rag_backend: str = "auto"
@@ -76,7 +90,9 @@ class Settings(BaseSettings):
     tool_router_backend: str = "auto"
     ollama_embed_model: str = "karuniaperjuangan/multilingual-e5-small"
     tool_knowledge_dir: str = "docs/tool-knowledge"
-    tool_router_threshold: float = 0.75
+    # Tuned against 307-example corpus: threshold=0.65 yields 95.77% on the hard
+    # eval set (up from 85.92% at 0.75) with precision=1.00 (no wrong-tool fires).
+    tool_router_threshold: float = 0.65
     tool_router_margin: float = 0.08
     # Prepend "query: " / "passage: " prefixes required by multilingual-e5 models.
     tool_router_use_e5_prefix: bool = True
@@ -97,15 +113,16 @@ class Settings(BaseSettings):
     tool_router_llm_fallback_enabled: bool = True
 
     # Response Formatter: optional LLM pass for human-friendly data replies.
+    # Disabled by default: the deterministic template is already correct and PII-safe.
     # When enabled, fast-path read results are rephrased by a compact LLM call
-    # before being returned.  PII validation runs after formatting; on failure
-    # the deterministic template is used instead.
+    # (at temperature_grounded=0) before being returned.  PII validation runs after
+    # formatting; on failure the deterministic template is used instead.
     # Uses the same Ollama model as the main chat (ollama_model).
     response_formatter_enabled: bool = Field(
-        default=True,
+        default=False,
         description=(
             "Pass fast-path data replies through an LLM for human-friendly formatting. "
-            "Disable with RESPONSE_FORMATTER_ENABLED=false."
+            "Enable with RESPONSE_FORMATTER_ENABLED=true."
         ),
     )
 

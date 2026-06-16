@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 import httpx
 
@@ -20,18 +20,25 @@ class OllamaProvider:
         *,
         stream: bool = False,
         tools: Optional[list[dict]] = None,
+        temperature: Optional[float] = None,
+        num_predict: Optional[int] = None,
+        format: Optional[dict] = None,
     ) -> dict:
         payload: dict = {
             "model": settings.ollama_model,
             "messages": messages,
             "stream": stream,
             "options": {
-                "temperature": settings.temperature,
-                "num_predict": settings.max_tokens,
+                "temperature": temperature if temperature is not None else settings.temperature,
+                "num_predict": num_predict if num_predict is not None else settings.max_tokens,
+                "top_p": settings.top_p,
+                "repeat_penalty": settings.repeat_penalty,
             },
         }
         if tools:
             payload["tools"] = tools
+        if format is not None:
+            payload["format"] = format
         return payload
 
     async def complete(
@@ -39,8 +46,18 @@ class OllamaProvider:
         messages: list[dict],
         *,
         tools: Optional[list[dict]] = None,
+        temperature: Optional[float] = None,
+        num_predict: Optional[int] = None,
+        format: Optional[dict] = None,
     ) -> CompletionResult:
-        payload = self._build_payload(messages, stream=False, tools=tools)
+        payload = self._build_payload(
+            messages,
+            stream=False,
+            tools=tools,
+            temperature=temperature,
+            num_predict=num_predict,
+            format=format,
+        )
         async with httpx.AsyncClient(
             base_url=settings.ollama_base_url,
             timeout=settings.ollama_timeout,
@@ -75,8 +92,14 @@ class OllamaProvider:
     async def stream(
         self,
         messages: list[dict],
+        *,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
-        payload = self._build_payload(messages, stream=True)
+        payload = self._build_payload(
+            messages,
+            stream=True,
+            temperature=temperature if temperature is not None else settings.temperature_advice,
+        )
         async with httpx.AsyncClient(
             base_url=settings.ollama_base_url,
             timeout=settings.ollama_timeout,

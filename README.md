@@ -4,20 +4,22 @@ Repository: [github.com/rezaghadimim/coach-assistant-ai](https://github.com/reza
 
 An AI-powered coaching assistant that helps coaches manage their clients,
 document each client's journey, and deliver actionable coaching guidance.
-Runs locally using open-source LLMs.
+Runs locally using open-source LLMs.  **English-only interface.**
 
 ## Quick Summary
 
 | Item | Detail |
 |------|--------|
 | LLM | Llama 3.1 8B (via Ollama) |
-| Embed model | multilingual-e5-small (via Ollama, for tool routing) |
-| RAG | Two-stage retrieval: E5 bi-encoder (Ollama) → local cross-encoder rerank (`BAAI/bge-reranker-base` via fastembed) |
-| Tool Routing | Embedding + token similarity for pre-LLM tool disambiguation |
+| Embed model | multilingual-e5-small (via Ollama, for tool routing + RAG stage-1) |
+| RAG | Two-stage retrieval: E5 bi-encoder (Ollama) → local cross-encoder rerank (`BAAI/bge-reranker-base` via fastembed); grounding contract prevents hallucinated "facts" |
+| Tool Routing | 307-example corpus; token → embedding → rerank → LLM router (structured JSON output at temp=0); 95.77% hard-set accuracy |
+| Generation | Per-task temperatures: `0.0` for tool/data calls, `0.5` for coaching advice |
 | Backend | FastAPI (Python) |
 | Database | SQLite (client notes, sessions, memory) |
 | UI | Open WebUI (via OpenAI-compatible API) |
 | Hosting | Local machine / Docker |
+| Language | English only |
 
 ## Key Features
 
@@ -53,7 +55,11 @@ python3 main.py
 python3 -m unittest discover -s tests -p "test_*.py"
 
 # 5. (Optional) Evaluate tool routing accuracy
-python3 scripts/eval_tool_routing.py --backend token --show-errors
+PYTHONPATH=. python3 scripts/eval_tool_routing.py --backend token --show-errors
+PYTHONPATH=. python3 scripts/eval_tool_routing.py --backend token --hard --show-errors
+
+# 5b. (Optional) Evaluate RAG grounding / abstention quality
+PYTHONPATH=. python3 scripts/eval_rag_grounding.py --show-failures
 
 # 6. (Optional, Phase 5) Export sessions for fine-tuning
 python3 scripts/export_training_data.py --output data/training/sessions.jsonl

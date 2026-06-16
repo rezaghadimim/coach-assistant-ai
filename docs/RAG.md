@@ -25,13 +25,25 @@ For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](F
 
 ```
 Query
-  → Stage 1: E5 embed / TF cosine  (retrieve_k=25 candidates)
+  → Stage 1: E5 embed / TF cosine  (retrieve_k=25 candidates, min_score≥0.15)
   → Stage 2: fastembed reranker    (optional, narrows to top_k=3)
   → source deduplication
-  → format_retrieval_context()
+  → format_retrieval_context()     (adds grounding contract + source tags)
   → build_system_prompt()
   → LLM
 ```
+
+## Grounding contract
+
+Every context window that contains retrieved chunks is prepended with a strict instruction:
+
+> **Use ONLY the passages below to answer factual questions about coaching methods, frameworks, or techniques. If the answer is not contained in these passages, say you do not have that in your knowledge base and continue from general coaching principles — never invent sources, studies, statistics, or quotes.**
+
+This prevents the LLM from hallucinating "facts" when retrieved chunks are marginally relevant.  Each chunk is also tagged with its `source_path` filename so the model can attribute answers rather than fabricate citations.
+
+When no chunk clears the `RAG_MIN_SCORE` floor (default `0.15`), **no context is injected at all** — avoiding the negative priming effect where low-score chunks suggest plausible-sounding but wrong content.
+
+This follows the *retrieval-conditional abstain* pattern: inject context only when the retriever is confident, and let the model abstain gracefully when it is not.
 
 ## Ingestion
 
@@ -65,6 +77,7 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RAG_RETRIEVE_K` | `25` | Stage-1 candidate pool size |
+| `RAG_MIN_SCORE` | `0.15` | Minimum score to include a chunk; 0 means inject everything |
 | `RAG_RERANK_ENABLED` | `true` | Enable/disable reranking |
 | `RAG_RERANK_MODEL` | `BAAI/bge-reranker-base` | fastembed cross-encoder model name |
 | `RAG_RERANK_BATCH_SIZE` | `32` | Passages scored per ONNX batch |
@@ -117,3 +130,28 @@ python3 -m unittest discover -s tests -p "test_*.py"
 - `tests/test_rerank.py` — unit tests with a mocked encoder (fast, offline)
 - `tests/test_rag_rerank.py` — two-stage `retrieve()` pipeline tests (mocked reranker)
 - `tests/test_rerank_integration.py` — optional end-to-end test against the real ONNX model (skipped when the model is not cached; set `RUN_RERANK_INTEGRATION=1` to download and run)
+
+## Grounding eval
+
+`scripts/eval_rag_grounding.py` evaluates two retrieval-quality properties:
+
+1. **Abstention** — off-topic queries (weather, code, math, recipes …) should return zero chunks above `RAG_MIN_SCORE`.  If chunks leak through, the LLM is primed to hallucinate answers to out-of-domain questions.
+2. **Recall** — in-corpus coaching questions should return at least one chunk; optional keyword checks verify topic coverage.
+
+```bash
+# Run with default token backend (offline, no Ollama needed)
+PYTHONPATH=. python scripts/eval_rag_grounding.py --show-failures
+
+# Run with embedding backend
+PYTHONPATH=. python scripts/eval_rag_grounding.py --backend embedding --show-failures
+
+# Fail if accuracy < 85%
+PYTHONPATH=. python scripts/eval_rag_grounding.py --min-accuracy 0.85 --exit-nonzero
+```
+
+Eval cases live in `data/eval/rag_grounding.jsonl`.  Add rows to extend coverage:
+
+```json
+{"question": "off-topic query here", "must_abstain": true, "category": "off_topic"}
+{"question": "What is the GROW model?", "must_abstain": false, "keywords": ["GROW", "Goal"], "category": "coaching_concept"}
+```

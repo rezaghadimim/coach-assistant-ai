@@ -18,10 +18,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    pass
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +138,11 @@ async def format_data_reply(
                 ),
             },
         ]
-        result = await provider.complete(messages)
+        result = await provider.complete(
+            messages,
+            temperature=settings.temperature_grounded,
+            num_predict=settings.max_tokens_classify,
+        )
         formatted = result.content.strip()
 
         if not formatted:

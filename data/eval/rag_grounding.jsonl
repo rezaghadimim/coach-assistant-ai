@@ -1,0 +1,20 @@
+{"question": "What is the weather in Tehran today?", "must_abstain": true, "category": "off_topic"}
+{"question": "Write me a Python script to sort a list", "must_abstain": true, "category": "off_topic"}
+{"question": "What is the capital of France?", "must_abstain": true, "category": "off_topic"}
+{"question": "Who won the football World Cup in 2022?", "must_abstain": true, "category": "off_topic"}
+{"question": "Can you translate this sentence into Spanish?", "must_abstain": true, "category": "off_topic"}
+{"question": "What is 17 multiplied by 43?", "must_abstain": true, "category": "off_topic"}
+{"question": "Give me a recipe for chocolate cake", "must_abstain": true, "category": "off_topic"}
+{"question": "What are the latest stock prices?", "must_abstain": true, "category": "off_topic"}
+{"question": "Tell me a joke", "must_abstain": true, "category": "off_topic"}
+{"question": "Who is the CEO of Apple?", "must_abstain": true, "category": "off_topic"}
+{"question": "What is the GROW model?", "must_abstain": false, "keywords": ["GROW", "Goal", "Reality", "Options", "Will"], "category": "coaching_concept"}
+{"question": "How does motivational interviewing work?", "must_abstain": false, "keywords": ["motivational", "MI", "ambivalence", "OARS"], "category": "coaching_concept"}
+{"question": "What is a SMART goal?", "must_abstain": false, "keywords": ["SMART", "Specific", "Measurable", "Achievable"], "category": "coaching_concept"}
+{"question": "What are powerful coaching questions?", "must_abstain": false, "keywords": ["question", "coaching", "open"], "category": "coaching_concept"}
+{"question": "What does CBT-informed coaching involve?", "must_abstain": false, "keywords": ["CBT", "cognitive", "coaching", "thinking"], "category": "coaching_concept"}
+{"question": "What is active listening in coaching?", "must_abstain": false, "keywords": ["listen", "reflect", "coaching"], "category": "coaching_concept"}
+{"question": "What is a strengths-based coaching approach?", "must_abstain": false, "keywords": ["strength", "resources", "coaching"], "category": "coaching_concept"}
+{"question": "What is the wheel of life exercise?", "must_abstain": false, "keywords": ["wheel", "life", "balance", "areas"], "category": "coaching_concept"}
+{"question": "How does accountability work in coaching?", "must_abstain": false, "keywords": ["accountab", "commit", "coaching"], "category": "coaching_concept"}
+{"question": "What frameworks are used in coaching?", "must_abstain": false, "keywords": ["GROW", "model", "framework", "coaching"], "category": "coaching_concept"}
