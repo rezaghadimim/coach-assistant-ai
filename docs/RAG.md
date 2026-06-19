@@ -43,23 +43,51 @@ This prevents the LLM from hallucinating "facts" when retrieved chunks are margi
 
 When no chunk clears the `RAG_MIN_SCORE` floor (default `0.15`), **no context is injected at all** — avoiding the negative priming effect where low-score chunks suggest plausible-sounding but wrong content.
 
+Off-topic queries detected by the scope guard (`app/core/scope.py`) return zero chunks immediately — retrieval abstains before any similarity search runs.
+
 This follows the *retrieval-conditional abstain* pattern: inject context only when the retriever is confident, and let the model abstain gracefully when it is not.
+
+## Knowledge layout
+
+```text
+docs/knowledge/
+├── README.md                    ← overview (this repo)
+├── SETUP_PRIVATE_REPO.md        ← GitHub + clone guide (start here)
+├── private-repo-scaffold/       ← reference files for new private repos
+├── starter/                     ← committed bootstrap docs
+└── private/                     ← git submodule → oach-knowledge
+```
+
+**Starter** docs live in this repo. **Real documents** live in the private
+[`oach-knowledge`](https://github.com/rezaghadimim/oach-knowledge) repo, linked
+as a submodule at `private/`. See
+[`docs/knowledge/SETUP_PRIVATE_REPO.md`](knowledge/SETUP_PRIVATE_REPO.md).
+
+On every ingest, starter files are indexed first, then private files are **appended**.
+Same relative path in both → **private wins**.
 
 ## Ingestion
 
 ```bash
-python scripts/ingest.py --docs-dir ./docs/knowledge/
-```
+# After clone (once):
+./scripts/setup_knowledge_private_repo.sh
+# or: git submodule update --init --recursive docs/knowledge/private
 
-`docs/knowledge/` is treated as a local-only ingest directory. Add your real source
-documents there on your machine or in a mounted volume; the repo only tracks a sample file.
+python scripts/ingest.py
+```
 
 Or via API:
 
 ```bash
 curl -X POST http://localhost:8000/api/ingest \
   -H "Content-Type: application/json" \
-  -d '{"chunk_size":512,"chunk_overlap":50}'
+  -d '{"chunk_size": 300, "chunk_overlap": 50}'
+```
+
+Legacy single-directory ingest still works for tests:
+
+```bash
+python scripts/ingest.py --starter-dir ./my/docs --private-dir ./my/private
 ```
 
 ## Reranker setup
@@ -76,14 +104,18 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RAG_RETRIEVE_K` | `25` | Stage-1 candidate pool size |
-| `RAG_MIN_SCORE` | `0.15` | Minimum score to include a chunk; 0 means inject everything |
+| `RAG_MIN_SCORE` | `0.15` | Stage-1 candidate pool floor (bi-encoder / token cosine) |
+| `RAG_RERANK_MIN_SCORE` | `0.42` | Final floor after cross-encoder reranking (sigmoid 0–1) |
+| `RAG_HYBRID_RRF_ENABLED` | `true` | Merge embedding + token stage-1 lists via RRF before rerank |
+| `RAG_RETRIEVE_K` | `30` | Stage-1 candidate pool size |
 | `RAG_RERANK_ENABLED` | `true` | Enable/disable reranking |
 | `RAG_RERANK_MODEL` | `BAAI/bge-reranker-base` | fastembed cross-encoder model name |
 | `RAG_RERANK_BATCH_SIZE` | `32` | Passages scored per ONNX batch |
 | `RAG_RERANK_MAX_PASSAGE_CHARS` | `2000` | Passage truncation before scoring |
 | `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default) |
-| `RAG_TOP_K` | `3` | Final number of chunks injected into prompt |
+| `RAG_KNOWLEDGE_STARTER_DIR` | `docs/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
+| `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Local-only docs merged on ingest (gitignored) |
+| `RAG_TOP_K` | `2` | Final number of chunks injected into prompt |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings only** (stage 1) |
 
 `OLLAMA_RERANK_MODEL` is still accepted as a legacy alias for `RAG_RERANK_MODEL`.

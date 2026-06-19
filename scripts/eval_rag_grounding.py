@@ -93,12 +93,21 @@ def main() -> int:
         os.environ["RAG_BACKEND"] = args.backend
 
     from app.core.config import settings
-    from app.rag.ingest import ingest_documents_from_dir
+    from app.core.knowledge_paths import knowledge_ingest_summary, knowledge_private_dir_if_exists, knowledge_starter_dir
+    from app.rag.ingest import ingest_documents_from_dirs
     from app.rag.retriever import index_chunks, retrieve
 
-    # Build the index from whatever is in the configured docs directory.
-    print(f"Ingesting from: {settings.rag_docs_dir}")
-    chunks = ingest_documents_from_dir(settings.rag_docs_dir)
+    starter_dir = str(knowledge_starter_dir())
+    private_dir = knowledge_private_dir_if_exists()
+    private_str = str(private_dir) if private_dir is not None else None
+
+    print(f"Ingesting from: {knowledge_ingest_summary()}")
+    chunks = ingest_documents_from_dirs(
+        starter_dir,
+        private_str,
+        chunk_size=settings.rag_chunk_size,
+        chunk_overlap=settings.rag_chunk_overlap,
+    )
     indexed = index_chunks(
         chunks,
         embed=(settings.rag_backend != "token"),

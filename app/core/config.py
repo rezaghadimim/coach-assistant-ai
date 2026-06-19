@@ -46,22 +46,46 @@ class Settings(BaseSettings):
 
     # RAG
     rag_enabled: bool = True
-    rag_docs_dir: str = "docs/knowledge"
+    # Committed starter / bundled knowledge (safe to git). Indexed on every ingest.
+    rag_knowledge_starter_dir: str = Field(
+        default="docs/knowledge/starter",
+        validation_alias=AliasChoices(
+            "rag_knowledge_starter_dir",
+            "RAG_KNOWLEDGE_STARTER_DIR",
+            # Legacy names map to starter.
+            "rag_knowledge_templates_dir",
+            "RAG_KNOWLEDGE_TEMPLATES_DIR",
+            "rag_docs_dir",
+            "RAG_DOCS_DIR",
+        ),
+    )
+    # Local-only content (private git repo). Merged after starter on ingest.
+    # Files with the same relative path override the starter copy.
+    rag_knowledge_private_dir: str = Field(
+        default="docs/knowledge/private",
+        validation_alias=AliasChoices(
+            "rag_knowledge_private_dir",
+            "RAG_KNOWLEDGE_PRIVATE_DIR",
+        ),
+    )
     # Sized for E5-small (512 subword tokens; ~300 whitespace words is safe).
     rag_chunk_size: int = 300
     rag_chunk_overlap: int = 50
-    rag_top_k: int = 3
-    # Minimum similarity score to include a chunk in the context window.
-    # 0.15 prevents near-zero relevance matches from priming hallucinations while
-    # remaining safe for both token-cosine and E5-embedding backends.
+    rag_top_k: int = 2
+    # Stage-1 candidate pool floor (bi-encoder / token cosine).  Kept low for recall.
     rag_min_score: float = 0.15
+    # Final floor after cross-encoder reranking (sigmoid scores in 0–1).  Higher than
+    # rag_min_score to abstain on off-topic queries that slip through stage-1.
+    rag_rerank_min_score: float = 0.42
     # backend: "embedding" | "token" | "auto"
     # "auto" uses E5 embedding when the embed model probe passes, else falls back to token cosine.
     rag_backend: str = "auto"
     # On-disk cache for chunk embeddings so restarts don't re-embed unchanged content.
     rag_index_cache_path: str = "data/rag_index_cache.json"
     # Stage-1 candidate pool — retrieve this many chunks before reranking, then trim to rag_top_k.
-    rag_retrieve_k: int = 25
+    rag_retrieve_k: int = 30
+    # Merge embedding + token stage-1 lists via RRF before reranking (improves exact-term recall).
+    rag_hybrid_rrf_enabled: bool = True
     # Stage-2 cross-encoder reranker — runs locally in-process via fastembed (ONNX,
     # no PyTorch, no Ollama). Ollama cannot serve reranker models (ollama/ollama #3368).
     rag_rerank_enabled: bool = True

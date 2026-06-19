@@ -2,12 +2,14 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import tempfile
-from typing import List
+from typing import List, Optional
 
 DEFAULT_CHUNK_SIZE = 300
 DEFAULT_CHUNK_OVERLAP = 50
 SUPPORTED_FILE_EXTENSIONS = (".txt", ".md", ".pdf")
+_SECTION_SPLIT = re.compile(r"^(#{2,3}\s+.+)$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -95,30 +97,132 @@ def build_document_chunks(
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> List[DocumentChunk]:
     """Build structured chunks with source metadata for one document."""
+    if Path(source_path).suffix.lower() == ".md":
+        sections = _split_markdown_sections(text)
+    else:
+        sections = [text]
+
+    source_name = Path(source_path).name
+    chunks: List[DocumentChunk] = []
+    chunk_index = 0
+    for section in sections:
+        section_chunks = _chunk_token_window(
+            section,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        for section_text, start, end in section_chunks:
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=f"{source_name}:{chunk_index}",
+                    source_path=source_path,
+                    text=section_text,
+                    start_token=start,
+                    end_token=end,
+                )
+            )
+            chunk_index += 1
+    return chunks
+
+
+def _split_markdown_sections(text: str) -> List[str]:
+    """Split markdown on ``##`` / ``###`` headings so chunks stay semantically coherent."""
+    parts = _SECTION_SPLIT.split(text)
+    if len(parts) <= 1:
+        return [text.strip()] if text.strip() else []
+
+    sections: List[str] = []
+    preamble = parts[0].strip()
+    if preamble:
+        sections.append(preamble)
+
+    for index in range(1, len(parts), 2):
+        heading = parts[index]
+        body = parts[index + 1] if index + 1 < len(parts) else ""
+        section = f"{heading}\n{body}".strip()
+        if section:
+            sections.append(section)
+    return sections
+
+
+def _chunk_token_window(
+    text: str,
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+) -> List[tuple[str, int, int]]:
+    """Return (chunk_text, start_token, end_token) tuples for one text window."""
     tokens = _tokenize(text)
     if not tokens:
         return []
 
     _validate_chunk_config(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     step = chunk_size - chunk_overlap
-    source_name = Path(source_path).name
 
-    chunks: List[DocumentChunk] = []
-    chunk_index = 0
+    chunks: List[tuple[str, int, int]] = []
     for start in range(0, len(tokens), step):
         end = min(start + chunk_size, len(tokens))
-        chunks.append(
-            DocumentChunk(
-                chunk_id=f"{source_name}:{chunk_index}",
-                source_path=source_path,
-                text=" ".join(tokens[start:end]),
-                start_token=start,
-                end_token=end,
-            )
-        )
-        chunk_index += 1
+        chunks.append((" ".join(tokens[start:end]), start, end))
         if end == len(tokens):
             break
+    return chunks
+
+
+def discover_documents_optional(docs_dir: str) -> List[Path]:
+    """Like :func:`discover_documents` but returns ``[]`` when *docs_dir* is missing."""
+    root = Path(docs_dir).expanduser().resolve()
+    if not root.exists():
+        return []
+    return discover_documents(docs_dir)
+
+
+def discover_knowledge_documents(
+    starter_dir: str,
+    private_dir: Optional[str] = None,
+) -> List[Path]:
+    """Discover starter + private knowledge files, with private overriding starter.
+
+    Both directories are scanned recursively for ``.txt``, ``.md``, and ``.pdf``.
+    When the same relative path exists in both (e.g. ``grow_model.md``), the
+    private copy wins so coaches can fork and customize bundled content locally.
+    """
+    by_key: dict[str, Path] = {}
+    starter_root = Path(starter_dir).expanduser().resolve()
+
+    for path in discover_documents(starter_dir):
+        key = path.relative_to(starter_root).as_posix()
+        by_key[key] = path
+
+    if private_dir:
+        private_root = Path(private_dir).expanduser().resolve()
+        for path in discover_documents_optional(private_dir):
+            key = path.relative_to(private_root).as_posix()
+            by_key[key] = path
+
+    return sorted(by_key.values(), key=lambda item: str(item))
+
+
+def ingest_documents_from_dirs(
+    starter_dir: str,
+    private_dir: Optional[str] = None,
+    *,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> List[DocumentChunk]:
+    """Load supported files from starter + private dirs and return all chunks."""
+    chunks: List[DocumentChunk] = []
+    for path in discover_knowledge_documents(starter_dir, private_dir):
+        text = read_document(str(path))
+        if not text:
+            continue
+        chunks.extend(
+            build_document_chunks(
+                text=text,
+                source_path=str(path),
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+        )
     return chunks
 
 
@@ -127,7 +231,7 @@ def ingest_documents_from_dir(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> List[DocumentChunk]:
-    """Load supported files from a directory and return all generated chunks."""
+    """Load supported files from a single directory and return all generated chunks."""
     chunks: List[DocumentChunk] = []
     for path in discover_documents(docs_dir):
         text = read_document(str(path))

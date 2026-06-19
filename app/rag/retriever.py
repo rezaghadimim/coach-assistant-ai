@@ -17,7 +17,7 @@ import logging
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, replace, field
 from pathlib import Path
 from typing import Iterable, Literal
 
@@ -135,9 +135,36 @@ def ingest_and_index_directory(
     embed: bool = False,
     cache_path: str | None = None,
 ) -> tuple[int, int]:
-    """Chunk all supported docs in a directory and index them."""
+    """Chunk all supported docs in a single directory and index them."""
     chunks = ingest_documents_from_dir(
         docs_dir,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+
+    docs_count = len({chunk.source_path for chunk in chunks})
+    chunks_count = index_chunks(chunks, reset=True, embed=embed, cache_path=cache_path)
+    return docs_count, chunks_count
+
+
+def ingest_and_index_knowledge(
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+    embed: bool = False,
+    cache_path: str | None = None,
+) -> tuple[int, int]:
+    """Index committed starter knowledge plus optional private overrides."""
+    from app.core.knowledge_paths import knowledge_private_dir_if_exists, knowledge_starter_dir
+    from app.rag.ingest import ingest_documents_from_dirs
+
+    starter_dir = str(knowledge_starter_dir())
+    private_dir = knowledge_private_dir_if_exists()
+    private_str = str(private_dir) if private_dir is not None else None
+
+    chunks = ingest_documents_from_dirs(
+        starter_dir,
+        private_str,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
@@ -161,8 +188,7 @@ def retrieve(
     runs in two stages:
 
     1. Stage-1 retrieval — fetch up to ``retrieve_k`` candidates (defaults to
-       ``settings.rag_retrieve_k``, typically 25) using bi-encoder or token
-       similarity.
+       ``settings.rag_retrieve_k``) using bi-encoder, token cosine, or hybrid RRF.
     2. Stage-2 reranking — score candidates with a local cross-encoder
        (``RAG_RERANK_MODEL`` via fastembed) and keep the best ``top_k``.  Falls
        back to stage-1 order when the reranker is unavailable.
@@ -170,13 +196,21 @@ def retrieve(
     Args:
         query:      The coach's message or question.
         top_k:      Maximum number of chunks to return (final context size).
-        min_score:  Minimum similarity score threshold applied to stage-1 scores.
-                    Also applied to rerank scores after reranking.
+        min_score:  Minimum stage-1 similarity floor for the candidate pool.
+                    After reranking, ``settings.rag_rerank_min_score`` is used
+                    instead (sigmoid scores).  When reranking is skipped, *min_score*
+                    applies to the final result.
         backend:    "auto" | "embedding" | "token".
         retrieve_k: Override the stage-1 candidate pool size.  Defaults to
                     ``settings.rag_retrieve_k``.
     """
     if not _index:
+        return []
+
+    from app.core.scope import is_off_topic
+
+    if is_off_topic(query):
+        log_step(logger, "rag", "empty", level=logging.DEBUG, reason="off_topic")
         return []
 
     use_embedding = _resolve_backend(backend)
@@ -185,20 +219,25 @@ def retrieve(
     # Stage-1: fetch a wider candidate pool for reranking.
     candidate_k = retrieve_k if retrieve_k is not None else settings.rag_retrieve_k
     candidate_k = max(candidate_k, top_k)
+    stage1_min = min_score
 
-    if use_embedding:
-        candidates = _retrieve_embedding(query, top_k=candidate_k, min_score=min_score)
-    else:
-        candidates = _retrieve_token(query, top_k=candidate_k, min_score=min_score)
+    candidates = _stage1_candidates(
+        query,
+        top_k=candidate_k,
+        min_score=stage1_min,
+        use_embedding=use_embedding,
+    )
 
     log_step(logger, "rag.stage1", "ok", level=logging.DEBUG,
              backend=backend_name, candidates=len(candidates))
 
+    rerank_applied = False
     # Stage-2: rerank when enabled and there is something to reorder.
     if settings.rag_rerank_enabled and len(candidates) > top_k:
         try:
             from app.rag.reranker import rerank
             candidates = rerank(query, candidates, top_k=top_k)
+            rerank_applied = True
         except Exception as exc:
             log_step(logger, "rag.rerank", "fail", level=logging.WARNING,
                      exc=type(exc).__name__)
@@ -215,8 +254,8 @@ def retrieve(
             seen_sources.add(chunk.source_path)
             deduped.append(chunk)
 
-    # Re-apply min_score on final (possibly reranked) scores.
-    final = [c for c in deduped if c.score >= min_score][:top_k]
+    final_min = settings.rag_rerank_min_score if rerank_applied else min_score
+    final = [c for c in deduped if c.score >= final_min][:top_k]
 
     outcome = "ok" if final else "empty"
     log_step(logger, "rag", outcome, backend=backend_name,
@@ -258,6 +297,61 @@ def format_retrieval_context(chunks: list[RetrievedChunk]) -> str:
 # ---------------------------------------------------------------------------
 # Backend implementations
 # ---------------------------------------------------------------------------
+
+def _stage1_candidates(
+    query: str,
+    *,
+    top_k: int,
+    min_score: float,
+    use_embedding: bool,
+) -> list[RetrievedChunk]:
+    """Return stage-1 candidates, optionally merged via hybrid RRF."""
+    if (
+        use_embedding
+        and settings.rag_hybrid_rrf_enabled
+        and _embedding_index_ready
+    ):
+        embedding_hits = _retrieve_embedding(query, top_k=top_k, min_score=min_score)
+        token_hits = _retrieve_token(query, top_k=top_k, min_score=min_score)
+        if embedding_hits and token_hits:
+            log_step(logger, "rag.rrf", "ok", level=logging.DEBUG,
+                     embed=len(embedding_hits), token=len(token_hits))
+            return _reciprocal_rank_fusion([embedding_hits, token_hits])[:top_k]
+        if embedding_hits:
+            return embedding_hits
+        return token_hits
+
+    if use_embedding:
+        return _retrieve_embedding(query, top_k=top_k, min_score=min_score)
+    return _retrieve_token(query, top_k=top_k, min_score=min_score)
+
+
+def _reciprocal_rank_fusion(
+    ranked_lists: list[list[RetrievedChunk]],
+    *,
+    k: int = 60,
+) -> list[RetrievedChunk]:
+    """Merge ranked lists with Reciprocal Rank Fusion (RRF)."""
+    fused_scores: dict[str, float] = {}
+    best_chunk: dict[str, RetrievedChunk] = {}
+
+    for ranked in ranked_lists:
+        for rank, chunk in enumerate(ranked, start=1):
+            fused_scores[chunk.chunk_id] = fused_scores.get(chunk.chunk_id, 0.0) + (
+                1.0 / (k + rank)
+            )
+            if (
+                chunk.chunk_id not in best_chunk
+                or chunk.score > best_chunk[chunk.chunk_id].score
+            ):
+                best_chunk[chunk.chunk_id] = chunk
+
+    ordered = sorted(fused_scores.items(), key=lambda item: item[1], reverse=True)
+    return [
+        replace(best_chunk[chunk_id], score=score)
+        for chunk_id, score in ordered
+    ]
+
 
 def _resolve_backend(backend: Backend) -> bool:
     """Return True to use embedding, False to use token cosine."""

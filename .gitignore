@@ -48,6 +48,9 @@ logs/
 # Vector store local data
 chroma_data/
 
+# RAG reranker model cache (downloaded on first use, ~1 GB)
+data/rerank_cache/
+
 # Fine-tuning data and artifacts (local only — not for git)
 data/external/
 data/training/

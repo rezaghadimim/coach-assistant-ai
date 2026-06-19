@@ -31,6 +31,8 @@ class IngestResponse(BaseModel):
     """Ingest endpoint response payload."""
 
     docs_dir: str
+    starter_dir: str
+    private_dir: str
     documents_indexed: int
     chunks_indexed: int
 

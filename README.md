@@ -45,8 +45,10 @@ Runs locally using open-source LLMs.  **English-only interface.**
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Ingest coaching documents
-python3 scripts/ingest.py --docs-dir ./docs/knowledge/
+# 2. Initialize private knowledge submodule, then ingest
+#    See docs/knowledge/SETUP_PRIVATE_REPO.md
+./scripts/setup_knowledge_private_repo.sh
+python3 scripts/ingest.py
 
 # 3. Run API
 python3 main.py
@@ -70,8 +72,10 @@ python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps all --dry-
 #    See docs/FINETUNE.md for the full Infinia integration guide.
 ```
 
-`docs/knowledge/` is a local-only ingest folder. Keep your real source documents there
-outside git; only a sample file is tracked in the repository.
+`docs/knowledge/starter/` holds committed bootstrap docs. Your real documents
+live in the **`oach-knowledge`** private repo, linked as a git submodule at
+`docs/knowledge/private/`. See
+[Private knowledge setup](./docs/knowledge/SETUP_PRIVATE_REPO.md).
 
 `docs/tool-knowledge/` contains per-tool documentation and the routing corpus
 (`examples/routing.jsonl`). This is tracked in git and is the source of truth for
@@ -133,6 +137,7 @@ model options, cost reference, and troubleshooting.
 - [Implementation Plan](./docs/IMPLEMENTATION.md)
 - [Tool Routing](./docs/TOOL_ROUTING.md)
 - [RAG Pipeline](./docs/RAG.md)
+- [Private knowledge repo setup](./docs/knowledge/SETUP_PRIVATE_REPO.md)
 - [Memory System](./docs/MEMORY.md)
 - [Open WebUI Integration](./docs/OPENWEBUI.md)
 - [OpenRouter Integration](./docs/OPENROUTER.md)

@@ -48,17 +48,15 @@ async def lifespan(_app: FastAPI):
         logger.info("tool router: index ready (%d examples)", count)
 
     if settings.rag_enabled:
-        from pathlib import Path
-        from app.rag.retriever import ingest_and_index_directory
+        from app.core.knowledge_paths import knowledge_starter_dir
+        from app.rag.retriever import ingest_and_index_knowledge
         from app.core.embeddings import probe_embed_model
 
-        docs_dir = settings.rag_docs_dir
-        if Path(docs_dir).exists():
+        if knowledge_starter_dir().exists():
             use_embed = settings.rag_backend == "embedding" or (
                 settings.rag_backend == "auto" and probe_embed_model()
             )
-            docs, chunks = ingest_and_index_directory(
-                docs_dir,
+            docs, chunks = ingest_and_index_knowledge(
                 chunk_size=settings.rag_chunk_size,
                 chunk_overlap=settings.rag_chunk_overlap,
                 embed=use_embed,
@@ -71,7 +69,10 @@ async def lifespan(_app: FastAPI):
                 chunks,
             )
         else:
-            logger.warning("rag: docs_dir %r not found — index empty", docs_dir)
+            logger.warning(
+                "rag: starter dir %r not found — index empty",
+                settings.rag_knowledge_starter_dir,
+            )
 
     rerank_warm_task: asyncio.Task | None = None
     if settings.rag_rerank_enabled:

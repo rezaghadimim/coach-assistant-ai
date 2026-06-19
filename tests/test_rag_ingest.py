@@ -8,7 +8,9 @@ from app.rag.ingest import (
     build_document_chunks,
     chunk_text,
     discover_documents,
+    discover_knowledge_documents,
     ingest_documents_from_dir,
+    ingest_documents_from_dirs,
     read_document,
 )
 
@@ -26,6 +28,21 @@ class RagIngestTests(unittest.TestCase):
     def test_chunk_text_validates_chunk_config(self) -> None:
         with self.assertRaises(ValueError):
             chunk_text("a b c", chunk_size=4, chunk_overlap=4)
+
+    def test_build_document_chunks_splits_markdown_sections(self) -> None:
+        text = (
+            "# Title\n\n"
+            "Intro paragraph with enough words to chunk.\n\n"
+            "## Section One\n\n"
+            "First section content about GROW goals.\n\n"
+            "## Section Two\n\n"
+            "Second section about accountability."
+        )
+        chunks = build_document_chunks(text, source_path="guide.md", chunk_size=20, chunk_overlap=2)
+
+        self.assertGreaterEqual(len(chunks), 2)
+        self.assertTrue(any("Section One" in chunk.text for chunk in chunks))
+        self.assertTrue(any("Section Two" in chunk.text for chunk in chunks))
 
     def test_build_document_chunks_has_metadata(self) -> None:
         text = " ".join(f"word{i}" for i in range(12))
@@ -71,6 +88,39 @@ class RagIngestTests(unittest.TestCase):
 
             content = read_document(str(path))
             self.assertEqual(content, "line one\nline two")
+
+    def test_discover_knowledge_documents_private_overrides_starter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            starter = root / "starter"
+            private = root / "private"
+            starter.mkdir()
+            private.mkdir()
+            (starter / "grow.md").write_text("starter GROW content", encoding="utf-8")
+            (private / "grow.md").write_text("private GROW override", encoding="utf-8")
+            (private / "extra.md").write_text("private only doc", encoding="utf-8")
+
+            found = discover_knowledge_documents(str(starter), str(private))
+            found_names = sorted(path.name for path in found)
+
+            self.assertEqual(found_names, ["extra.md", "grow.md"])
+            grow_path = next(path for path in found if path.name == "grow.md")
+            self.assertEqual(read_document(str(grow_path)), "private GROW override")
+
+    def test_ingest_documents_from_dirs_merges_both_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            starter = root / "starter"
+            private = root / "private"
+            starter.mkdir()
+            private.mkdir()
+            (starter / "a.md").write_text("starter alpha beta", encoding="utf-8")
+            (private / "b.md").write_text("private gamma delta", encoding="utf-8")
+
+            chunks = ingest_documents_from_dirs(str(starter), str(private), chunk_size=5, chunk_overlap=1)
+            sources = {Path(chunk.source_path).name for chunk in chunks}
+
+            self.assertEqual(sources, {"a.md", "b.md"})
 
 
 if __name__ == "__main__":

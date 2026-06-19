@@ -49,20 +49,24 @@ class Phase2RagIntegrationTests(unittest.TestCase):
             root = Path(temp_dir)
             (root / "method.md").write_text("Values and accountability coaching", encoding="utf-8")
 
-            original_docs_dir = settings.rag_docs_dir
-            settings.rag_docs_dir = temp_dir
+            original_starter = settings.rag_knowledge_starter_dir
+            original_private = settings.rag_knowledge_private_dir
+            settings.rag_knowledge_starter_dir = temp_dir
+            settings.rag_knowledge_private_dir = str(root / "empty_private")
             try:
                 response = self.client.post(
                     "/api/ingest",
                     json={"chunk_size": 20, "chunk_overlap": 2},
                 )
             finally:
-                settings.rag_docs_dir = original_docs_dir
+                settings.rag_knowledge_starter_dir = original_starter
+                settings.rag_knowledge_private_dir = original_private
 
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["documents_indexed"], 1)
-        self.assertGreaterEqual(body["chunks_indexed"], 1)
+            self.assertEqual(response.status_code, 200)
+            body = response.json()
+            self.assertEqual(body["documents_indexed"], 1)
+            self.assertGreaterEqual(body["chunks_indexed"], 1)
+            self.assertEqual(body["starter_dir"], temp_dir)
 
     def test_chat_includes_rag_context_in_system_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

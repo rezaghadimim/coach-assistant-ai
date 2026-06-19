@@ -45,6 +45,7 @@ _OFF_TOPIC_PATTERNS = (
     # Math / calculations
     re.compile(r"\b(calculate|compute|solve)\b.{0,30}\b(equation|integral|derivative|sum|product)\b", re.IGNORECASE),
     re.compile(r"what\s+is\s+\d+\s*[\+\-\*/x]\s*\d+", re.IGNORECASE),
+    re.compile(r"\b\d+\s+multiplied\s+by\s+\d+\b", re.IGNORECASE),
     # Weather
     re.compile(r"\b(weather|forecast|temperature)\b.{0,30}\b(today|tomorrow|outside|in)\b", re.IGNORECASE),
     # Sports scores
@@ -56,7 +57,12 @@ _OFF_TOPIC_PATTERNS = (
     # Recipes / cooking
     re.compile(r"\b(recipe|how\s+to\s+cook|how\s+to\s+bake|ingredients\s+for)\b", re.IGNORECASE),
     # Current news / events
-    re.compile(r"\b(latest\s+news|breaking\s+news|stock\s+price|who\s+is\s+the\s+president)\b", re.IGNORECASE),
+    re.compile(r"\b(latest\s+news|breaking\s+news|stock\s+prices?|who\s+is\s+the\s+president)\b", re.IGNORECASE),
+    re.compile(r"\b(tell\s+me\s+a\s+joke|make\s+me\s+laugh)\b", re.IGNORECASE),
+    re.compile(r"\bwho\s+is\s+the\s+ceo\s+of\b", re.IGNORECASE),
+    re.compile(r"\b(best|top)\s+programming\s+language\b", re.IGNORECASE),
+    re.compile(r"\bplanets?\s+(?:are\s+)?in\s+the\s+solar\s+system\b", re.IGNORECASE),
+    re.compile(r"\bcover\s+letter\b", re.IGNORECASE),
 )
 
 

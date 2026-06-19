@@ -18,3 +18,15 @@
 {"question": "What is the wheel of life exercise?", "must_abstain": false, "keywords": ["wheel", "life", "balance", "areas"], "category": "coaching_concept"}
 {"question": "How does accountability work in coaching?", "must_abstain": false, "keywords": ["accountab", "commit", "coaching"], "category": "coaching_concept"}
 {"question": "What frameworks are used in coaching?", "must_abstain": false, "keywords": ["GROW", "model", "framework", "coaching"], "category": "coaching_concept"}
+{"question": "How do I use the wheel of life with a client?", "must_abstain": false, "keywords": ["wheel", "life"], "category": "coaching_concept"}
+{"question": "What is solution-focused coaching?", "must_abstain": false, "keywords": ["solution", "focused", "coaching"], "category": "coaching_concept"}
+{"question": "When should a coach refer a client to a therapist?", "must_abstain": false, "keywords": ["refer", "therapist", "clinical"], "category": "coaching_concept"}
+{"question": "What homework can I assign between coaching sessions?", "must_abstain": false, "keywords": ["homework", "session", "exercise"], "category": "coaching_concept"}
+{"question": "How should I structure a first coaching session?", "must_abstain": false, "keywords": ["session", "intake", "first"], "category": "coaching_concept"}
+{"question": "What is the miracle question in coaching?", "must_abstain": false, "keywords": ["miracle", "question"], "category": "coaching_concept"}
+{"question": "How do I help a client set better goals?", "must_abstain": false, "keywords": ["SMART", "goal"], "category": "coaching_concept"}
+{"question": "What coaching techniques help with negative thinking?", "must_abstain": false, "keywords": ["CBT", "cognitive", "thinking"], "category": "coaching_concept"}
+{"question": "How do I build trust at the start of a session?", "must_abstain": false, "keywords": ["listen", "trust", "coaching"], "category": "coaching_concept"}
+{"question": "What is the best programming language for web development?", "must_abstain": true, "category": "off_topic"}
+{"question": "How many planets are in the solar system?", "must_abstain": true, "category": "off_topic"}
+{"question": "Can you help me write a cover letter for a software job?", "must_abstain": true, "category": "off_topic"}

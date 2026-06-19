@@ -1,3 +1,1 @@
-*
-!.gitignore
-!sample.md
+# Private knowledge is a git submodule at private/ — see .gitmodules and SETUP_PRIVATE_REPO.md
