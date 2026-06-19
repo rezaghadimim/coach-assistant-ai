@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, model_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_OPENROUTER_MODELS = (
     "openai/gpt-4o-mini,"
@@ -12,6 +12,12 @@ DEFAULT_OPENROUTER_MODELS = (
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     app_name: str = "Coach Assistant AI"
     app_version: str = "0.3.0"
@@ -198,10 +204,5 @@ class Settings(BaseSettings):
         if self.rag_rerank_cache_dir and not Path(self.rag_rerank_cache_dir).is_absolute():
             self.rag_rerank_cache_dir = str(project_root / self.rag_rerank_cache_dir)
         return self
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
 
 settings = Settings()
