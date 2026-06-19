@@ -225,7 +225,7 @@ class Phase4ResponseFormatterWiringTests(unittest.TestCase):
         self.assertEqual(content, "Ali's email is ali@example.com.")
         mock_fmt.assert_awaited_once()
 
-    def test_direct_reply_not_formatted_when_disabled(self) -> None:
+    def test_direct_reply_passthrough_when_formatter_disabled(self) -> None:
         from app.core.response_formatter import _DATA_REPLY_PREFIX
 
         data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nEmail: ali@example.com"
@@ -235,7 +235,7 @@ class Phase4ResponseFormatterWiringTests(unittest.TestCase):
             patch("app.core.config.settings.response_formatter_enabled", False),
             patch(
                 "app.core.response_formatter.format_data_reply",
-                new=AsyncMock(return_value="should not be used"),
+                new=AsyncMock(return_value=data_reply),
             ) as mock_fmt,
         ):
             response = self.client.post(
@@ -251,7 +251,7 @@ class Phase4ResponseFormatterWiringTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.json()["choices"][0]["message"]["content"]
         self.assertEqual(content, data_reply)
-        mock_fmt.assert_not_called()
+        mock_fmt.assert_awaited_once()
 
 
 if __name__ == "__main__":

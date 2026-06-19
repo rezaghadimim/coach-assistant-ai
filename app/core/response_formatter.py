@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Optional
 
 from app.core.config import settings
 from app.core.observability import log_step
@@ -34,6 +35,16 @@ _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 # Phone numbers: at least 7 digits optionally separated by spaces, dashes,
 # parentheses, dots, or a leading +.
 _PHONE_RE = re.compile(r"\+?[\d][\d\s\-\(\)\.]{5,}\d")
+
+_TABLE_INTENT = re.compile(
+    r"\b(?:table|tabular|spreadsheet|grid|matrix|columns?)\b",
+    re.IGNORECASE,
+)
+_LIST_CLIENT_LINE = re.compile(
+    r"^\s*-?\s*(?P<name>.+?)\s+\(ID:\s*(?P<id>[^,)]+),\s*Email:\s*(?P<email>.+?)\)\s*$",
+    re.MULTILINE,
+)
+_PROFILE_FIELD_LINE = re.compile(r"^([A-Za-z][A-Za-z ]*): (.+)$", re.MULTILINE)
 
 _FORMATTER_SYSTEM_PROMPT = """\
 You are a data presentation assistant for a life-coaching app.
@@ -60,6 +71,68 @@ def is_formattable(reply: str) -> bool:
     previews, error strings, greetings, and scope refusals are excluded.
     """
     return bool(reply) and reply.startswith(_DATA_REPLY_PREFIX)
+
+
+def wants_table_format(message: str) -> bool:
+    """Return True when the coach asked for tabular output."""
+    return bool(_TABLE_INTENT.search(message.strip()))
+
+
+def _display_value(value: str) -> str:
+    """Normalize a field value for table display."""
+    return "" if value.strip() in ("(not set)", "(none)", "none") else value.strip()
+
+
+def _format_registered_clients_table(raw_data: str) -> Optional[str]:
+    """Build a markdown table from ``list_clients`` tool output, or ``None``."""
+    if "Registered clients:" not in raw_data:
+        return None
+
+    rows: list[tuple[str, str, str]] = []
+    for match in _LIST_CLIENT_LINE.finditer(raw_data):
+        rows.append(
+            (
+                match.group("name").strip(),
+                match.group("id").strip(),
+                _display_value(match.group("email")),
+            )
+        )
+    if not rows:
+        return None
+
+    lines = [
+        "| Name | ID | Email |",
+        "| --- | --- | --- |",
+    ]
+    for name, client_id, email in rows:
+        lines.append(f"| {name} | {client_id} | {email} |")
+    return "\n".join(lines)
+
+
+def _format_profile_fields_table(raw_data: str) -> Optional[str]:
+    """Build a two-column table from single-client key-value profile output."""
+    fields: list[tuple[str, str]] = []
+    for line in raw_data.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = _PROFILE_FIELD_LINE.match(stripped)
+        if match:
+            fields.append((match.group(1).strip(), _display_value(match.group(2))))
+    if len(fields) < 2:
+        return None
+
+    lines = ["| Field | Value |", "| --- | --- |"]
+    for label, value in fields:
+        lines.append(f"| {label} | {value} |")
+    return "\n".join(lines)
+
+
+def try_deterministic_table_format(user_message: str, raw_data: str) -> Optional[str]:
+    """Return a markdown table when *user_message* asks for one and *raw_data* is parseable."""
+    if not wants_table_format(user_message):
+        return None
+    return _format_registered_clients_table(raw_data) or _format_profile_fields_table(raw_data)
 
 
 def _extract_pii(text: str) -> set[str]:
@@ -118,6 +191,17 @@ async def format_data_reply(
         return reply
 
     raw_data = reply.removeprefix(_DATA_REPLY_PREFIX)
+
+    table = try_deterministic_table_format(user_message, raw_data)
+    if table is not None:
+        log_step(logger, "formatter", "ok", chars=len(table), mode="table")
+        return table
+
+    if not settings.response_formatter_enabled:
+        log_step(logger, "formatter", "skip", level=logging.DEBUG,
+                 reason="disabled")
+        return reply
+
     log_step(logger, "formatter", "start", level=logging.DEBUG,
              raw_chars=len(raw_data))
 
@@ -135,19 +219,21 @@ async def format_data_reply(
         result = await provider.complete(
             messages,
             temperature=settings.temperature_grounded,
-            num_predict=settings.max_tokens_classify,
+            num_predict=settings.max_tokens_formatter,
         )
         formatted = result.content.strip()
 
         if not formatted:
             log_step(logger, "formatter", "fallback", level=logging.WARNING,
                      reason="llm_empty_reply")
-            return reply
+            table = try_deterministic_table_format(user_message, raw_data)
+            return table if table is not None else reply
 
         if not _pii_preserved(raw_data, formatted):
             log_step(logger, "formatter", "fallback", level=logging.WARNING,
                      reason="hallucinated_pii")
-            return reply
+            table = try_deterministic_table_format(user_message, raw_data)
+            return table if table is not None else reply
 
         log_step(logger, "formatter", "ok", chars=len(formatted))
         return formatted
@@ -156,4 +242,5 @@ async def format_data_reply(
         logger.exception("response_formatter: LLM call failed, using template")
         log_step(logger, "formatter", "fallback", level=logging.WARNING,
                  reason="llm_exception")
-        return reply
+        table = try_deterministic_table_format(user_message, raw_data)
+        return table if table is not None else reply

@@ -108,9 +108,6 @@ async def _maybe_format_direct_reply(
     """
     if direct_reply is None:
         return None
-    if not settings.response_formatter_enabled:
-        logger.info("response_formatter: DISABLED (RESPONSE_FORMATTER_ENABLED=false)")
-        return direct_reply
 
     from app.core.model_registry import resolve_provider
     from app.core.response_formatter import format_data_reply, is_formattable
@@ -118,6 +115,12 @@ async def _maybe_format_direct_reply(
     if not is_formattable(direct_reply):
         logger.info("response_formatter: SKIP (not a formattable fast-path reply)")
         return direct_reply
+
+    if not settings.response_formatter_enabled:
+        logger.debug(
+            "response_formatter: LLM pass skipped (RESPONSE_FORMATTER_ENABLED=false); "
+            "deterministic table formatting still applies when requested"
+        )
 
     provider = resolve_provider(model_id)
     return await format_data_reply(user_message, direct_reply, provider)

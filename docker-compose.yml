@@ -7,6 +7,10 @@ services:
     build: .
     ports:
       - "8000:8000"
+    # Load operator settings from the project .env (copy from .env.example).
+    # Values in `environment` below override the file for Docker-specific paths.
+    env_file:
+      - .env
     environment:
       # Inside Docker, localhost is the container — use host.docker.internal to
       # reach Ollama on the Mac/Windows host. Override only for a remote Ollama.

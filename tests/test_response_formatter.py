@@ -192,6 +192,92 @@ class FormatDataReplyTests(unittest.IsolatedAsyncioTestCase):
         provider.complete.assert_not_called()
 
 
+class DeterministicTableFormatTests(unittest.TestCase):
+    """Unit tests for table formatting without an LLM."""
+
+    def setUp(self) -> None:
+        from app.core.response_formatter import (
+            try_deterministic_table_format,
+            wants_table_format,
+        )
+
+        self.try_table = try_deterministic_table_format
+        self.wants_table = wants_table_format
+
+    def test_wants_table_detects_table_keyword(self) -> None:
+        self.assertTrue(self.wants_table("Show all in Table profile"))
+        self.assertFalse(self.wants_table("Who are my clients?"))
+
+    def test_list_clients_table(self) -> None:
+        raw = (
+            "Registered clients:\n"
+            "- Reza (ID: reza, Email: (not set))\n"
+            "- Ali (ID: ali, Email: ali123@gmail.comk)"
+        )
+        result = self.try_table("Show all in Table profile", raw)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("| Name | ID | Email |", result)
+        self.assertIn("| Reza | reza |", result)
+        self.assertIn("| Ali | ali | ali123@gmail.comk |", result)
+
+    def test_profile_fields_table(self) -> None:
+        raw = (
+            "Client ID: reza\n"
+            "Name: Reza\n"
+            "Email: (not set)\n"
+            "Phone: 09121234567"
+        )
+        result = self.try_table("Show Reza profile in a table", raw)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("| Field | Value |", result)
+        self.assertIn("| Email |", result)
+        self.assertIn("| Phone | 09121234567 |", result)
+
+    def test_no_table_without_table_intent(self) -> None:
+        raw = "Registered clients:\n- Ali (ID: ali, Email: ali@example.com)"
+        self.assertIsNone(self.try_table("Who are my clients?", raw))
+
+
+class FormatDataReplyTableTests(unittest.IsolatedAsyncioTestCase):
+    """Table requests should format deterministically without calling the LLM."""
+
+    async def test_table_request_skips_llm(self) -> None:
+        from app.core.response_formatter import _DATA_REPLY_PREFIX, format_data_reply
+
+        raw = (
+            "Registered clients:\n"
+            "- Reza (ID: reza, Email: (not set))\n"
+            "- Ali (ID: ali, Email: ali123@gmail.comk)"
+        )
+        reply = f"{_DATA_REPLY_PREFIX}{raw}"
+        provider = MagicMock()
+        provider.complete = AsyncMock()
+
+        result = await format_data_reply("Show all in Table profile", reply, provider)
+
+        provider.complete.assert_not_called()
+        self.assertIn("| Reza | reza |", result)
+        self.assertNotIn("Here are the details on file", result)
+
+    async def test_table_fallback_when_llm_fails(self) -> None:
+        from app.core.response_formatter import _DATA_REPLY_PREFIX, format_data_reply
+
+        raw = (
+            "Registered clients:\n"
+            "- Ali (ID: ali, Email: ali123@gmail.comk)"
+        )
+        reply = f"{_DATA_REPLY_PREFIX}{raw}"
+        provider = MagicMock()
+        provider.complete = AsyncMock(side_effect=RuntimeError("Ollama unavailable"))
+
+        result = await format_data_reply("Show all clients in table", reply, provider)
+
+        self.assertIn("| Ali | ali | ali123@gmail.comk |", result)
+        self.assertNotIn("Here are the details on file", result)
+
+
 class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
     """Verify the formatter flag is respected in _generate_with_tools."""
 
@@ -230,7 +316,8 @@ class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, "Ali's profile is on file.")
 
     async def test_formatter_skipped_when_flag_disabled(self) -> None:
-        """With response_formatter_enabled=False (default), format_data_reply is not called."""
+        """With response_formatter_enabled=False, format_data_reply is still called
+        for formattable replies but skips the LLM pass."""
         from unittest.mock import patch as _patch
 
         from app.core.response_formatter import _DATA_REPLY_PREFIX
@@ -242,7 +329,7 @@ class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
             _patch("app.core.llm.try_direct_reply", return_value=data_reply),
             _patch(
                 "app.core.response_formatter.format_data_reply",
-                new=AsyncMock(return_value="Should not be called."),
+                new=AsyncMock(return_value=data_reply),
             ) as mock_fmt,
         ):
             from app.core.llm import _generate_with_tools
@@ -260,7 +347,7 @@ class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 provider,
             )
 
-        mock_fmt.assert_not_called()
+        mock_fmt.assert_called_once()
         self.assertEqual(result, data_reply)
 
 

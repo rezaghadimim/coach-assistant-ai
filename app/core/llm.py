@@ -319,10 +319,9 @@ async def _generate_with_tools(
     if last_user and not is_task:
         direct = try_direct_reply(last_user, store, messages)
         if direct is not None:
-            if settings.response_formatter_enabled:
-                from app.core.response_formatter import format_data_reply, is_formattable
-                if is_formattable(direct):
-                    direct = await format_data_reply(last_user, direct, provider)
+            from app.core.response_formatter import format_data_reply, is_formattable
+            if is_formattable(direct):
+                direct = await format_data_reply(last_user, direct, provider)
             return direct
 
         # LLM router fallback: one constrained call to pick a tool name when all
@@ -334,12 +333,11 @@ async def _generate_with_tools(
                 last_user, store, provider
             )
             if llm_router_result is not None:
-                if settings.response_formatter_enabled:
-                    from app.core.response_formatter import format_data_reply, is_formattable
-                    if is_formattable(llm_router_result):
-                        llm_router_result = await format_data_reply(
-                            last_user, llm_router_result, provider
-                        )
+                from app.core.response_formatter import format_data_reply, is_formattable
+                if is_formattable(llm_router_result):
+                    llm_router_result = await format_data_reply(
+                        last_user, llm_router_result, provider
+                    )
                 return llm_router_result
 
         client_id = detect_client_mention(last_user, store)

@@ -47,8 +47,10 @@ class Settings(BaseSettings):
     # Sampling options applied to all Ollama completions.
     top_p: float = 0.9
     repeat_penalty: float = 1.1
-    # Reduced token budget for single-purpose classify calls (LLM router, formatter).
+    # Reduced token budget for single-purpose classify calls (LLM router).
     max_tokens_classify: int = 64
+    # Token budget for the optional response-formatter LLM pass (tables need more room).
+    max_tokens_formatter: int = 256
 
     # RAG
     rag_enabled: bool = True

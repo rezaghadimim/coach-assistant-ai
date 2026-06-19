@@ -104,12 +104,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
             )
         else:
             path = "direct"
-            if settings.response_formatter_enabled:
-                from app.core.model_registry import resolve_provider
-                from app.core.response_formatter import format_data_reply, is_formattable
-                if is_formattable(reply):
-                    provider = resolve_provider(None)
-                    reply = await format_data_reply(request.message, reply, provider)
+            from app.core.model_registry import resolve_provider
+            from app.core.response_formatter import format_data_reply, is_formattable
+            if is_formattable(reply):
+                provider = resolve_provider(None)
+                reply = await format_data_reply(request.message, reply, provider)
         store.add_message(session_id, "assistant", reply)
 
         history = store.get_session_messages(session_id)
