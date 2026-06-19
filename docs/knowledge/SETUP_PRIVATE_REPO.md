@@ -132,6 +132,9 @@ RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
 PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/oach-knowledge.git
 ```
 
+`PRIVATE_KNOWLEDGE_REPO` is documented for teammates only — the app reads
+`RAG_KNOWLEDGE_STARTER_DIR` and `RAG_KNOWLEDGE_PRIVATE_DIR` from settings.
+
 ---
 
 ## Security checklist

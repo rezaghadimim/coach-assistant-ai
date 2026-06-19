@@ -11,6 +11,10 @@
 > Stage-2 reranking now runs **in-process** via fastembed + ONNX
 > (`BAAI/bge-reranker-base`). The two-stage retrieval design is unchanged.
 
+> **Update (2026-06-19):** Defaults tuned for anti-hallucination — `RAG_RETRIEVE_K=30`,
+> `RAG_TOP_K=2`, `RAG_RERANK_MIN_SCORE=0.42`, hybrid RRF enabled. Historical ADR text
+> below references the original `top_k=3` / `RAG_RETRIEVE_K=25` values at acceptance time.
+
 ## Context
 
 The RAG pipeline (ADR-0003) originally retrieved `top_k=3` chunks using a single

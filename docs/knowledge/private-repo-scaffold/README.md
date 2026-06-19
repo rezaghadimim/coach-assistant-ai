@@ -1,10 +1,10 @@
-# coach-knowledge-private
+# oach-knowledge
 
-Your **private** coaching knowledge base for [Coach Assistant AI](https://github.com/YOUR_USER/coach-assistant-ai).
+Your **private** coaching knowledge base for [Coach Assistant AI](https://github.com/rezaghadimim/coach-assistant-ai).
 
-This repository is cloned into `docs/knowledge/private/` in the app project.
-On every ingest, these files are **merged with** the app’s committed
-`starter/` docs — same filename in this repo **overrides** the starter copy.
+This repository is linked as a **git submodule** at `docs/knowledge/private/` in
+the app project. On every ingest, these files are **merged with** the app’s
+committed `starter/` docs — same filename in this repo **overrides** the starter copy.
 
 ## What to put here
 
@@ -15,11 +15,11 @@ On every ingest, these files are **merged with** the app’s committed
 **Do not store client PII** (names, emails, session notes). Client data belongs in
 the app’s SQLite memory, not in RAG files.
 
-## Quick start (after clone)
+## Quick start (after submodule init)
 
 ```bash
-# Copy a starter doc from the app repo and customize
-cp ../coach-assistant-ai/docs/knowledge/starter/grow_model.md ./grow_model.md
+# From the app repo — copy a starter doc and customize
+cp ../starter/grow_model.md ./grow_model.md
 
 # Or add your own files
 # my_company_playbook.pdf
@@ -33,8 +33,8 @@ git push
 Re-index in the app:
 
 ```bash
-cd ../coach-assistant-ai
-python scripts/ingest.py
+cd ../../..   # back to coach-assistant-ai root
+python3 scripts/ingest.py
 ```
 
 ## Override rule
@@ -54,7 +54,7 @@ python scripts/ingest.py
 ## Suggested layout
 
 ```text
-coach-knowledge-private/
+oach-knowledge/
 ├── README.md                 ← this file
 ├── grow_model.md             ← optional override
 ├── company_playbook.md

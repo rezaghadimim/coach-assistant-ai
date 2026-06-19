@@ -72,7 +72,7 @@
 **Problem solved:** single-pass bi-encoder retrieval with `top_k=3` had no opportunity to re-score candidates; a query that was semantically close to several chunks had no second-pass signal to surface the most relevant one.
 
 **Done:**
-- [x] Two-stage `retrieve()`: stage-1 fetches `RAG_RETRIEVE_K=25` candidates; stage-2 local cross-encoder narrows to `RAG_TOP_K=3`
+- [x] Two-stage `retrieve()`: stage-1 fetches `RAG_RETRIEVE_K=30` candidates (hybrid RRF optional); stage-2 local cross-encoder narrows to `RAG_TOP_K=2`
 - [x] `app/core/rerank.py` — fastembed ONNX cross-encoder (default `BAAI/bge-reranker-base`)
 - [x] `app/rag/reranker.py` — thin wrapper, batch scoring, passage truncation, graceful fallback when fastembed is unavailable
 - [x] Per-source deduplication: only the highest-scoring chunk per source file is kept
@@ -84,7 +84,7 @@
 **To operate:**
 ```bash
 pip install -r requirements.txt   # includes fastembed
-RAG_RERANK_ENABLED=true RAG_RETRIEVE_K=25 python main.py
+RAG_RERANK_ENABLED=true python3 main.py
 # first run downloads BAAI/bge-reranker-base to data/rerank_cache/
 # startup log: rag: rerank ready | model=BAAI/bge-reranker-base (local cross-encoder via fastembed)
 # per-request log: rag rerank | backend=fastembed model=... candidates=N final=M top_scores=[...]
@@ -107,12 +107,14 @@ See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-
 
 **To operate:**
 ```bash
-# Enabled by default — no configuration needed.
-# Disable if needed:
+# Disabled by default — enable when you want LLM-rephrased data replies:
+RESPONSE_FORMATTER_ENABLED=true
+
+# Disable explicitly (default):
 RESPONSE_FORMATTER_ENABLED=false
 
 # Benchmark to measure latency overhead for your hardware:
-python scripts/benchmark_response_formatter.py --samples 8
+python3 scripts/benchmark_response_formatter.py --samples 8
 # Target: PII preservation 100%; overhead typically 500-2000 ms per reply.
 ```
 

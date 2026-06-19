@@ -47,11 +47,9 @@ header in Open WebUI's *Connection → Headers* settings, or pass
 # 1. Make sure Ollama is running locally and has the model pulled
 ollama pull llama3.1:8b
 
-# 2. (Optional) seed the knowledge base
-python scripts/ingest.py --docs-dir ./docs/knowledge/
-
-`docs/knowledge/` is intended for local-only source documents. Keep private knowledge
-outside git and use the tracked sample file as a template.
+# 2. (Optional) initialize private knowledge submodule and ingest
+./scripts/setup_knowledge_private_repo.sh
+python3 scripts/ingest.py
 
 # 3. Start the stack
 docker compose up --build
@@ -59,6 +57,11 @@ docker compose up --build
 # Open WebUI is now available at http://localhost:3000
 # Coach Assistant API docs at http://localhost:8000/docs
 ```
+
+`docs/knowledge/starter/` holds bundled bootstrap docs (committed in this repo).
+Your real documents live in the **`oach-knowledge`** private repo, linked as a
+git submodule at `docs/knowledge/private/`. See
+[`docs/knowledge/SETUP_PRIVATE_REPO.md`](knowledge/SETUP_PRIVATE_REPO.md).
 
 Open WebUI will automatically list `coach-assistant-ai` (local) as an available
 model. If you have configured `OPENROUTER_API_KEY`, a second model

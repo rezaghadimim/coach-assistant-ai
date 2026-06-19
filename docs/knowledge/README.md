@@ -34,7 +34,7 @@ vim grow_model.md
 git add . && git commit -m "Update GROW notes" && git push
 
 # Refresh RAG index in app
-cd ../../.. && python scripts/ingest.py
+cd ../../.. && python3 scripts/ingest.py
 ```
 
 ## Starter disclaimer
@@ -48,8 +48,8 @@ Put production content in your **private repo**.
 ```env
 RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
 RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
-# Optional note for your team (not read by the app):
-# PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/oach-knowledge.git
+# Documented for teammates only — not read by the app:
+PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/oach-knowledge.git
 ```
 
 Legacy `RAG_KNOWLEDGE_TEMPLATES_DIR` and `RAG_DOCS_DIR` map to the starter directory.

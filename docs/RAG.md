@@ -13,20 +13,24 @@ For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](F
 
 ## What is implemented
 
-- Local ingestion of `.txt`, `.md`, and `.pdf` documents (`app/rag/ingest.py`)
+- Local ingestion of `.txt`, `.md`, and `.pdf` from **starter + private** knowledge dirs (`app/rag/ingest.py`, `app/core/knowledge_paths.py`)
+- Heading-aware chunking for markdown (splits on `##` / `###` before fixed-size windows)
 - Two-stage in-memory retrieval index (`app/rag/retriever.py`):
-  - **Stage 1** — bi-encoder cosine (E5-small via Ollama) or TF cosine fallback; retrieves a wider candidate pool (`RAG_RETRIEVE_K`, default 25)
-  - **Stage 2** — optional local cross-encoder reranker (`app/core/rerank.py` + `app/rag/reranker.py`) narrows pool to final `RAG_TOP_K` (default 3)
+  - **Stage 1** — bi-encoder cosine (E5-small via Ollama), TF cosine fallback, or **hybrid RRF** merge when `RAG_HYBRID_RRF_ENABLED=true`; retrieves a wider candidate pool (`RAG_RETRIEVE_K`, default 30)
+  - **Stage 2** — optional local cross-encoder reranker (`app/core/rerank.py` + `app/rag/reranker.py`) narrows pool to final `RAG_TOP_K` (default 2)
+- Off-topic abstention: scope guard short-circuits retrieval before similarity search (`app/core/scope.py`)
 - Source-level deduplication: only the highest-scoring chunk per source file reaches context
-- API endpoint to reindex documents (`POST /api/ingest`)
+- Private overrides: same relative path in `private/` wins over `starter/`
+- API endpoint to reindex documents (`POST /api/ingest` → `starter_dir`, `private_dir`, `docs_dir` summary)
 - Chat integration that injects retrieved chunks into system prompt
 
 ## Retrieval pipeline
 
 ```
 Query
-  → Stage 1: E5 embed / TF cosine  (retrieve_k=25 candidates, min_score≥0.15)
-  → Stage 2: fastembed reranker    (optional, narrows to top_k=3)
+  → off-topic check (scope guard — abstain if out of domain)
+  → Stage 1: E5 embed / TF cosine / hybrid RRF  (retrieve_k=30, min_score≥0.15)
+  → Stage 2: fastembed reranker    (optional, narrows to top_k=2, floor≥0.42)
   → source deduplication
   → format_retrieval_context()     (adds grounding contract + source tags)
   → build_system_prompt()
@@ -73,7 +77,7 @@ Same relative path in both → **private wins**.
 ./scripts/setup_knowledge_private_repo.sh
 # or: git submodule update --init --recursive docs/knowledge/private
 
-python scripts/ingest.py
+python3 scripts/ingest.py
 ```
 
 Or via API:
@@ -87,7 +91,7 @@ curl -X POST http://localhost:8000/api/ingest \
 Legacy single-directory ingest still works for tests:
 
 ```bash
-python scripts/ingest.py --starter-dir ./my/docs --private-dir ./my/private
+python3 scripts/ingest.py --starter-dir ./my/docs --private-dir ./my/private
 ```
 
 ## Reranker setup
@@ -114,7 +118,7 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 | `RAG_RERANK_MAX_PASSAGE_CHARS` | `2000` | Passage truncation before scoring |
 | `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default) |
 | `RAG_KNOWLEDGE_STARTER_DIR` | `docs/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
-| `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Local-only docs merged on ingest (gitignored) |
+| `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Private knowledge (git submodule → `oach-knowledge`) merged on ingest |
 | `RAG_TOP_K` | `2` | Final number of chunks injected into prompt |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings only** (stage 1) |
 
@@ -161,6 +165,7 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 - `tests/test_rerank.py` — unit tests with a mocked encoder (fast, offline)
 - `tests/test_rag_rerank.py` — two-stage `retrieve()` pipeline tests (mocked reranker)
+- `tests/test_rag_rrf.py` — hybrid RRF stage-1 merge tests
 - `tests/test_rerank_integration.py` — optional end-to-end test against the real ONNX model (skipped when the model is not cached; set `RUN_RERANK_INTEGRATION=1` to download and run)
 
 ## Grounding eval
@@ -172,13 +177,13 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 ```bash
 # Run with default token backend (offline, no Ollama needed)
-PYTHONPATH=. python scripts/eval_rag_grounding.py --show-failures
+PYTHONPATH=. python3 scripts/eval_rag_grounding.py --show-failures
 
 # Run with embedding backend
-PYTHONPATH=. python scripts/eval_rag_grounding.py --backend embedding --show-failures
+PYTHONPATH=. python3 scripts/eval_rag_grounding.py --backend embedding --show-failures
 
 # Fail if accuracy < 85%
-PYTHONPATH=. python scripts/eval_rag_grounding.py --min-accuracy 0.85 --exit-nonzero
+PYTHONPATH=. python3 scripts/eval_rag_grounding.py --min-accuracy 0.85 --exit-nonzero
 ```
 
 Eval cases live in `data/eval/rag_grounding.jsonl`.  Add rows to extend coverage:

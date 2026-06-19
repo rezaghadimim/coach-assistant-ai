@@ -30,10 +30,11 @@ The local Ollama provider is always the default.
 
 ### 2) RAG Ingestion + Retrieval (`app/rag/`)
 
-- `ingest.py`: document discovery + chunking (`.txt`, `.md`, `.pdf`)
-- `retriever.py`: two-stage retrieval — bi-encoder or TF cosine (stage 1) followed by optional local cross-encoder reranking (stage 2); per-source deduplication before context assembly
+- `ingest.py`: document discovery + heading-aware chunking (`.txt`, `.md`, `.pdf`); merges `starter/` + `private/` (private wins on path collision)
+- `knowledge_paths.py`: resolves configured starter and private directories
+- `retriever.py`: two-stage retrieval — bi-encoder, TF cosine, or hybrid RRF (stage 1) followed by optional local cross-encoder reranking (stage 2); off-topic abstention; per-source deduplication before context assembly
 - `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); graceful fallback when fastembed is unavailable
-- `POST /api/ingest`: reindex local document directory
+- `POST /api/ingest`: reindex starter + private knowledge directories
 
 ### 3) Memory System (`app/memory/`)
 
