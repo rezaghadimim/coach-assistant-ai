@@ -5,7 +5,7 @@
 #   ./scripts/setup_knowledge_private_repo.sh
 #
 # One-off clone (no submodule):
-#   ./scripts/setup_knowledge_private_repo.sh https://github.com/USER/oach-knowledge.git
+#   ./scripts/setup_knowledge_private_repo.sh https://github.com/USER/coach-knowledge.git
 #
 # See docs/knowledge/SETUP_PRIVATE_REPO.md
 
@@ -44,7 +44,7 @@ if [[ -z "$REPO_URL" ]]; then
   echo "Usage: $0 [git-clone-url]" >&2
   echo "  No URL: init from .gitmodules (submodule)" >&2
   echo "  With URL: clone into docs/knowledge/private/" >&2
-  echo "Example: $0 https://github.com/rezaghadimim/oach-knowledge.git" >&2
+  echo "Example: $0 https://github.com/rezaghadimim/coach-knowledge.git" >&2
   exit 1
 fi
 

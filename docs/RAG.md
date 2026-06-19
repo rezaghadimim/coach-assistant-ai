@@ -59,11 +59,11 @@ docs/knowledge/
 ├── SETUP_PRIVATE_REPO.md        ← GitHub + clone guide (start here)
 ├── private-repo-scaffold/       ← reference files for new private repos
 ├── starter/                     ← committed bootstrap docs
-└── private/                     ← git submodule → oach-knowledge
+└── private/                     ← git submodule → coach-knowledge
 ```
 
 **Starter** docs live in this repo. **Real documents** live in the private
-[`oach-knowledge`](https://github.com/rezaghadimim/oach-knowledge) repo, linked
+[`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge) repo, linked
 as a submodule at `private/`. See
 [`docs/knowledge/SETUP_PRIVATE_REPO.md`](knowledge/SETUP_PRIVATE_REPO.md).
 
@@ -118,7 +118,7 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 | `RAG_RERANK_MAX_PASSAGE_CHARS` | `2000` | Passage truncation before scoring |
 | `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default) |
 | `RAG_KNOWLEDGE_STARTER_DIR` | `docs/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
-| `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Private knowledge (git submodule → `oach-knowledge`) merged on ingest |
+| `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Private knowledge (git submodule → `coach-knowledge`) merged on ingest |
 | `RAG_TOP_K` | `2` | Final number of chunks injected into prompt |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings only** (stage 1) |
 

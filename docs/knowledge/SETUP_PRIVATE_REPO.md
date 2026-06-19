@@ -1,7 +1,7 @@
 # Private knowledge repository setup
 
 Your real coaching documents live in a **separate private GitHub repository**
-([`oach-knowledge`](https://github.com/rezaghadimim/oach-knowledge)). It is linked
+([`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge)). It is linked
 as a **git submodule** at `docs/knowledge/private/` in this project.
 
 Ingest merges **starter + private** on every startup and `POST /api/ingest`.
@@ -10,11 +10,11 @@ Ingest merges **starter + private** on every startup and `POST /api/ingest`.
 
 ```text
 coach-assistant-ai/                    ← this repo
-  .gitmodules                          ← pins oach-knowledge commit
+  .gitmodules                          ← pins coach-knowledge commit
   docs/knowledge/starter/              ← committed bootstrap docs
-  docs/knowledge/private/              ← git submodule → oach-knowledge
+  docs/knowledge/private/              ← git submodule → coach-knowledge
 
-oach-knowledge/                        ← private GitHub repo (separate)
+coach-knowledge/                        ← private GitHub repo (separate)
   grow_model.md
   company_playbook.pdf
   ...
@@ -29,7 +29,7 @@ The submodule is already configured in `.gitmodules`:
 ```ini
 [submodule "docs/knowledge/private"]
     path = docs/knowledge/private
-    url = https://github.com/rezaghadimim/oach-knowledge.git
+    url = https://github.com/rezaghadimim/coach-knowledge.git
 ```
 
 Initialize it:
@@ -60,7 +60,7 @@ git submodule update --init --recursive
 ```
 
 **Access required:** your GitHub account must have read access to
-[`rezaghadimim/oach-knowledge`](https://github.com/rezaghadimim/oach-knowledge)
+[`rezaghadimim/coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge)
 (private repo). Add collaborators under **Settings → Collaborators** on that repo.
 
 ---
@@ -99,7 +99,7 @@ automatically.
 
 ## Pin a new private-knowledge version in the app repo
 
-After pushing changes to `oach-knowledge`, update the submodule pointer in this repo:
+After pushing changes to `coach-knowledge`, update the submodule pointer in this repo:
 
 ```bash
 cd docs/knowledge/private && git pull
@@ -129,7 +129,7 @@ Defaults (no change needed):
 ```env
 RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
 RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
-PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/oach-knowledge.git
+PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/coach-knowledge.git
 ```
 
 `PRIVATE_KNOWLEDGE_REPO` is documented for teammates only — the app reads
@@ -139,11 +139,11 @@ PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/oach-knowledge.git
 
 ## Security checklist
 
-- [ ] `oach-knowledge` GitHub repo is **Private**
+- [ ] `coach-knowledge` GitHub repo is **Private**
 - [ ] 2FA enabled on GitHub
 - [ ] No client PII in knowledge files
 - [ ] Licensed PDFs only if you have redistribution rights
-- [ ] Collaborators on `oach-knowledge` are intentional (they can read all docs)
+- [ ] Collaborators on `coach-knowledge` are intentional (they can read all docs)
 
 ---
 
@@ -157,11 +157,11 @@ git submodule update --init --recursive docs/knowledge/private
 
 **Permission denied / 404 on submodule**
 
-You need access to the private `oach-knowledge` repo. Use HTTPS with a personal
+You need access to the private `coach-knowledge` repo. Use HTTPS with a personal
 access token, or SSH:
 
 ```bash
-git config submodule.docs/knowledge/private.url git@github.com:rezaghadimim/oach-knowledge.git
+git config submodule.docs/knowledge/private.url git@github.com:rezaghadimim/coach-knowledge.git
 git submodule sync
 git submodule update --init --recursive
 ```
@@ -175,12 +175,12 @@ docker compose logs coach-api | grep "rag:"
 
 ---
 
-## Creating `oach-knowledge` from scratch (reference)
+## Creating `coach-knowledge` from scratch (reference)
 
 Already done for this project. For a new fork, push scaffold from
 `docs/knowledge/private-repo-scaffold/` then:
 
 ```bash
-git submodule add https://github.com/YOUR_USER/oach-knowledge.git docs/knowledge/private
+git submodule add https://github.com/YOUR_USER/coach-knowledge.git docs/knowledge/private
 git commit -m "Add private knowledge submodule"
 ```

@@ -59,7 +59,7 @@ docker compose up --build
 ```
 
 `docs/knowledge/starter/` holds bundled bootstrap docs (committed in this repo).
-Your real documents live in the **`oach-knowledge`** private repo, linked as a
+Your real documents live in the **`coach-knowledge`** private repo, linked as a
 git submodule at `docs/knowledge/private/`. See
 [`docs/knowledge/SETUP_PRIVATE_REPO.md`](knowledge/SETUP_PRIVATE_REPO.md).
 

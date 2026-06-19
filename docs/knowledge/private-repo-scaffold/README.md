@@ -1,4 +1,4 @@
-# oach-knowledge
+# coach-knowledge
 
 Your **private** coaching knowledge base for [Coach Assistant AI](https://github.com/rezaghadimim/coach-assistant-ai).
 
@@ -54,7 +54,7 @@ python3 scripts/ingest.py
 ## Suggested layout
 
 ```text
-oach-knowledge/
+coach-knowledge/
 ├── README.md                 ← this file
 ├── grow_model.md             ← optional override
 ├── company_playbook.md

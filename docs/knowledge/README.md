@@ -5,7 +5,7 @@ Two sources are indexed together on every startup and `POST /api/ingest`:
 | Directory | Git | Purpose |
 |-----------|-----|---------|
 | [`starter/`](starter/) | **This repo** | Bundled coaching frameworks (GROW, MI, SMART, …). Safe for public git. |
-| [`private/`](private/) | **Submodule** → [`oach-knowledge`](https://github.com/rezaghadimim/oach-knowledge) | Your real manuals and overrides |
+| [`private/`](private/) | **Submodule** → [`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge) | Your real manuals and overrides |
 
 **Merge rule:** all starter files are indexed. Private files are **appended**.
 If the same relative path exists in both (e.g. `grow_model.md`), the **private
@@ -49,7 +49,7 @@ Put production content in your **private repo**.
 RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
 RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
 # Documented for teammates only — not read by the app:
-PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/oach-knowledge.git
+PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/coach-knowledge.git
 ```
 
 Legacy `RAG_KNOWLEDGE_TEMPLATES_DIR` and `RAG_DOCS_DIR` map to the starter directory.

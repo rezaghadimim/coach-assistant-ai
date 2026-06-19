@@ -73,7 +73,7 @@ python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps all --dry-
 ```
 
 `docs/knowledge/starter/` holds committed bootstrap docs. Your real documents
-live in the **`oach-knowledge`** private repo, linked as a git submodule at
+live in the **`coach-knowledge`** private repo, linked as a git submodule at
 `docs/knowledge/private/`. See
 [Private knowledge setup](./docs/knowledge/SETUP_PRIVATE_REPO.md).
 
