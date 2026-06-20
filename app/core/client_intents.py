@@ -48,7 +48,7 @@ _ABOUT_LOOKUP = re.compile(
 )
 _FIELD_LOOKUP = re.compile(
     r"(?:what\s+is|what's|show)\s+(.+?)(?:'s|'s)\s+"
-    r"(?:email|phone|profile|detail|details|info|information|data)",
+    r"(?:email|phone|mobile|cell|cellphone|number|profile|detail|details|info|information|data)",
     re.IGNORECASE,
 )
 _LIST_CLIENTS = re.compile(

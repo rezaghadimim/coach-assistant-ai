@@ -117,6 +117,18 @@ class LexiconNormalizationTests(unittest.TestCase):
         self.assertIn("goal", result.lower())
 
     # -----------------------------------------------------------------------
+    # Phone / mobile synonyms → phone appended
+    # -----------------------------------------------------------------------
+
+    def test_mobile_triggers_phone_expansion(self) -> None:
+        result = self._normalize("what is Ali's mobile")
+        self.assertIn("phone", result.lower())
+
+    def test_cell_triggers_phone_expansion(self) -> None:
+        result = self._normalize("pull up Sara's cell number")
+        self.assertIn("phone", result.lower())
+
+    # -----------------------------------------------------------------------
     # Token backend: out-of-vocab message matches list_clients with lexicon
     # -----------------------------------------------------------------------
 
@@ -167,3 +179,20 @@ class LexiconNormalizationTests(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual(match.tool, "list_client_notes")
+
+    def test_mobile_matches_get_client_token_backend(self) -> None:
+        """Regression: "mobile" must route to get_client, not tie or defer.
+
+        Before the phone synonym was added, "what is Ali's mobile" tied
+        get_client with list_client_notes (margin 0) and deferred to the LLM,
+        which deflected with follow-up suggestions instead of the profile.
+        """
+        import os
+        os.environ["TOOL_ROUTER_BACKEND"] = "token"
+        from app.core.tool_router import build_index, classify_tool, reset_index
+        reset_index()
+        build_index()
+        match = classify_tool("what is Ali's mobile")
+        self.assertIsNotNone(match, "Expected get_client match via phone synonym")
+        assert match is not None
+        self.assertEqual(match.tool, "get_client")

@@ -47,6 +47,21 @@ class ClientIntentTests(unittest.TestCase):
     def test_detect_everything_about_lookup_returns_none_without_name(self) -> None:
         self.assertIsNone(detect_client_lookup("Show me everything about this patient"))
 
+    def test_detect_mobile_field_lookup(self) -> None:
+        # Regression: "mobile" must be recognised as a contact field so the query
+        # routes to a profile lookup instead of deflecting to the LLM.
+        self.assertEqual(detect_client_lookup("what is Ali's mobile"), "Ali")
+        self.assertEqual(detect_client_lookup("what is Ali's mobile profile"), "Ali")
+        self.assertEqual(detect_client_lookup("what is Sara's cell number"), "Sara")
+
+    def test_mobile_query_is_data_request(self) -> None:
+        # Regression: a "mobile"/contact lookup must count as a data request so
+        # follow-up deflections are suppressed and the LLM-router fallback fires.
+        from app.core.llm import _is_data_request
+
+        self.assertTrue(_is_data_request("what is Ali's mobile"))
+        self.assertTrue(_is_data_request("show me Sara's cell number"))
+
     def test_detect_list_clients(self) -> None:
         self.assertTrue(detect_list_clients("Who are my clients?"))
 

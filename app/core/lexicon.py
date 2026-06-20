@@ -53,6 +53,14 @@ _SYNONYMS: list[tuple[re.Pattern[str], list[str]]] = [
         ),
         ["show", "get", "list"],
     ),
+    # Phone / mobile synonyms → "phone"
+    (
+        re.compile(
+            r"\b(?:mobile|cell|cellphone|cell\s+phone|telephone|tel)\b",
+            re.IGNORECASE,
+        ),
+        ["phone", "phone number"],
+    ),
     # Note / memo synonyms
     (
         re.compile(

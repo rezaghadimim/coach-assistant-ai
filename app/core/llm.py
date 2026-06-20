@@ -40,7 +40,8 @@ _DATA_REQUEST_PATTERNS = re.compile(
     r")\b.{0,60}\b(?:"
     r"client|clients|patient|patients|visitor|visitors|contact|contacts|"
     r"person|people|member|members|roster|database|records|table|notes?|goals?|"
-    r"decisions?|progress|story|stories|details?|info|information|profile|data"
+    r"decisions?|progress|story|stories|details?|info|information|profile|data|"
+    r"email|phone|mobile|cell|cellphone|number"
     r")\b",
     re.IGNORECASE | re.DOTALL,
 )
