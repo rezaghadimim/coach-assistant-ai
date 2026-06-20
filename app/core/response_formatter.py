@@ -11,7 +11,7 @@ Design constraints:
   On any validation failure or LLM error the deterministic template is returned.
 - Only read replies are formatted.  Write previews (⏳), outcomes (✅/❌), and
   empty strings are passed through unchanged.
-- Gated by ``settings.response_formatter_enabled`` (default ``False``).
+- Gated by ``settings.response_formatter_enabled`` (default ``True``).
 """
 
 from __future__ import annotations

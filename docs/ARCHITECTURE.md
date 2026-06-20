@@ -134,7 +134,7 @@ The local Ollama provider is always the default.
    c. Tool Router: synonym normalize → embedding top-K → cross-encoder rerank → embedding cosine → token cosine → param extract → execute_tool
    d. Intent KB (read-only patterns)
    e. LLM router fallback (one constrained call, data requests only) → param extract → execute_tool
-   f. **Response Formatter** (optional, `RESPONSE_FORMATTER_ENABLED=true`): LLM rephrases the raw tool output into a natural reply; PII validation runs; falls back to template on failure
+   f. **Response Formatter** (on by default): LLM rephrases the raw tool output into a natural reply; PII validation runs; falls back to template on failure. Disable with `RESPONSE_FORMATTER_ENABLED=false`.
 7. Full LLM tool-calling loop (hardened system prompt, max 5 iterations) for remaining cases
 8. Dead-end guard: if the LLM returns only follow-up questions for a data request, rescues via direct-action path or returns a targeted clarification
 9. Result is stored in SQLite

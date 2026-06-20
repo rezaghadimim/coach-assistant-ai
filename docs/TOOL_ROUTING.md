@@ -301,16 +301,16 @@ human-friendly reply
 
 This sits **outside** the routing pipeline — routing, tool selection, and parameter extraction remain fully deterministic. The LLM only decides how to present data that has already been fetched.
 
-Enable with:
+Enabled by default. Disable with:
 
 ```env
-RESPONSE_FORMATTER_ENABLED=true
+RESPONSE_FORMATTER_ENABLED=false
 ```
 
-Benchmark before enabling to measure latency overhead:
+Re-benchmark after changing model or hardware:
 
 ```bash
-python scripts/benchmark_response_formatter.py
+python scripts/benchmark_response_formatter.py --samples 8
 ```
 
 See [ADR-0010](adr/0010-llm-response-formatter.md) for the full design and trade-offs.

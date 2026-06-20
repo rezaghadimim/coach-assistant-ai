@@ -101,15 +101,13 @@ return formatted       return deterministic reply
 
 ### 4. Feature flag and temperature (`app/core/config.py`)
 
-The formatter is **disabled by default** to prevent small-model hallucination.  The deterministic template is already correct and PII-safe; the formatter adds latency with no correctness benefit when the LLM is unreliable:
-
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `RESPONSE_FORMATTER_ENABLED` | `false` | Enable LLM formatting pass for fast-path data replies |
+| `RESPONSE_FORMATTER_ENABLED` | `true` | LLM formatting pass for fast-path data replies |
 | `TEMPERATURE_GROUNDED` | `0.0` | Temperature used for the formatter LLM call |
 | `MAX_TOKENS_CLASSIFY` | `64` | Token budget for the formatter call |
 
-Enable with `RESPONSE_FORMATTER_ENABLED=true` when you have verified the model produces reliable rephrasing (benchmark with `scripts/benchmark_response_formatter.py` first).  The formatter call always runs at `TEMPERATURE_GROUNDED=0.0` for deterministic output — the global `TEMPERATURE` setting does not apply to it.
+Disable with `RESPONSE_FORMATTER_ENABLED=false` to skip the extra LLM call and return the deterministic template only.  The formatter call always runs at `TEMPERATURE_GROUNDED=0.0` for deterministic output — the global `TEMPERATURE` setting does not apply to it.
 
 ### 5. Benchmark script (`scripts/benchmark_response_formatter.py`)
 
@@ -128,6 +126,21 @@ python scripts/benchmark_response_formatter.py --no-llm  # deterministic baselin
 python scripts/benchmark_response_formatter.py --samples 4 --model llama3.1:8b
 ```
 
+### 6. Operational decision — enable by default (2026-06-20)
+
+Benchmark run on local hardware with `llama3.1:8b` (`python3 scripts/benchmark_response_formatter.py --samples 8`):
+
+| Metric | Result |
+|--------|--------|
+| Samples | 8 |
+| PII preservation | 100% (8/8) |
+| Avg latency OFF | ~0 ms (deterministic template, in-process) |
+| Avg latency ON | 686 ms |
+| Avg overhead | 686 ms per formatted reply |
+| Avg char delta | −106 (formatted replies shorter and more concise) |
+
+**Decision:** Enable the formatter by default (`RESPONSE_FORMATTER_ENABLED=true` / `response_formatter_enabled: true`).  PII validation and deterministic fallback remain the safety net; disable explicitly if latency is unacceptable on your hardware or if a different model fails the benchmark.
+
 ## Consequences
 
 **Positive:**
@@ -140,9 +153,9 @@ python scripts/benchmark_response_formatter.py --samples 4 --model llama3.1:8b
 - 19 unit and integration tests cover all code paths including PII drop, LLM error, and the flag.
 
 **Negative:**
-- Each formatted fast-path reply adds one LLM round-trip (~500–2000 ms on a local small model). Acceptable only when enabled explicitly.
+- Each formatted fast-path reply adds one LLM round-trip (~500–2000 ms on a local small model; ~686 ms measured on `llama3.1:8b`).
 - Small models may occasionally drop or rephrase phone numbers in unusual formats; the `_PHONE_RE` extractor may not catch all variants, so the PII check is not 100% exhaustive.
-- `RESPONSE_FORMATTER_ENABLED=false` is the default — operators must opt in with `RESPONSE_FORMATTER_ENABLED=true` after verifying model quality.
+- Operators on slow hardware or with unreliable models should disable with `RESPONSE_FORMATTER_ENABLED=false` after re-running the benchmark.
 - The formatter system prompt is a single shared prompt for all tools.  Unusual tool outputs (e.g. multi-client tables with notes) may produce inconsistent formatting on smaller models.
 
 ## Alternatives Considered
@@ -157,7 +170,7 @@ python scripts/benchmark_response_formatter.py --samples 4 --model llama3.1:8b
 
 ## Future Direction
 
-- Run `scripts/benchmark_response_formatter.py` after deployment to measure real overhead and PII preservation rate on production messages. If PII preservation falls below 98%, tighten the formatter system prompt.
+- Re-run `scripts/benchmark_response_formatter.py` after changing models or hardware. If PII preservation falls below 98%, disable the formatter or tighten the system prompt.
 - Add per-tool formatter prompts when the generic prompt proves too coarse (e.g. a dedicated list-clients formatter that produces a compact table when requested).
 - Explore streaming the formatted reply via `provider.stream()` so the coach sees the first words immediately rather than waiting for the full Ollama round-trip.
 - When a fine-tuned model is available (Phase 5), evaluate whether it produces better formatting without a separate formatter call.

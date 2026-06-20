@@ -98,7 +98,7 @@ See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-
 
 **Done:**
 - [x] Formatter module: `app/core/response_formatter.py` — `format_data_reply()`, `is_formattable()`, PII validation (`_EMAIL_RE`, `_PHONE_RE`), deterministic fallback
-- [x] Config flag: `RESPONSE_FORMATTER_ENABLED` (default `false`) in `app/core/config.py`
+- [x] Config flag: `RESPONSE_FORMATTER_ENABLED` (default `true`) in `app/core/config.py`
 - [x] Formatter wired into `app/core/llm.py` — applied after `try_direct_reply` and `_try_llm_router_action` fast-path returns
 - [x] Formatter wired into `app/api/chat.py` — applied on the `try_direct_reply` early-return path
 - [x] Tests: `tests/test_response_formatter.py` — 19 tests covering `is_formattable`, `format_data_reply`, PII drop fallback, LLM error fallback, flag integration
@@ -107,15 +107,15 @@ See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-
 
 **To operate:**
 ```bash
-# Disabled by default — enable when you want LLM-rephrased data replies:
+# Enabled by default — LLM-rephrased data replies (see ADR-0010 §6):
 RESPONSE_FORMATTER_ENABLED=true
 
-# Disable explicitly (default):
+# Disable to skip the extra LLM call and use the deterministic template:
 RESPONSE_FORMATTER_ENABLED=false
 
-# Benchmark to measure latency overhead for your hardware:
+# Re-benchmark after changing model or hardware:
 python3 scripts/benchmark_response_formatter.py --samples 8
-# Target: PII preservation 100%; overhead typically 500-2000 ms per reply.
+# Target: PII preservation 100%; overhead typically 500-2000 ms per reply (~686 ms on llama3.1:8b).
 ```
 
 See [ADR-0010](adr/0010-llm-response-formatter.md) for the rationale and design constraints.
@@ -162,7 +162,7 @@ See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) for full guide.
 
 ### Response Formatter — Next Steps
 
-- [ ] **Run the benchmark and baseline latency overhead.** Before enabling in production, measure the real overhead for your model and hardware:
+- [x] **Run the benchmark and baseline latency overhead.** Baseline on `llama3.1:8b` (2026-06-20): PII 100%, avg overhead 686 ms, avg char delta −106. Re-run after model or hardware changes:
   ```bash
   python scripts/benchmark_response_formatter.py
   ```

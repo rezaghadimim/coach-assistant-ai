@@ -145,16 +145,17 @@ class Settings(BaseSettings):
     tool_router_llm_fallback_enabled: bool = True
 
     # Response Formatter: optional LLM pass for human-friendly data replies.
-    # Disabled by default: the deterministic template is already correct and PII-safe.
-    # When enabled, fast-path read results are rephrased by a compact LLM call
-    # (at temperature_grounded=0) before being returned.  PII validation runs after
+    # Enabled by default after benchmark on llama3.1:8b (PII 100%, ~686 ms overhead).
+    # Disable with RESPONSE_FORMATTER_ENABLED=false to skip the extra LLM call.
+    # Fast-path read results are rephrased by a compact LLM call (at
+    # temperature_grounded=0) before being returned.  PII validation runs after
     # formatting; on failure the deterministic template is used instead.
     # Uses the same Ollama model as the main chat (ollama_model).
     response_formatter_enabled: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Pass fast-path data replies through an LLM for human-friendly formatting. "
-            "Enable with RESPONSE_FORMATTER_ENABLED=true."
+            "Disable with RESPONSE_FORMATTER_ENABLED=false."
         ),
     )
 
@@ -191,6 +192,25 @@ class Settings(BaseSettings):
             if normalized.startswith("dengcao/") or normalized.endswith("bge-reranker-v2-m3"):
                 data["rag_rerank_model"] = "BAAI/bge-reranker-base"
         return data
+
+    @staticmethod
+    def _running_in_docker() -> bool:
+        return Path("/.dockerenv").exists()
+
+    @model_validator(mode="after")
+    def _normalize_ollama_base_url(self) -> "Settings":
+        """Map ``host.docker.internal`` to ``localhost`` when not inside Docker.
+
+        ``.env.example`` defaults to the Docker Compose URL so containers can
+        reach the host Ollama.  Native scripts and ``uvicorn`` on the machine
+        should talk to ``localhost`` instead — ``host.docker.internal`` often
+        does not resolve outside Docker Desktop.
+        """
+        if not self._running_in_docker() and "host.docker.internal" in self.ollama_base_url:
+            self.ollama_base_url = self.ollama_base_url.replace(
+                "host.docker.internal", "localhost"
+            )
+        return self
 
     @model_validator(mode="after")
     def _resolve_relative_paths(self) -> "Settings":
