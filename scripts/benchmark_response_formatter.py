@@ -107,7 +107,7 @@ _EVAL_SET = [
             "Occupation: Teacher\n"
             "Background: (not set)"
         ),
-        "expected_pii": ["leila.s@example.org"],
+        "expected_pii": [],  # age-only question — email must not be required in output
     },
     {
         "user_message": "Show Sara's goals",
@@ -157,11 +157,14 @@ def _wrap_result(tool_result: str) -> str:
     return f"{_DATA_REPLY_PREFIX}{tool_result}"
 
 
-def _pii_preserved(formatted: str, expected_pii: list[str]) -> bool:
+def _pii_preserved(raw_data: str, formatted: str, expected_pii: list[str]) -> bool:
+    """Return True when required tokens appear and no contact detail was hallucinated."""
+    from app.core.response_formatter import _pii_preserved as no_hallucinated_pii
+
     for token in expected_pii:
         if token not in formatted:
             return False
-    return True
+    return no_hallucinated_pii(raw_data, formatted)
 
 
 @dataclass
@@ -193,7 +196,8 @@ async def _run_on(
         sample["user_message"], deterministic_reply, provider
     )
     elapsed = (time.perf_counter() - t0) * 1000
-    preserved = _pii_preserved(formatted, sample["expected_pii"])
+    raw_data = deterministic_reply.removeprefix(_DATA_REPLY_PREFIX)
+    preserved = _pii_preserved(raw_data, formatted, sample["expected_pii"])
     return formatted, elapsed, preserved
 
 
@@ -260,6 +264,9 @@ def _print_summary(results: list[SampleResult], run_llm: bool) -> None:
 
 async def _main(args: argparse.Namespace) -> None:
     run_llm = not args.no_llm
+
+    # Ensure formatter LLM pass is active (matches production with RESPONSE_FORMATTER_ENABLED=true).
+    os.environ.setdefault("RESPONSE_FORMATTER_ENABLED", "true")
 
     samples = _EVAL_SET[: args.samples]
     results: list[SampleResult] = []

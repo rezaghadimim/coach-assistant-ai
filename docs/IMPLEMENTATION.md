@@ -168,7 +168,7 @@ See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) for full guide.
   ```
   Target: PII preservation 100%; latency overhead < 2000 ms per reply.
 
-- [ ] **Tune or replace the formatter system prompt** if the model produces poor rephrasing. Inspect outputs with `RESPONSE_FORMATTER_ENABLED=true` and one test message. If the model ignores the "answer only what was asked" rule, add a few-shot example to the prompt.
+- [x] **Tune or replace the formatter system prompt** if the model produces poor rephrasing. Inspect outputs with `RESPONSE_FORMATTER_ENABLED=true` and one test message. If the model ignores the "answer only what was asked" rule, add a few-shot example to the prompt.
 
 - [ ] **Add per-tool formatter hints** for special cases (e.g. a multi-client list → compact table, or a notes list → numbered list). Wire them through `format_data_reply()` as an optional `hint` argument.
 
