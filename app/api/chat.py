@@ -8,7 +8,7 @@ import time
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
-from app.core.llm import generate_response, try_direct_reply
+from app.core.llm import generate_response, try_direct_reply_with_meta
 from app.core.observability import bind_message, log_step, preview, reset_message
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
 from app.core.tools import TOOL_DEFINITIONS
@@ -90,8 +90,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         history = store.get_session_messages(session_id)
         _sessions[request.user_id] = history
 
-        reply = try_direct_reply(request.message, store, history)
-        if reply is None:
+        direct_meta = try_direct_reply_with_meta(request.message, store, history)
+        if direct_meta is None:
             path = "llm"
             system_prompt = await asyncio.to_thread(
                 build_system_prompt, request.user_id, request.message
@@ -104,11 +104,18 @@ async def chat(request: ChatRequest) -> ChatResponse:
             )
         else:
             path = "direct"
+            reply = direct_meta.reply
             from app.core.model_registry import resolve_provider
             from app.core.response_formatter import format_data_reply, is_formattable
             if is_formattable(reply):
                 provider = resolve_provider(None)
-                reply = await format_data_reply(request.message, reply, provider)
+                reply = await format_data_reply(
+                    request.message,
+                    reply,
+                    provider,
+                    tool=direct_meta.tool,
+                    hint=direct_meta.hint,
+                )
         store.add_message(session_id, "assistant", reply)
 
         history = store.get_session_messages(session_id)

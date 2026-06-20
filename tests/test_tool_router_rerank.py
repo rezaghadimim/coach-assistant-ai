@@ -68,7 +68,7 @@ class ReRankCandidatesTests(unittest.TestCase):
 
         # Reranker assigns high score to first candidate (list_clients).
         with patch("app.core.rerank.rerank_documents", return_value=[0.92, 0.88, 0.30]):
-            result = _rerank_candidates(
+            result, ranked = _rerank_candidates(
                 "Give me all visitors in table",
                 candidates,
                 threshold=0.55,
@@ -81,6 +81,9 @@ class ReRankCandidatesTests(unittest.TestCase):
         self.assertEqual(result.tool, "list_clients")
         self.assertEqual(result.backend, "rerank")
         self.assertAlmostEqual(result.rerank_score, 0.92, places=2)
+        # Ranked candidates are returned for deferral reuse (best tool first).
+        self.assertEqual(ranked[0].tool, "list_clients")
+        self.assertAlmostEqual(ranked[0].rerank_score, 0.92, places=2)
 
     def test_rerank_below_threshold_returns_none(self) -> None:
         from app.core.tool_router import _rerank_candidates
@@ -90,7 +93,7 @@ class ReRankCandidatesTests(unittest.TestCase):
         ])
 
         with patch("app.core.rerank.rerank_documents", return_value=[0.40]):
-            result = _rerank_candidates(
+            result, ranked = _rerank_candidates(
                 "random message",
                 candidates,
                 threshold=0.55,
@@ -99,6 +102,9 @@ class ReRankCandidatesTests(unittest.TestCase):
             )
 
         self.assertIsNone(result)
+        # Even on a miss, ranked candidates are returned so the caller can log
+        # the deferral without recomputing embeddings/rerank.
+        self.assertEqual(ranked[0].tool, "list_clients")
 
     def test_rerank_insufficient_margin_returns_none(self) -> None:
         from app.core.tool_router import _rerank_candidates
@@ -110,7 +116,7 @@ class ReRankCandidatesTests(unittest.TestCase):
 
         # list_clients 0.80, get_client_full 0.78 — margin 0.02 < required 0.10
         with patch("app.core.rerank.rerank_documents", return_value=[0.80, 0.78]):
-            result = _rerank_candidates(
+            result, _ranked = _rerank_candidates(
                 "some ambiguous message",
                 candidates,
                 threshold=0.55,
@@ -128,7 +134,7 @@ class ReRankCandidatesTests(unittest.TestCase):
         ])
 
         with patch("app.core.rerank.rerank_documents", side_effect=RuntimeError("fastembed unavailable")):
-            result = _rerank_candidates(
+            result, _ranked = _rerank_candidates(
                 "give me all clients",
                 candidates,
                 threshold=0.55,
@@ -148,7 +154,7 @@ class ReRankCandidatesTests(unittest.TestCase):
 
         # Reranker returns wrong number of scores.
         with patch("app.core.rerank.rerank_documents", return_value=[0.90]):
-            result = _rerank_candidates(
+            result, _ranked = _rerank_candidates(
                 "some message",
                 candidates,
                 threshold=0.55,
@@ -161,7 +167,7 @@ class ReRankCandidatesTests(unittest.TestCase):
     def test_rerank_empty_candidates_returns_none(self) -> None:
         from app.core.tool_router import _rerank_candidates
 
-        result = _rerank_candidates(
+        result, _ranked = _rerank_candidates(
             "give me all clients",
             [],
             threshold=0.55,

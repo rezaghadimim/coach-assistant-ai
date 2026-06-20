@@ -161,7 +161,12 @@ class Phase4OpenAICompatTests(unittest.TestCase):
         self.assertTrue(any("[DONE]" in line for line in lines))
 
     def test_chat_completion_streaming_chunks_contain_content(self) -> None:
+        # Isolate from the routing layer so the test exercises streaming of the
+        # generated reply, not whatever the fast path resolves the message to.
         with patch(
+            "app.api.openai_compat.try_direct_reply_with_meta",
+            return_value=None,
+        ), patch(
             "app.api.openai_compat.generate_response",
             new=AsyncMock(return_value="Think about your goal."),
         ):
@@ -198,12 +203,16 @@ class Phase4ResponseFormatterWiringTests(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_direct_reply_is_formatted_when_enabled(self) -> None:
+        from app.core.llm import DirectReplyMeta
         from app.core.response_formatter import _DATA_REPLY_PREFIX
 
         data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nEmail: ali@example.com"
 
         with (
-            patch("app.api.openai_compat.try_direct_reply", return_value=data_reply),
+            patch(
+                "app.api.openai_compat.try_direct_reply_with_meta",
+                return_value=DirectReplyMeta(data_reply),
+            ),
             patch("app.core.config.settings.response_formatter_enabled", True),
             patch(
                 "app.core.response_formatter.format_data_reply",
@@ -226,12 +235,16 @@ class Phase4ResponseFormatterWiringTests(unittest.TestCase):
         mock_fmt.assert_awaited_once()
 
     def test_direct_reply_passthrough_when_formatter_disabled(self) -> None:
+        from app.core.llm import DirectReplyMeta
         from app.core.response_formatter import _DATA_REPLY_PREFIX
 
         data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nEmail: ali@example.com"
 
         with (
-            patch("app.api.openai_compat.try_direct_reply", return_value=data_reply),
+            patch(
+                "app.api.openai_compat.try_direct_reply_with_meta",
+                return_value=DirectReplyMeta(data_reply),
+            ),
             patch("app.core.config.settings.response_formatter_enabled", False),
             patch(
                 "app.core.response_formatter.format_data_reply",

@@ -170,9 +170,9 @@ See [`TOOL_ROUTING.md`](TOOL_ROUTING.md) for full guide.
 
 - [x] **Tune or replace the formatter system prompt** if the model produces poor rephrasing. Inspect outputs with `RESPONSE_FORMATTER_ENABLED=true` and one test message. If the model ignores the "answer only what was asked" rule, add a few-shot example to the prompt.
 
-- [ ] **Add per-tool formatter hints** for special cases (e.g. a multi-client list → compact table, or a notes list → numbered list). Wire them through `format_data_reply()` as an optional `hint` argument.
+- [x] **Add per-tool formatter hints** for special cases (e.g. a multi-client list → compact table, or a notes list → numbered list). Wire them through `format_data_reply()` as an optional `hint` argument.
 
-- [ ] **Extend `_PHONE_RE`** to cover regional formats used by the coach's clients.
+- [x] **Extend `_PHONE_RE`** to cover regional formats used by the coach's clients.
 
 ---
 
@@ -205,7 +205,7 @@ The current stack (lexicon → token → embedding → rerank → LLM fallback) 
 
 - [ ] **Improve the `_is_data_request` pattern.** The regex is deliberately broad. Log cases where it fires incorrectly (triggers LLM router for coaching questions) or misses (data request not caught). Tighten the pattern based on evidence.
 
-- [ ] **Add an observability endpoint for near-misses.** When `classify_tool` returns None, log the top-3 scores so you can see whether the correct tool was close but below threshold. Wire this into the health/debug API.
+- [x] **Add an observability endpoint for near-misses.** When `classify_tool` returns None, log the top-3 scores so you can see whether the correct tool was close but below threshold. Wired into `/health` via `tool_router` stats and structured `tool_router.deferral` logs.
 
 - [ ] **Test LLM router fallback accuracy.** `app/core/llm_router.py` is only tested with mocked providers. Run a small manual evaluation: take 20 messages that were deferred by the fast path and check whether the LLM router classifies them correctly. If accuracy is below 90%, improve the `_SYSTEM_PROMPT` in `llm_router.py`.
 

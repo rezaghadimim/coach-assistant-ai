@@ -1,8 +1,11 @@
 """LLM client — routes requests to the appropriate provider."""
 
+from __future__ import annotations
+
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncGenerator, Optional, Union
 
 from app.core.config import settings
@@ -13,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.memory.store import MemoryStore
+
+
+@dataclass(frozen=True)
+class DirectReplyMeta:
+    """Fast-path reply with optional tool routing metadata for the formatter."""
+
+    reply: str
+    tool: str | None = None
+    hint: str | None = None
 
 _MAX_TOOL_ITERATIONS = 5
 _JSON_WRAPPER_KEYS = ("response", "answer", "content", "message")
@@ -144,11 +156,11 @@ async def _try_llm_router_action(
     message: str,
     store: "MemoryStore",
     provider,
-) -> Optional[str]:
+) -> DirectReplyMeta | None:
     """Use the LLM router fallback to classify and execute a tool.
 
-    Returns a formatted tool result string when confident, or ``None`` to
-    fall through to the full tool-calling loop.
+    Returns routing metadata when confident, or ``None`` to fall through to the
+    full tool-calling loop.
     """
     from app.core.client_intents import (
         detect_client_lookup,
@@ -167,7 +179,7 @@ async def _try_llm_router_action(
 
     if tool == "list_clients":
         result = execute_tool("list_clients", {}, store)
-        return _format_direct_lookup_reply(result)
+        return DirectReplyMeta(_format_direct_lookup_reply(result), tool=tool)
 
     if tool == "create_client":
         profile_args = detect_profile_update(message, store)
@@ -182,11 +194,15 @@ async def _try_llm_router_action(
         client_ref = detect_client_lookup(message)
         if client_ref:
             result = execute_tool(tool, {"client_id": client_ref}, store)
-            return _format_direct_lookup_reply(result)
+            return DirectReplyMeta(
+                _format_direct_lookup_reply(result), tool=tool, hint=match.hint
+            )
         client_id = detect_client_mention(message, store)
         if client_id:
             result = execute_tool(tool, {"client_id": client_id}, store)
-            return _format_direct_lookup_reply(result)
+            return DirectReplyMeta(
+                _format_direct_lookup_reply(result), tool=tool, hint=match.hint
+            )
         return None
 
     if tool == "list_client_notes":
@@ -194,23 +210,25 @@ async def _try_llm_router_action(
         if client_id is None:
             return None
         result = execute_tool("list_client_notes", {"client_id": client_id}, store)
-        return _format_direct_lookup_reply(result)
+        return DirectReplyMeta(
+            _format_direct_lookup_reply(result), tool=tool, hint=match.hint
+        )
 
     # For write/delete tools, defer to the full LLM loop for param extraction
     # and confirmation flow.
     return None
 
 
-def try_direct_reply(
+def try_direct_reply_with_meta(
     message: str,
     store: "MemoryStore",
     messages: Optional[list[dict]] = None,
-) -> Optional[str]:
-    """Return a final reply for deterministic client commands, else None."""
+) -> DirectReplyMeta | None:
+    """Return a fast-path reply plus optional tool/hint metadata, else None."""
     from app.core.client_intents import (
         SIMPLE_GREETING_REPLY,
         is_simple_greeting,
-        try_direct_client_action,
+        try_direct_client_action_with_meta,
     )
     from app.core.scope import is_openwebui_task, scope_guard
 
@@ -221,22 +239,41 @@ def try_direct_reply(
 
     if is_simple_greeting(text):
         log_step(logger, "direct_reply", "hit", reason="greeting")
-        return SIMPLE_GREETING_REPLY
+        return DirectReplyMeta(SIMPLE_GREETING_REPLY)
 
     refusal = scope_guard(text)
     if refusal is not None:
         log_step(logger, "direct_reply", "hit", reason="scope_block")
-        return refusal
+        return DirectReplyMeta(refusal)
 
-    direct = try_direct_client_action(text, store, messages)
-    if direct is None:
+    action = try_direct_client_action_with_meta(text, store, messages)
+    if action is None:
         log_step(logger, "direct_reply", "miss", level=logging.DEBUG)
         return None
-    outcome = "preview" if direct.startswith("⏳") else ("ok" if direct.startswith("✅") else "hit")
+
+    outcome = (
+        "preview"
+        if action.reply.startswith("⏳")
+        else ("ok" if action.reply.startswith("✅") else "hit")
+    )
     log_step(logger, "direct_reply", outcome)
-    if direct.startswith(("⏳", "✅", "❌")):
-        return direct
-    return _format_direct_lookup_reply(direct)
+    if action.reply.startswith(("⏳", "✅", "❌")):
+        return DirectReplyMeta(action.reply, tool=action.tool, hint=action.hint)
+    return DirectReplyMeta(
+        _format_direct_lookup_reply(action.reply),
+        tool=action.tool,
+        hint=action.hint,
+    )
+
+
+def try_direct_reply(
+    message: str,
+    store: "MemoryStore",
+    messages: Optional[list[dict]] = None,
+) -> Optional[str]:
+    """Return a final reply for deterministic client commands, else None."""
+    meta = try_direct_reply_with_meta(message, store, messages)
+    return meta.reply if meta is not None else None
 
 
 async def generate_response(
@@ -317,11 +354,18 @@ async def _generate_with_tools(
     is_task = bool(last_user) and is_openwebui_task(last_user)
 
     if last_user and not is_task:
-        direct = try_direct_reply(last_user, store, messages)
-        if direct is not None:
+        direct_meta = try_direct_reply_with_meta(last_user, store, messages)
+        if direct_meta is not None:
             from app.core.response_formatter import format_data_reply, is_formattable
+            direct = direct_meta.reply
             if is_formattable(direct):
-                direct = await format_data_reply(last_user, direct, provider)
+                direct = await format_data_reply(
+                    last_user,
+                    direct,
+                    provider,
+                    tool=direct_meta.tool,
+                    hint=direct_meta.hint,
+                )
             return direct
 
         # LLM router fallback: one constrained call to pick a tool name when all
@@ -329,14 +373,19 @@ async def _generate_with_tools(
         # (_is_data_request); write operations go straight to the tool loop so
         # their confirmation flow is preserved and no extra call is made.
         if _is_data_request(last_user):
-            llm_router_result = await _try_llm_router_action(
+            llm_router_meta = await _try_llm_router_action(
                 last_user, store, provider
             )
-            if llm_router_result is not None:
+            if llm_router_meta is not None:
                 from app.core.response_formatter import format_data_reply, is_formattable
+                llm_router_result = llm_router_meta.reply
                 if is_formattable(llm_router_result):
                     llm_router_result = await format_data_reply(
-                        last_user, llm_router_result, provider
+                        last_user,
+                        llm_router_result,
+                        provider,
+                        tool=llm_router_meta.tool,
+                        hint=llm_router_meta.hint,
                     )
                 return llm_router_result
 

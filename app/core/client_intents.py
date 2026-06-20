@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.core.confirmations import (
@@ -16,6 +17,15 @@ from app.core.observability import log_step
 from app.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ClientActionResult:
+    """Fast-path client command result with optional routing metadata for formatting."""
+
+    reply: str
+    tool: str | None = None
+    hint: str | None = None
 
 # Returned (with a recognized status prefix so the LLM layer surfaces it
 # verbatim) when the coach declines a pending write preview.
@@ -519,7 +529,7 @@ _DELETE_NOTE_ID = re.compile(
 )
 
 
-def _tool_router_action(message: str, store: MemoryStore) -> Optional[str]:
+def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult | None:
     """Use the tool router to classify and execute the best-matching tool.
 
     Called after regex profile/create detection and before :func:`try_direct_client_query`.
@@ -539,26 +549,46 @@ def _tool_router_action(message: str, store: MemoryStore) -> Optional[str]:
              level=logging.DEBUG)
 
     if tool == "list_clients":
-        return execute_tool("list_clients", {}, store)
+        return ClientActionResult(
+            execute_tool("list_clients", {}, store),
+            tool=tool,
+            hint=match.hint,
+        )
 
     if tool == "create_client":
         # Router says profile update; delegate to existing param extractors.
         profile_args = detect_profile_update(message, store)
         if profile_args:
-            return execute_tool("create_client", profile_args, store)
+            return ClientActionResult(
+                execute_tool("create_client", profile_args, store),
+                tool=tool,
+                hint=match.hint,
+            )
         create_args = detect_create_client(message)
         if create_args:
-            return execute_tool("create_client", create_args, store)
+            return ClientActionResult(
+                execute_tool("create_client", create_args, store),
+                tool=tool,
+                hint=match.hint,
+            )
         # Confident about the tool but cannot extract params → LLM handles it.
         return None
 
     if tool in ("get_client", "get_client_full"):
         client_ref = detect_client_lookup(message)
         if client_ref:
-            return execute_tool(tool, {"client_id": client_ref}, store)
+            return ClientActionResult(
+                execute_tool(tool, {"client_id": client_ref}, store),
+                tool=tool,
+                hint=match.hint,
+            )
         client_id = detect_client_mention(message, store)
         if client_id:
-            return execute_tool(tool, {"client_id": client_id}, store)
+            return ClientActionResult(
+                execute_tool(tool, {"client_id": client_id}, store),
+                tool=tool,
+                hint=match.hint,
+            )
         return None
 
     if tool == "list_client_notes":
@@ -570,55 +600,71 @@ def _tool_router_action(message: str, store: MemoryStore) -> Optional[str]:
         if hint.startswith("note_type:"):
             note_type = hint.split(":", 1)[1]
             params["note_type"] = note_type
-        return execute_tool("list_client_notes", params, store)
+        return ClientActionResult(
+            execute_tool("list_client_notes", params, store),
+            tool=tool,
+            hint=match.hint,
+        )
 
     if tool == "update_client_note":
         id_match = _UPDATE_NOTE_ID.search(message)
         if id_match:
-            return execute_tool("update_client_note", {"note_id": int(id_match.group(1)), "content": message}, store)
+            return ClientActionResult(
+                execute_tool(
+                    "update_client_note",
+                    {"note_id": int(id_match.group(1)), "content": message},
+                    store,
+                )
+            )
         return None
 
     if tool == "delete_client_note":
         id_match = _DELETE_NOTE_ID.search(message)
         if id_match:
-            return execute_tool("delete_client_note", {"note_id": int(id_match.group(1))}, store)
+            return ClientActionResult(
+                execute_tool("delete_client_note", {"note_id": int(id_match.group(1))}, store)
+            )
         return None
 
     if tool == "delete_client":
         client_ref = detect_client_lookup(message)
         if client_ref:
-            return execute_tool("delete_client", {"client_id": client_ref}, store)
+            return ClientActionResult(
+                execute_tool("delete_client", {"client_id": client_ref}, store)
+            )
         client_id = detect_client_mention(message, store)
         if client_id:
-            return execute_tool("delete_client", {"client_id": client_id}, store)
+            return ClientActionResult(
+                execute_tool("delete_client", {"client_id": client_id}, store)
+            )
         return None
 
     # add_client_note and any unknown tool: defer to LLM for param extraction.
     return None
 
 
-def try_direct_client_query(message: str, store: MemoryStore) -> Optional[str]:
-    """Run a read-only client query directly. Returns None if not a lookup command.
-
-    Tries fast regex patterns first, then falls back to the offline intent
-    knowledge base. Returns ``None`` (deferring to the LLM) whenever neither is
-    confident, or when a client-scoped intent does not name a known client.
-    """
+def try_direct_client_query_with_meta(
+    message: str, store: MemoryStore
+) -> ClientActionResult | None:
+    """Run a read-only client query directly, with routing metadata when known."""
     from app.core.tools import execute_tool
 
     if detect_list_clients(message):
         log_step(logger, "intent.regex", "hit", pattern="list_clients")
-        return execute_tool("list_clients", {}, store)
+        return ClientActionResult(execute_tool("list_clients", {}, store), tool="list_clients")
 
     client_ref = detect_client_lookup(message)
     if client_ref:
         log_step(logger, "intent.regex", "hit", pattern="client_lookup", ref=client_ref)
-        return execute_tool("get_client_full", {"client_id": client_ref}, store)
+        return ClientActionResult(
+            execute_tool("get_client_full", {"client_id": client_ref}, store),
+            tool="get_client_full",
+        )
 
-    return _kb_client_query(message, store)
+    return _kb_client_query_with_meta(message, store)
 
 
-def _kb_client_query(message: str, store: MemoryStore) -> Optional[str]:
+def _kb_client_query_with_meta(message: str, store: MemoryStore) -> ClientActionResult | None:
     """Knowledge-base fallback for read-only client queries."""
     from app.core.intent_kb import classify
     from app.core.tools import execute_tool
@@ -630,12 +676,10 @@ def _kb_client_query(message: str, store: MemoryStore) -> Optional[str]:
 
     if not match.requires_client:
         log_step(logger, "intent_kb", "hit", intent=match.intent, score=match.score)
-        return execute_tool(match.tool, {}, store)
+        return ClientActionResult(execute_tool(match.tool, {}, store), tool=match.tool)
 
     client_id = detect_client_mention(message, store)
     if client_id is None:
-        # Confident about the intent but cannot tie it to a known client;
-        # defer to the LLM rather than guessing.
         log_step(logger, "intent_kb", "defer", level=logging.DEBUG,
                  intent=match.intent, reason="no_client_mentioned")
         return None
@@ -645,43 +689,59 @@ def _kb_client_query(message: str, store: MemoryStore) -> Optional[str]:
         params["note_type"] = match.note_type
     log_step(logger, "intent_kb", "hit", intent=match.intent,
              score=match.score, client=client_id, note_type=match.note_type)
-    return execute_tool(match.tool, params, store)
+    hint = f"note_type:{match.note_type}" if match.note_type else None
+    return ClientActionResult(
+        execute_tool(match.tool, params, store),
+        tool=match.tool,
+        hint=hint,
+    )
 
 
-def try_direct_client_action(
+def try_direct_client_query(message: str, store: MemoryStore) -> Optional[str]:
+    """Run a read-only client query directly. Returns None if not a lookup command.
+
+    Tries fast regex patterns first, then falls back to the offline intent
+    knowledge base. Returns ``None`` (deferring to the LLM) whenever neither is
+    confident, or when a client-scoped intent does not name a known client.
+    """
+    result = try_direct_client_query_with_meta(message, store)
+    return result.reply if result is not None else None
+
+
+def try_direct_client_action_with_meta(
     message: str,
     store: MemoryStore,
     messages: Optional[list[dict]] = None,
-) -> Optional[str]:
-    """Run client read/write commands directly. Returns None if not a known command."""
+) -> ClientActionResult | None:
+    """Run client read/write commands directly, with routing metadata when known."""
     from app.core.tools import execute_tool
 
     history = messages or []
 
     pending = parse_pending_write(history)
     if pending:
-        # Resolve the pending write first so a decline cancels it instead of
-        # falling through to the LLM, which would re-propose the same preview.
         if is_user_cancellation(message):
             log_step(logger, "confirmation", "cancel")
-            return _CANCEL_REPLY
+            return ClientActionResult(_CANCEL_REPLY)
         if is_user_confirmation(message):
             tool_name, params = pending
             log_step(logger, "confirmation", "confirm", tool=tool_name)
-            return execute_tool(tool_name, {**params, "confirmed": True}, store)
+            return ClientActionResult(
+                execute_tool(tool_name, {**params, "confirmed": True}, store)
+            )
         log_step(logger, "confirmation", "none", level=logging.DEBUG)
 
     profile_args = detect_profile_update(message, store)
     if profile_args:
         log_step(logger, "intent.regex", "hit", pattern="profile_update",
                  client=profile_args.get("client_id", "?"))
-        return execute_tool("create_client", profile_args, store)
+        return ClientActionResult(execute_tool("create_client", profile_args, store))
 
     create_args = detect_create_client(message)
     if create_args:
         log_step(logger, "intent.regex", "hit", pattern="create_client",
                  client=create_args.get("client_id", "?"))
-        return execute_tool("create_client", create_args, store)
+        return ClientActionResult(execute_tool("create_client", create_args, store))
 
     text_tool = parse_text_tool_call(message)
     if text_tool:
@@ -690,7 +750,7 @@ def try_direct_client_action(
         tool_name, params = text_tool
         log_step(logger, "intent.regex", "hit", pattern="text_tool_call", tool=tool_name)
         params = sanitize_write_confirmation(tool_name, params, message)
-        return execute_tool(tool_name, params, store)
+        return ClientActionResult(execute_tool(tool_name, params, store))
 
     log_step(logger, "intent.regex", "miss", level=logging.DEBUG)
 
@@ -698,11 +758,18 @@ def try_direct_client_action(
     if router_result is not None:
         return router_result
 
-    # A clear profile-edit request that no extractor above could parse must go
-    # to the LLM tool loop (which handles arbitrary phrasing), not the
-    # read-only query path — otherwise it would wrongly return a profile card.
     if looks_like_unhandled_profile_write(message):
         log_step(logger, "intent.profile_write_guard", "defer", level=logging.DEBUG)
         return None
 
-    return try_direct_client_query(message, store)
+    return try_direct_client_query_with_meta(message, store)
+
+
+def try_direct_client_action(
+    message: str,
+    store: MemoryStore,
+    messages: Optional[list[dict]] = None,
+) -> Optional[str]:
+    """Run client read/write commands directly. Returns None if not a known command."""
+    result = try_direct_client_action_with_meta(message, store, messages)
+    return result.reply if result is not None else None

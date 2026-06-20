@@ -286,19 +286,23 @@ def _rerank_candidates(
     threshold: float,
     margin: float,
     model: str,
-) -> Optional[ToolMatch]:
+) -> tuple[Optional[ToolMatch], list[ToolMatch]]:
     """Stage-2 cross-encoder rerank over *candidates* (from stage-1 embedding top-K).
 
     Calls ``rerank_documents`` from :mod:`app.core.rerank` over the candidate
     utterances, selects the highest-scoring example, applies threshold and
-    cross-tool margin, then returns a :class:`ToolMatch` or ``None``.
+    cross-tool margin.
+
+    Returns ``(match, ranked)`` where *match* is a confident :class:`ToolMatch`
+    or ``None``, and *ranked* is the top tools by rerank score (reused for
+    deferral observability so the caller need not recompute them).
     """
     from app.core.rerank import rerank_documents
 
     if not candidates:
         log_step(logger, "tool_router.rerank", "skip", level=logging.DEBUG,
                  reason="no_candidates")
-        return None
+        return None, []
 
     utterances = [ex.utterance for ex, _ in candidates]
     embed_scores = [score for _, score in candidates]
@@ -311,13 +315,13 @@ def _rerank_candidates(
     except Exception as exc:
         log_step(logger, "tool_router.rerank", "fail", level=logging.WARNING,
                  exc=type(exc).__name__)
-        return None
+        return None, []
 
     if len(rerank_scores) != len(candidates):
         log_step(logger, "tool_router.rerank", "fail", level=logging.WARNING,
                  reason="score_count_mismatch",
                  expected=len(candidates), got=len(rerank_scores))
-        return None
+        return None, []
 
     # Find best and runner-up across tools using rerank scores.
     scored = sorted(
@@ -325,12 +329,15 @@ def _rerank_candidates(
         key=lambda t: t[0],
         reverse=True,
     )
+    ranked = _aggregate_tool_matches(
+        [(ex, embed_s, rerank_s) for rerank_s, embed_s, ex in scored], "rerank", 3
+    )
 
     best_rerank, best_embed, best_ex = scored[0]
     if best_rerank < threshold:
         log_step(logger, "tool_router.rerank", "miss", level=logging.DEBUG,
                  best_tool=best_ex.tool, score=best_rerank, threshold=threshold)
-        return None
+        return None, ranked
 
     # Runner-up: best score from a *different* tool.
     runner_up_rerank = 0.0
@@ -343,13 +350,13 @@ def _rerank_candidates(
         log_step(logger, "tool_router.rerank", "miss", level=logging.DEBUG,
                  best_tool=best_ex.tool, score=best_rerank,
                  margin=best_rerank - runner_up_rerank, required_margin=margin)
-        return None
+        return None, ranked
 
     log_step(logger, "tool_router.rerank", "hit",
              tool=best_ex.tool, score=best_rerank,
              embed_score=best_embed, margin=best_rerank - runner_up_rerank)
 
-    return ToolMatch(
+    match = ToolMatch(
         tool=best_ex.tool,
         score=best_embed,
         hint=best_ex.hint,
@@ -357,6 +364,7 @@ def _rerank_candidates(
         backend="rerank",
         rerank_score=best_rerank,
     )
+    return match, ranked
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +533,11 @@ def classify_tool(
         or (backend_setting == "auto" and _embed_available)
     )
 
+    # Candidates seen during the attempt, reused for deferral observability so
+    # the miss path never re-embeds or re-reranks the same query.
+    deferral_candidates: list[ToolMatch] = []
+    deferral_backend = "token"
+
     # --- Two-stage rerank path ---
     if (
         use_embed
@@ -538,7 +551,7 @@ def classify_tool(
             floor=settings.tool_router_embed_floor,
         )
         if candidates:
-            result = _rerank_candidates(
+            result, ranked = _rerank_candidates(
                 message,
                 candidates,
                 threshold=settings.tool_router_rerank_threshold,
@@ -551,6 +564,9 @@ def classify_tool(
                          score=result.rerank_score or result.score)
                 return result
             # Fall through to embedding-only on low confidence.
+            if ranked:
+                deferral_candidates = ranked
+                deferral_backend = "rerank"
         else:
             log_step(logger, "tool_router.embed_recall", "miss", level=logging.DEBUG,
                      reason="below_floor")
@@ -570,10 +586,121 @@ def classify_tool(
     if result is not None:
         log_step(logger, "tool_router", "hit",
                  backend="token", tool=result.tool, score=result.score)
+        return result
+
+    # All backends deferred. Reuse the rerank candidates if we already have them;
+    # otherwise build a cheap top-N (embedding-only / token setups, or below-floor).
+    if deferral_candidates:
+        candidates, backend_used = deferral_candidates, deferral_backend
     else:
-        log_step(logger, "tool_router", "miss", level=logging.DEBUG,
-                 backend="token")
-    return result
+        candidates, backend_used = top_n_candidates(message, n=3)
+    top_score = 0.0
+    top_tool: str | None = None
+    if candidates:
+        top = candidates[0]
+        top_tool = top.tool
+        top_score = top.rerank_score if top.rerank_score is not None else top.score
+
+    from app.core.routing_observability import record_deferral
+
+    entry = record_deferral(message, candidates, backend_used)
+    log_step(
+        logger,
+        "tool_router.deferral",
+        "miss",
+        level=logging.INFO if entry.near_miss else logging.DEBUG,
+        backend=backend_used,
+        near_miss=entry.near_miss,
+        top_tool=top_tool,
+        top_score=top_score,
+    )
+    log_step(logger, "tool_router", "miss", level=logging.DEBUG, backend="token")
+    return None
+
+
+def _aggregate_tool_matches(
+    items: list[tuple[_Example, float, Optional[float]]],
+    backend: str,
+    n: int,
+) -> list[ToolMatch]:
+    """Keep the best-scoring example per tool and return the top *n* tools."""
+    best: dict[str, ToolMatch] = {}
+    for ex, embed_score, rerank_score in items:
+        rank_score = rerank_score if rerank_score is not None else embed_score
+        prev = best.get(ex.tool)
+        prev_rank = (prev.rerank_score or prev.score) if prev else -1.0
+        if prev is None or rank_score > prev_rank:
+            best[ex.tool] = ToolMatch(
+                tool=ex.tool,
+                score=embed_score,
+                hint=ex.hint,
+                utterance=ex.utterance,
+                backend=backend,
+                rerank_score=rerank_score,
+            )
+    return sorted(
+        best.values(),
+        key=lambda match: match.rerank_score if match.rerank_score is not None else match.score,
+        reverse=True,
+    )[:n]
+
+
+def top_n_candidates(message: str, n: int = 3) -> tuple[list[ToolMatch], str]:
+    """Return top-N tool candidates using the same backend chain as classify_tool.
+
+    Unlike :func:`top_n_tools`, this mirrors rerank → embedding → token priority
+    and is intended for deferral observability rather than CI-stable debugging.
+    """
+    if not settings.tool_router_enabled:
+        return [], "disabled"
+
+    if not _index_built:
+        build_index()
+
+    backend_setting = settings.tool_router_backend.lower()
+    use_embed = (
+        backend_setting == "embedding"
+        or (backend_setting == "auto" and _embed_available)
+    )
+
+    if (
+        use_embed
+        and len(_embed_backend) > 0
+        and settings.tool_router_rerank_enabled
+        and _rerank_available
+    ):
+        candidates = _embed_backend.top_k(
+            message,
+            k=settings.tool_router_rerank_top_k,
+            floor=0.0,
+        )
+        if candidates:
+            from app.core.rerank import rerank_documents
+
+            try:
+                utterances = [ex.utterance for ex, _ in candidates]
+                rerank_scores = rerank_documents(
+                    message,
+                    utterances,
+                    model=settings.tool_router_rerank_model,
+                    batch_size=32,
+                )
+                if len(rerank_scores) == len(candidates):
+                    scored = [
+                        (ex, embed_score, rerank_score)
+                        for (ex, embed_score), rerank_score in zip(candidates, rerank_scores)
+                    ]
+                    return _aggregate_tool_matches(scored, "rerank", n), "rerank"
+            except Exception as exc:
+                logger.warning("top_n_candidates rerank failed: %s", exc)
+
+    if use_embed and len(_embed_backend) > 0:
+        candidates = _embed_backend.top_k(message, k=max(n * 5, 20), floor=0.0)
+        if candidates:
+            scored = [(ex, score, None) for ex, score in candidates]
+            return _aggregate_tool_matches(scored, "embedding", n), "embedding"
+
+    return top_n_tools(message, n=n), "token"
 
 
 def top_n_tools(

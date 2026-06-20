@@ -103,6 +103,7 @@ The local Ollama provider is always the default.
 - **LLM router fallback** (`llm_router.py`): when all fast-path layers defer on a data-retrieval message, one compact LLM call picks a tool name (`{"tool": "..."}`) before falling into the full tool loop
 - Corpus: `docs/tool-knowledge/examples/routing.jsonl` (130 examples); eval sets in `data/eval/`
 - API: `POST /api/tools/classify` (exposes `rerank_score`, `backend`), `POST /api/tools/reindex`
+- **Deferral observability**: when all fast-path backends defer, `classify_tool()` records top-3 candidates in `app/core/routing_observability.py`; near-misses (top score ≥ `TOOL_ROUTER_NEAR_MISS_SCORE`, default 0.25) are logged at INFO and exposed on `/health` under `tool_router`
 - See `[TOOL_ROUTING.md](TOOL_ROUTING.md)` and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)
 
 ### 12) Response Formatter (`app/core/response_formatter.py`)
@@ -111,9 +112,10 @@ The local Ollama provider is always the default.
 - Applied after the deterministic fast path fetches data — **only presentation changes, not data selection**
 - Wired into **both** API entry points: `/api/chat` (`chat.py`) and `/v1/chat/completions` (`openai_compat.py`, used by Open WebUI)
 - `is_formattable(reply)` gates the call: only successful read results (starting with the template prefix) are eligible; write previews (⏳/✅/❌), errors, greetings, and scope refusals pass through unchanged
-- **PII validation**: every email and phone number in the source data must appear verbatim in the formatted output; any failure falls back to the deterministic template
+- **PII validation**: every email and phone number in the formatted output must exist verbatim in the source data; regional phone formats (bare digits, `09…`, international spacing) are detected via `_extract_phones()`, and ISO dates (note timestamps) are masked first so they are not mistaken for phone numbers
+- **Per-tool hints**: `format_data_reply(..., tool=, hint=)` applies deterministic formatters for notes lists, compact client lists, and single profile fields **before** the optional LLM pass — common reply shapes resolve in ~16 µs with guaranteed PII instead of an ~870 ms LLM call; tool-specific LLM guidance is appended when deterministic formatting does not apply
 - Gated by `RESPONSE_FORMATTER_ENABLED` (default `true`) — disable with `RESPONSE_FORMATTER_ENABLED=false`
-- Benchmark: `scripts/benchmark_response_formatter.py` — measures latency overhead, PII preservation rate, and output length delta between OFF and ON modes
+- Benchmarks: `scripts/benchmark_response_formatter.py` (template vs LLM pass) and `scripts/benchmark_formatter_hints.py` (per-tool deterministic fast path: hit-rate, latency saved, PII)
 - See [ADR-0010](adr/0010-llm-response-formatter.md)
 
 ## Data Flow
@@ -156,7 +158,8 @@ app/
 │   ├── llm_router.py      ← constrained LLM tool classifier (fallback)
 │   ├── rerank.py          ← local fastembed cross-encoder (RAG + tool router)
 │   ├── llm.py             ← tool loop, LLM router wiring, dead-end guard, formatter wiring
-│   ├── response_formatter.py ← optional LLM formatting pass (PII validation, fallback)
+│   ├── response_formatter.py ← optional LLM formatting pass (PII validation, per-tool hints, fallback)
+│   ├── routing_observability.py ← deferral ring buffer + /health stats
 │   ├── model_registry.py
 │   ├── prompts.py
 │   ├── scope.py
@@ -207,6 +210,7 @@ tests/
 ├── test_llm_router.py             ← 18 LLM router parser + classify tests (mocked)
 ├── test_tool_router.py            ← token backend + 6 out-of-vocab cases via lexicon
 ├── test_tools_api.py              ← API schema fields + data-request guard tests
-└── test_response_formatter.py    ← 19 formatter unit + integration tests (mocked provider)
+├── test_response_formatter.py    ← formatter unit + integration tests (mocked provider)
+└── test_routing_observability.py ← deferral recording + /health tool_router stats
 ```
 

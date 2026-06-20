@@ -143,6 +143,8 @@ class Settings(BaseSettings):
     tool_router_rerank_model: str = "BAAI/bge-reranker-base"
     # LLM router fallback: one constrained LLM call when all fast-path layers defer.
     tool_router_llm_fallback_enabled: bool = True
+    # Near-miss threshold for deferral observability (top score >= this → near_miss).
+    tool_router_near_miss_score: float = 0.25
 
     # Response Formatter: optional LLM pass for human-friendly data replies.
     # Enabled by default after benchmark on llama3.1:8b (PII 100%, ~686 ms overhead).

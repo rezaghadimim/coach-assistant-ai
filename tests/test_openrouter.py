@@ -170,7 +170,7 @@ class CloudModelRoutingTests(unittest.TestCase):
             "app.api.openai_compat.generate_response",
             new=AsyncMock(return_value="Local fallback reply."),
         ) as mock_gen, patch(
-            "app.api.openai_compat.try_direct_reply",
+            "app.api.openai_compat.try_direct_reply_with_meta",
             return_value=None,
         ):
             response = self.client.post(

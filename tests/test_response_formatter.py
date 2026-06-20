@@ -201,6 +201,108 @@ class FormatDataReplyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, greeting)
         provider.complete.assert_not_called()
 
+    async def test_notes_list_skips_llm_when_tool_known(self) -> None:
+        from app.core.response_formatter import _DATA_REPLY_PREFIX, format_data_reply
+
+        raw = (
+            "- [GOAL] Leadership plan (2026-05-20)\n"
+            "  Complete certification by Q3"
+        )
+        reply = f"{_DATA_REPLY_PREFIX}{raw}"
+        provider = MagicMock()
+        provider.complete = AsyncMock()
+
+        result = await format_data_reply(
+            "show ali's goals", reply, provider, tool="list_client_notes"
+        )
+
+        provider.complete.assert_not_called()
+        self.assertTrue(result.startswith("1. [GOAL]"))
+
+
+class PhoneExtractionTests(unittest.TestCase):
+    """Unit tests for regional phone detection used in PII validation."""
+
+    def setUp(self) -> None:
+        from app.core.response_formatter import _extract_phones, _extract_pii
+
+        self.extract_phones = _extract_phones
+        self.extract_pii = _extract_pii
+
+    def test_us_formatted_number(self) -> None:
+        phones = self.extract_phones("Phone: +1-555-0101")
+        self.assertIn("+1-555-0101", phones)
+
+    def test_parentheses_format(self) -> None:
+        phones = self.extract_phones("Call (555) 123-4567 anytime")
+        self.assertTrue(any("555" in phone for phone in phones))
+
+    def test_bare_iranian_mobile(self) -> None:
+        phones = self.extract_phones("Phone: 9892323442")
+        self.assertIn("9892323442", phones)
+
+    def test_iranian_mobile_with_leading_zero(self) -> None:
+        phones = self.extract_phones("Phone: 09121234567")
+        self.assertIn("09121234567", phones)
+
+    def test_international_spaced_number(self) -> None:
+        phones = self.extract_phones("Mobile +98 912 345 6789")
+        self.assertTrue(any("98" in phone for phone in phones))
+
+    def test_ignores_short_numbers(self) -> None:
+        phones = self.extract_phones("Age: 35")
+        self.assertEqual(phones, set())
+
+    def test_extract_pii_includes_phones_and_emails(self) -> None:
+        pii = self.extract_pii("Email: ali@example.com Phone: 09121234567")
+        self.assertIn("ali@example.com", pii)
+        self.assertIn("09121234567", pii)
+
+
+class ToolHintFormatTests(unittest.TestCase):
+    """Deterministic per-tool formatting helpers."""
+
+    def setUp(self) -> None:
+        from app.core.response_formatter import try_deterministic_tool_format
+
+        self.try_tool_format = try_deterministic_tool_format
+
+    def test_notes_numbered_list(self) -> None:
+        raw = (
+            "- [GOAL] Leadership plan (2026-05-20)\n"
+            "  Complete certification by Q3\n"
+            "- [STORY] Referral (2026-04-01)\n"
+            "  Joined via wellness programme"
+        )
+        result = self.try_tool_format(
+            "show ali's notes", raw, tool="list_client_notes"
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.startswith("1. [GOAL]"))
+        self.assertIn("2. [STORY]", result)
+
+    def test_compact_client_list(self) -> None:
+        raw = (
+            "Registered clients:\n"
+            "- Ali Hassan (ID: ali, Email: ali@example.com)\n"
+            "- Sara Karimi (ID: sara, Email: sara@example.com)"
+        )
+        result = self.try_tool_format(
+            "who are my clients?", raw, tool="list_clients"
+        )
+        self.assertEqual(result, "You have two clients: Ali Hassan and Sara Karimi.")
+
+    def test_profile_email_hint(self) -> None:
+        raw = "Client ID: ali\nName: Ali\nEmail: ali@example.com\nPhone: (not set)"
+        result = self.try_tool_format(
+            "what is ali's email",
+            raw,
+            tool="get_client",
+            hint="profile:email",
+        )
+        self.assertEqual(result, "Ali's email is ali@example.com.")
+
 
 class DeterministicTableFormatTests(unittest.TestCase):
     """Unit tests for table formatting without an LLM."""
@@ -296,12 +398,16 @@ class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import patch as _patch
 
         from app.core.response_formatter import _DATA_REPLY_PREFIX
+        from app.core.llm import DirectReplyMeta
 
         data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nName: Ali"
 
         with (
             _patch("app.core.config.settings.response_formatter_enabled", True),  # default
-            _patch("app.core.llm.try_direct_reply", return_value=data_reply),
+            _patch(
+                "app.core.llm.try_direct_reply_with_meta",
+                return_value=DirectReplyMeta(data_reply),
+            ),
             _patch(
                 "app.core.response_formatter.format_data_reply",
                 new=AsyncMock(return_value="Ali's profile is on file."),
@@ -331,12 +437,16 @@ class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
         from unittest.mock import patch as _patch
 
         from app.core.response_formatter import _DATA_REPLY_PREFIX
+        from app.core.llm import DirectReplyMeta
 
         data_reply = f"{_DATA_REPLY_PREFIX}Client ID: ali\nName: Ali"
 
         with (
             _patch("app.core.config.settings.response_formatter_enabled", False),
-            _patch("app.core.llm.try_direct_reply", return_value=data_reply),
+            _patch(
+                "app.core.llm.try_direct_reply_with_meta",
+                return_value=DirectReplyMeta(data_reply),
+            ),
             _patch(
                 "app.core.response_formatter.format_data_reply",
                 new=AsyncMock(return_value=data_reply),
@@ -381,9 +491,14 @@ class FormatterConfirmFlowTests(unittest.IsolatedAsyncioTestCase):
             "Are you sure you want to save this client? Reply yes or confirm to save."
         )
 
+        from app.core.llm import DirectReplyMeta
+
         with (
             _patch("app.core.config.settings.response_formatter_enabled", True),
-            _patch("app.core.llm.try_direct_reply", return_value=preview),
+            _patch(
+                "app.core.llm.try_direct_reply_with_meta",
+                return_value=DirectReplyMeta(preview),
+            ),
             _patch(
                 "app.core.response_formatter.format_data_reply",
                 new=AsyncMock(return_value="Should not be called."),

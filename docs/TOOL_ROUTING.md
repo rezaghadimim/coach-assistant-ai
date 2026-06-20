@@ -314,3 +314,19 @@ python scripts/benchmark_response_formatter.py --samples 8
 ```
 
 See [ADR-0010](adr/0010-llm-response-formatter.md) for the full design and trade-offs.
+
+## Observability (deferrals and near-misses)
+
+When every fast-path backend defers (`classify_tool` → `None`), the router:
+
+1. Reuses the top-3 candidates already scored during the rerank attempt (no extra embedding/rerank call); falls back to `top_n_candidates()` only for embedding-only/token setups
+2. Logs `step=tool_router.deferral outcome=miss` at **INFO** when the top score ≥ `TOOL_ROUTER_NEAR_MISS_SCORE` (default `0.25`), else DEBUG
+3. Appends the event to an in-memory ring buffer in `app/core/routing_observability.py`
+
+Inspect aggregate stats on the existing health endpoint:
+
+```bash
+curl -s http://localhost:8000/health | jq '.tool_router'
+```
+
+Response includes `deferrals_total`, `near_misses_total`, `near_miss_threshold`, and `recent_near_misses` (last five near-misses with message preview and top tool scores). Use these to grow `routing.jsonl` and tune `TOOL_ROUTER_RERANK_THRESHOLD`.

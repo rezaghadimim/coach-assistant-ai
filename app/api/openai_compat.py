@@ -19,6 +19,8 @@ Coach accounts are stored separately from client/patient records so the
 logged-in coach does not appear in ``list_clients`` results.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -35,7 +37,7 @@ from pydantic import BaseModel
 
 from app.api.chat import build_system_prompt, session_manager, store
 from app.core.config import settings
-from app.core.llm import generate_response, try_direct_reply
+from app.core.llm import generate_response, try_direct_reply_with_meta
 from app.core.model_registry import (
     LOCAL_MODEL_ID,
     is_cloud_model_id,
@@ -99,6 +101,9 @@ async def _maybe_format_direct_reply(
     user_message: str,
     direct_reply: Optional[str],
     model_id: str,
+    *,
+    tool: str | None = None,
+    hint: str | None = None,
 ) -> Optional[str]:
     """Apply the optional LLM formatter to a fast-path data reply.
 
@@ -123,7 +128,9 @@ async def _maybe_format_direct_reply(
         )
 
     provider = resolve_provider(model_id)
-    return await format_data_reply(user_message, direct_reply, provider)
+    return await format_data_reply(
+        user_message, direct_reply, provider, tool=tool, hint=hint
+    )
 
 
 async def _generate_reply_or_unavailable(
@@ -338,9 +345,13 @@ async def chat_completions(
         store.add_message(session_id, "user", last_user_message)
 
     history = store.get_session_messages(session_id)
-    direct_reply = try_direct_reply(last_user_message, store, history)
+    direct_meta = try_direct_reply_with_meta(last_user_message, store, history)
     direct_reply = await _maybe_format_direct_reply(
-        last_user_message, direct_reply, model_id
+        last_user_message,
+        direct_meta.reply if direct_meta is not None else None,
+        model_id,
+        tool=direct_meta.tool if direct_meta is not None else None,
+        hint=direct_meta.hint if direct_meta is not None else None,
     )
 
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"

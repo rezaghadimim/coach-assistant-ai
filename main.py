@@ -135,6 +135,15 @@ async def health_check():
         "enabled": settings.tool_router_enabled,
     }
 
+    from app.core.routing_observability import get_stats as routing_stats
+
+    tool_router_info: dict = {
+        "enabled": settings.tool_router_enabled,
+        "backend": settings.tool_router_backend,
+    }
+    if settings.tool_router_enabled:
+        tool_router_info.update(routing_stats())
+
     rerank_info: dict = {
         "enabled": settings.rag_rerank_enabled,
         "model": settings.rag_rerank_model,
@@ -163,6 +172,7 @@ async def health_check():
             "openrouter": openrouter_info,
         },
         "embeddings": embed_info,
+        "tool_router": tool_router_info,
         "rerank": rerank_info,
     }
 
