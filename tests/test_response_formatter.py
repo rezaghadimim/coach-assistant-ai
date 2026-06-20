@@ -57,6 +57,16 @@ class IsFormattableTests(unittest.TestCase):
 class FormatDataReplyTests(unittest.IsolatedAsyncioTestCase):
     """Unit tests for :func:`~app.core.response_formatter.format_data_reply`."""
 
+    def setUp(self) -> None:
+        # Formatter is off by default; these tests exercise the LLM formatting path.
+        self._formatter_enabled = patch(
+            "app.core.config.settings.response_formatter_enabled", True
+        )
+        self._formatter_enabled.start()
+
+    def tearDown(self) -> None:
+        self._formatter_enabled.stop()
+
     async def test_returns_friendly_text_when_pii_preserved(self) -> None:
         from app.core.response_formatter import format_data_reply
 
@@ -282,7 +292,7 @@ class ResponseFormatterIntegrationTests(unittest.IsolatedAsyncioTestCase):
     """Verify the formatter flag is respected in _generate_with_tools."""
 
     async def test_formatter_called_when_flag_enabled(self) -> None:
-        """With response_formatter_enabled=True (default), format_data_reply is invoked."""
+        """With response_formatter_enabled=True, format_data_reply is invoked."""
         from unittest.mock import patch as _patch
 
         from app.core.response_formatter import _DATA_REPLY_PREFIX
