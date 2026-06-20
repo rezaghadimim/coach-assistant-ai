@@ -60,3 +60,8 @@ data/training/
 artifacts/lora/
 artifacts/eval/
 training_data.jsonl
+
+# Graphify (codebase knowledge graph) — local-only / regenerable bits.
+# Commit graphify-out/graph.json + GRAPH_REPORT.md if you want a shared map.
+graphify-out/cost.json
+graphify-out/cache/
