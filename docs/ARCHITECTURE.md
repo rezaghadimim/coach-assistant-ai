@@ -194,13 +194,15 @@ docs/
 
 data/
 └── eval/
-    ├── tool_routing.jsonl       ← in-distribution eval set (59 rows)
-    └── tool_routing_hard.jsonl  ← held-out out-of-vocab eval set (34 rows)
+    ├── tool_routing.jsonl       ← in-distribution eval set
+    ├── tool_routing_hard.jsonl  ← held-out out-of-vocab eval set
+    └── llm_router.jsonl         ← LLM-router eval set incl. data-shaped "none" rows (abstention)
 
 scripts/
 ├── ingest.py
 ├── export_training_data.py
 ├── eval_tool_routing.py              ← accuracy/F1/latency eval (--backend rerank, --hard)
+├── eval_llm_router.py                ← LLM-router accuracy + hallucination-rate eval (needs Ollama)
 ├── benchmark_tool_routing.py        ← cross-backend comparison (token/embedding/rerank)
 └── benchmark_response_formatter.py  ← formatter OFF vs ON: latency, PII preservation, char delta
 
@@ -208,6 +210,8 @@ tests/
 ├── test_lexicon.py                ← 24 normalization + token backend regression tests
 ├── test_tool_router_rerank.py     ← 12 rerank unit + integration tests (mocked)
 ├── test_llm_router.py             ← 18 LLM router parser + classify tests (mocked)
+├── test_eval_llm_router.py        ← LLM-router eval set integrity + trap coverage (CI-safe)
+├── test_llm_router_integration.py ← live abstention regression: acc ≥ 0.90, halluc ≤ 0.10 (optional)
 ├── test_tool_router.py            ← token backend + 6 out-of-vocab cases via lexicon
 ├── test_tools_api.py              ← API schema fields + data-request guard tests
 ├── test_response_formatter.py    ← formatter unit + integration tests (mocked provider)

@@ -207,7 +207,23 @@ The current stack (lexicon → token → embedding → rerank → LLM fallback) 
 
 - [x] **Add an observability endpoint for near-misses.** When `classify_tool` returns None, log the top-3 scores so you can see whether the correct tool was close but below threshold. Wired into `/health` via `tool_router` stats and structured `tool_router.deferral` logs.
 
-- [ ] **Test LLM router fallback accuracy.** `app/core/llm_router.py` is only tested with mocked providers. Run a small manual evaluation: take 20 messages that were deferred by the fast path and check whether the LLM router classifies them correctly. If accuracy is below 90%, improve the `_SYSTEM_PROMPT` in `llm_router.py`.
+- [x] **Test LLM router fallback accuracy.** Built a labeled eval set
+  (`data/eval/llm_router.jsonl`, 41 rows) — the first to include `"none"` rows,
+  i.e. *data-shaped coaching questions* that trip `_is_data_request` and so
+  actually reach the router. New eval `scripts/eval_llm_router.py` reports a
+  **hallucination rate**: how often a coaching question is wrongly assigned a
+  tool (the router executes read tools directly, so a wrong pick = a fabricated
+  data answer). Baseline on `llama3.1:8b` was **78.0% accuracy, 46.7%
+  hallucination** (`none` recall 0.53). Hardening `_SYSTEM_PROMPT` with a sharp
+  "specific stored record vs. general advice" rule + data-shaped `none`
+  exemplars raised it to **95.1% accuracy, 0% hallucination** (`none` recall
+  1.00), with no regression in data-request recall. Guarded by
+  `tests/test_eval_llm_router.py` (CI-safe: dataset integrity + trap coverage)
+  and `tests/test_llm_router_integration.py` (optional live regression: accuracy
+  ≥ 0.90, hallucination ≤ 0.10; skips without Ollama).
+  ```bash
+  PYTHONPATH=. python scripts/eval_llm_router.py --show-errors
+  ```
 
 #### Lower impact / future
 

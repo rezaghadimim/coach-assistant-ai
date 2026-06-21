@@ -1,0 +1,41 @@
+{"utterance": "I'd love to see the whole roster of people I'm working with", "expected_tool": "list_clients"}
+{"utterance": "who is currently on my books?", "expected_tool": "list_clients"}
+{"utterance": "run through everybody I'm coaching right now", "expected_tool": "list_clients"}
+{"utterance": "show me the full list of folks in my caseload", "expected_tool": "list_clients"}
+{"utterance": "what's the contact info you have for Ali?", "expected_tool": "get_client"}
+{"utterance": "pull up Sara's phone number for me", "expected_tool": "get_client"}
+{"utterance": "what email do we have on file for Reza?", "expected_tool": "get_client"}
+{"utterance": "give me the complete picture on Ali, notes and all", "expected_tool": "get_client_full"}
+{"utterance": "I want the full rundown for Sara", "expected_tool": "get_client_full"}
+{"utterance": "walk me through everything we've got on Reza", "expected_tool": "get_client_full"}
+{"utterance": "what have I jotted down for Ali so far?", "expected_tool": "list_client_notes"}
+{"utterance": "remind me what Sara's goals were", "expected_tool": "list_client_notes"}
+{"utterance": "what decisions did we land on with Reza?", "expected_tool": "list_client_notes"}
+{"utterance": "pull up the progress entries logged for Mina", "expected_tool": "list_client_notes"}
+{"utterance": "log a new client named Mina, she is 29", "expected_tool": "create_client"}
+{"utterance": "Ali just told me he is a teacher now, update that", "expected_tool": "create_client"}
+{"utterance": "add Reza to my client list, his email is reza@example.com", "expected_tool": "create_client"}
+{"utterance": "note that Ali decided to leave his job this week", "expected_tool": "add_client_note"}
+{"utterance": "save this as Sara's goal: run a marathon by spring", "expected_tool": "add_client_note"}
+{"utterance": "record that Reza made progress on his sleep routine", "expected_tool": "add_client_note"}
+{"utterance": "change note 5 to say she finished the leadership course", "expected_tool": "update_client_note"}
+{"utterance": "edit Ali's decision note, he changed his mind about relocating", "expected_tool": "update_client_note"}
+{"utterance": "remove note 3 from Sara's record", "expected_tool": "delete_client_note"}
+{"utterance": "delete that goal I logged for Ali by mistake", "expected_tool": "delete_client_note"}
+{"utterance": "remove Reza from my clients entirely", "expected_tool": "delete_client"}
+{"utterance": "wipe Ali's whole record, he's no longer a client", "expected_tool": "delete_client"}
+{"utterance": "give me some good goals to suggest to a new client who procrastinates", "expected_tool": "none"}
+{"utterance": "list the best ways to build trust with the people I coach", "expected_tool": "none"}
+{"utterance": "what are the typical decisions a client faces when changing careers?", "expected_tool": "none"}
+{"utterance": "show me what real progress looks like for someone with anxiety", "expected_tool": "none"}
+{"utterance": "tell me what notes I should be taking during a coaching session", "expected_tool": "none"}
+{"utterance": "what is a powerful goal-setting question to open a session with?", "expected_tool": "none"}
+{"utterance": "what is the most important information to gather from a client early on?", "expected_tool": "none"}
+{"utterance": "give me a few stories I can share to motivate a discouraged client", "expected_tool": "none"}
+{"utterance": "what are good follow-up questions when a client feels stuck?", "expected_tool": "none"}
+{"utterance": "show me how to structure a GROW model conversation with any client", "expected_tool": "none"}
+{"utterance": "tell me what a healthy coaching goal for a first-time client looks like", "expected_tool": "none"}
+{"utterance": "what details matter most when a client describes a conflict at work?", "expected_tool": "none"}
+{"utterance": "list some signs that a client is making real progress", "expected_tool": "none"}
+{"utterance": "what is the best way to help a client who keeps missing our sessions?", "expected_tool": "none"}
+{"utterance": "give me coaching advice for a member of my group who lacks confidence", "expected_tool": "none"}

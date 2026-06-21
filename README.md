@@ -63,6 +63,9 @@ PYTHONPATH=. python3 scripts/eval_tool_routing.py --backend token --hard --show-
 # 5b. (Optional) Evaluate RAG grounding / abstention quality
 PYTHONPATH=. python3 scripts/eval_rag_grounding.py --show-failures
 
+# 5c. (Optional) Evaluate LLM-router accuracy + hallucination rate (needs Ollama)
+PYTHONPATH=. python3 scripts/eval_llm_router.py --show-errors
+
 # 6. (Optional, Phase 5) Export sessions for fine-tuning
 python3 scripts/export_training_data.py --output data/training/sessions.jsonl
 

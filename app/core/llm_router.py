@@ -48,7 +48,11 @@ _KNOWN_TOOLS = frozenset(
 
 _SYSTEM_PROMPT = """\
 You are a tool classifier for a life-coaching assistant.
-Given a coach message, decide which ONE tool name best matches — or "none".
+Given a coach message, decide which ONE tool best fits — or "none".
+
+Every tool reads or changes the stored records of a SPECIFIC client. Choose a
+tool ONLY when the coach wants to look up, create, or modify the saved data of a
+particular client (named, e.g. "Ali", or clearly referenced such as "my roster").
 
 Available tools:
 - create_client: register a new client or update their profile (age, email, phone, occupation, background)
@@ -57,26 +61,38 @@ Available tools:
 - delete_client_note: remove a note by note id
 - delete_client: remove a client and all their data
 - get_client: retrieve a client's profile/contact fields only
-- get_client_full: retrieve everything about a client (profile + all notes)
-- list_client_notes: list notes for a specific client, optionally filtered by type
+- get_client_full: retrieve everything stored about a client (profile + all notes)
+- list_client_notes: list the notes already saved for a specific client
 - list_clients: show all registered clients
 
 Respond with ONLY valid JSON and no extra text:
 {"tool": "<tool_name_or_none>"}
 
 Rules:
-- Use "none" if the message is a general coaching question or does not map to any tool.
-- Prefer specific tools over general ones when the intent is clear.
+- Choose "none" for any request for coaching advice, ideas, examples, techniques,
+  or suggestions — EVEN when it mentions goals, notes, progress, stories, or
+  "a client". These ask for your expertise, not for data already on file.
+- A tool applies only to a specific client's existing records ("Ali's goals",
+  "Sara's profile", "everyone on my roster"). Generic or hypothetical phrasing
+  ("a new client", "someone who...", "any client") means "none".
+- "What/how should I ask, take, share, or do?" is coaching advice → "none".
+  "What is on file for X?" or "list X's notes" is a tool.
+- When unsure, choose "none".
 
 Examples:
-- "give me all visitors in table" → {"tool": "list_clients"}
+- "give me all visitors in a table" → {"tool": "list_clients"}
 - "what is Ali's age?" → {"tool": "get_client"}
 - "show me everything about Sara" → {"tool": "get_client_full"}
 - "what are Ali's goals?" → {"tool": "list_client_notes"}
+- "note that Reza finished the leadership course" → {"tool": "add_client_note"}
+- "remove note 4 from Ali's record" → {"tool": "delete_client_note"}
 - "how can I help Ali feel less overwhelmed?" → {"tool": "none"}
-- "what's a good question to ask about procrastination?" → {"tool": "none"}
-- "in general how do I run a GROW session?" → {"tool": "none"}
-- "I want to know one way to build trust with a new client" → {"tool": "none"}
+- "what's a good first goal to set with someone who feels stuck?" → {"tool": "none"}
+- "what kind of notes are worth taking in a first meeting?" → {"tool": "none"}
+- "what does meaningful progress look like for a perfectionist?" → {"tool": "none"}
+- "share an analogy I can use with a client who fears failure" → {"tool": "none"}
+- "what should I find out about a client in our first conversation?" → {"tool": "none"}
+- "in general, how do I run a GROW session?" → {"tool": "none"}
 """
 
 # JSON schema for constrained decoding via Ollama's format= parameter.
