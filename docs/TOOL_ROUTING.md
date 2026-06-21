@@ -249,6 +249,32 @@ python scripts/benchmark_tool_routing.py
 
 Prints accuracy, stage-1 recall, deferral rate, and p50/p95 latency per backend across standard and hard eval sets. Skips backends whose dependencies (Ollama, fastembed) are unavailable.
 
+### LLM-router abstention eval (anti-hallucination)
+
+The LLM router is the only fast-path layer where the small model makes an
+open-ended call. Its dangerous failure mode is **hallucination**: returning a
+real tool for a general coaching question, which makes the system fetch and
+present client data the coach never asked for (read tools execute directly from
+the router). `data/eval/llm_router.jsonl` is the only eval set with `"none"`
+rows — coaching questions, most of them *data-shaped* (they trip
+`_is_data_request`, so they actually reach the router).
+
+```bash
+# Reports overall accuracy + a hallucination rate (tool wrongly assigned to a 'none' row)
+PYTHONPATH=. python scripts/eval_llm_router.py --show-errors
+
+# Gate in CI-with-Ollama:
+PYTHONPATH=. python scripts/eval_llm_router.py \
+    --min-accuracy 0.90 --max-hallucination-rate 0.10 --exit-nonzero
+```
+
+Target: **accuracy ≥ 90%, hallucination rate ≤ 10%.** On `llama3.1:8b` the
+hardened `_SYSTEM_PROMPT` reaches 95.1% / 0.0% (baseline before hardening was
+78.0% / 46.7%). If hallucination rises, add data-shaped `"none"` exemplars to
+`_SYSTEM_PROMPT` in `app/core/llm_router.py` that reinforce the "specific stored
+record vs. general advice" boundary — then re-run. `tests/test_llm_router_integration.py`
+guards this bound (skips without Ollama).
+
 ## Tuning thresholds
 
 If too many messages are misrouted:
