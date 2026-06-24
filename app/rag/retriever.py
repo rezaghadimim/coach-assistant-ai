@@ -119,10 +119,29 @@ def index_chunks(
     if embed:
         has_any_embedding = any(ic.embedding for ic in _index)
         _embedding_index_ready = has_any_embedding
-        if newly_embedded and cache_path:
-            cache.update(newly_embedded)
-            _save_cache(cache_path, cache)
-            logger.info("rag: saved %d new embeddings to cache %s", len(newly_embedded), cache_path)
+        if cache_path:
+            if reset:
+                # Full reindex: persist only current chunks so stale keys (e.g. from
+                # tests that pointed ingest at a temp dir) cannot linger in the cache.
+                cache = {
+                    _cache_key(ic.chunk): ic.embedding
+                    for ic in _index
+                    if ic.embedding
+                }
+                _save_cache(cache_path, cache)
+                logger.info(
+                    "rag: wrote %d embeddings to cache %s (full reindex)",
+                    len(cache),
+                    cache_path,
+                )
+            elif newly_embedded:
+                cache.update(newly_embedded)
+                _save_cache(cache_path, cache)
+                logger.info(
+                    "rag: saved %d new embeddings to cache %s",
+                    len(newly_embedded),
+                    cache_path,
+                )
 
     return added
 

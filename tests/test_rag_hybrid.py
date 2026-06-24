@@ -175,6 +175,27 @@ class TestEmbeddingCache(unittest.TestCase):
                 index_chunks(chunks, embed=True, cache_path=cache_path)
                 mock_embed.assert_not_called()
 
+    def test_index_reset_prunes_stale_cache_keys(self) -> None:
+        """Full reindex rewrites the cache so keys from removed docs do not linger."""
+        chunks = [_make_chunk("c1", "GROW coaching model")]
+        cache_key = _cache_key(chunks[0])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = str(Path(tmp) / "cache.json")
+            _save_cache(
+                cache_path,
+                {"orphan::deadbeef": [0.1, 0.2], cache_key: [0.9, 0.1, 0.0]},
+            )
+
+            with patch("app.core.embeddings.embed_texts") as mock_embed:
+                clear_index()
+                index_chunks(chunks, reset=True, embed=True, cache_path=cache_path)
+                mock_embed.assert_not_called()
+
+            cache = _load_cache(cache_path)
+            self.assertEqual(set(cache.keys()), {cache_key})
+            self.assertEqual(cache[cache_key], [0.9, 0.1, 0.0])
+
 
 class TestIngestAndIndexDirectory(unittest.TestCase):
     """ingest_and_index_directory passes embed/cache args through."""

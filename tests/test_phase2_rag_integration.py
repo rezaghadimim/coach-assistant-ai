@@ -51,8 +51,10 @@ class Phase2RagIntegrationTests(unittest.TestCase):
 
             original_starter = settings.rag_knowledge_starter_dir
             original_private = settings.rag_knowledge_private_dir
+            original_cache = settings.rag_index_cache_path
             settings.rag_knowledge_starter_dir = temp_dir
             settings.rag_knowledge_private_dir = str(root / "empty_private")
+            settings.rag_index_cache_path = str(root / "test_rag_cache.json")
             try:
                 response = self.client.post(
                     "/api/ingest",
@@ -61,6 +63,7 @@ class Phase2RagIntegrationTests(unittest.TestCase):
             finally:
                 settings.rag_knowledge_starter_dir = original_starter
                 settings.rag_knowledge_private_dir = original_private
+                settings.rag_index_cache_path = original_cache
 
             self.assertEqual(response.status_code, 200)
             body = response.json()
