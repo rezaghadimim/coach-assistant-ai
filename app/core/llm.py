@@ -36,7 +36,9 @@ _FOLLOW_UP_LIST_KEYS = ("follow_ups", "followups", "follow_up_questions")
 _DATA_REQUEST_PATTERNS = re.compile(
     r"\b(?:"
     r"list|show|give|fetch|get|pull|display|retrieve|dump|print|output|"
-    r"who\s+are|who\s+is|what\s+are|what\s+is|tell\s+me|show\s+me"
+    r"look\s+up|"
+    r"who\s+are|who\s+is|who'?s|what\s+are|what\s+is|what'?s|where'?s|"
+    r"do\s+(?:i|we|you)\s+have|tell\s+me|show\s+me"
     r")\b.{0,60}\b(?:"
     r"client|clients|patient|patients|visitor|visitors|contact|contacts|"
     r"person|people|member|members|roster|database|records|table|notes?|goals?|"
@@ -83,6 +85,59 @@ def _sanitize_assistant_reply(content: str, *, last_user: str = "") -> str:
 def _is_data_request(message: str) -> bool:
     """Return True when *message* looks like a data retrieval request."""
     return bool(_DATA_REQUEST_PATTERNS.search(message.strip()))
+
+
+def _references_unknown_client(message: str, store: "MemoryStore") -> str | None:
+    """Return the referenced client name when the message asks about a specific
+    client who is **not** on file, else ``None``.
+
+    Guardrail C (entity grounding): a possessive/about/field lookup such as
+    "Sara's email" yields a reference via ``detect_client_lookup``; when no known
+    client resolves from the message (``detect_client_mention`` is ``None``) the
+    record does not exist, so we abstain deterministically instead of letting the
+    model invent one.
+    """
+    from app.core.client_intents import detect_client_lookup, detect_client_mention
+
+    ref = detect_client_lookup(message)
+    if not ref:
+        return None
+    # A known client mentioned anywhere in the message → let the normal path run.
+    if detect_client_mention(message, store) is not None:
+        return None
+    return ref
+
+
+def _ground_data_reply(reply: str, last_user: str, store: "MemoryStore") -> str:
+    """Guardrail A/B: discard fabricated client data in a free-form reply.
+
+    For a data request about a client on file, verify the reply invents no PII
+    (email/phone) absent from that client's stored record.  On a mismatch the
+    untrusted free-form text is replaced with the client's real record so the
+    coach still receives a truthful answer rather than a hallucinated one.
+    """
+    if not (reply and last_user and _is_data_request(last_user)):
+        return reply
+
+    from app.core.client_intents import detect_client_mention
+    # Reuse the formatter's canonical PII-grounding check for consistent behavior.
+    from app.core.response_formatter import _pii_preserved
+    from app.core.tools import execute_tool
+
+    client_id = detect_client_mention(last_user, store)
+    if client_id is None:
+        return reply
+
+    record = execute_tool("get_client_full", {"client_id": client_id}, store)
+    if record.startswith("❌"):
+        return reply
+
+    if _pii_preserved(record, reply):
+        return reply
+
+    log_step(logger, "llm.guard", "hallucination", level=logging.WARNING,
+             reason="fabricated_pii", client=client_id)
+    return _format_direct_lookup_reply(record)
 
 
 def _format_follow_ups_as_text(data: dict, *, last_user: str = "") -> str:
@@ -374,6 +429,17 @@ async def _generate_with_tools(
         # (_is_data_request); write operations go straight to the tool loop so
         # their confirmation flow is preserved and no extra call is made.
         if _is_data_request(last_user):
+            # Guardrail C: abstain when the request names a client not on file,
+            # before any LLM call can invent a record for them.
+            unknown_ref = _references_unknown_client(last_user, store)
+            if unknown_ref is not None:
+                log_step(logger, "llm.guard", "block", reason="unknown_client",
+                         ref=unknown_ref)
+                return (
+                    f'I don\'t have a client named "{unknown_ref}" on file. '
+                    "Want me to create one, or did you mean someone else?"
+                )
+
             llm_router_meta = await _try_llm_router_action(
                 last_user, store, provider
             )
@@ -457,6 +523,7 @@ async def _generate_with_tools(
                 )
                 content = _sanitize_assistant_reply(plain_result.content, last_user=last_user)
                 if content.strip() and not looks_like_malformed_tool_call(content):
+                    content = _ground_data_reply(content, last_user, store)
                     log_step(logger, "llm", "final", reason="malformed_retry_ok",
                              iteration=iteration + 1)
                     return content
@@ -471,6 +538,7 @@ async def _generate_with_tools(
                         return fallback
                     return _format_direct_lookup_reply(fallback)
                 return _empty_reply_fallback(last_user, store)
+            content = _ground_data_reply(content, last_user, store)
             log_step(logger, "llm", "final", reason="content",
                      iteration=iteration + 1)
             return content
