@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.rag.retriever import (
     clear_index,
@@ -27,6 +27,15 @@ def _make_chunk(chunk_id: str, text: str) -> DocumentChunk:
         start_token=0,
         end_token=len(text.split()),
     )
+
+
+def _mock_embed_provider(*, passages_fn, query_fn=None):
+    """Patch retriever embed provider (index_chunks uses provider.embed_passages)."""
+    provider = MagicMock()
+    provider.embed_passages.side_effect = passages_fn
+    if query_fn is not None:
+        provider.embed_query.side_effect = query_fn
+    return patch("app.rag.retriever.get_embed_provider", return_value=provider)
 
 
 class TestTokenRetrieval(unittest.TestCase):
@@ -68,10 +77,6 @@ class TestEmbeddingRetrieval(unittest.TestCase):
     def setUp(self) -> None:
         clear_index()
 
-    def _fake_embed_texts(self, texts, *, input_type="passage", model=None):
-        # Returns a simple 3-dim vector based on text length for testing.
-        return [[len(t) / 100.0, 0.5, 0.1] for t in texts]
-
     def _fake_embed_query(self, text, *, model=None):
         return [len(text) / 100.0, 0.5, 0.1]
 
@@ -84,7 +89,11 @@ class TestEmbeddingRetrieval(unittest.TestCase):
             _make_chunk("short", "hi"),
             _make_chunk("medium", "This is a medium length coaching document about GROW"),
         ]
-        with patch("app.core.embeddings.embed_texts", side_effect=self._fake_embed_texts):
+
+        def fake_passages(texts):
+            return [[len(t) / 100.0, 0.5, 0.1] for t in texts]
+
+        with _mock_embed_provider(passages_fn=fake_passages):
             count = index_chunks(chunks, embed=True)
 
         self.assertEqual(count, 2)
@@ -100,7 +109,11 @@ class TestEmbeddingRetrieval(unittest.TestCase):
     def test_embedding_fallback_to_token_on_query_error(self) -> None:
         """When embed_query raises, retrieve() silently falls back to token."""
         chunks = [_make_chunk("grow", "GROW model goal reality options will")]
-        with patch("app.core.embeddings.embed_texts", side_effect=self._fake_embed_texts):
+
+        def fake_passages(texts):
+            return [[len(t) / 100.0, 0.5, 0.1] for t in texts]
+
+        with _mock_embed_provider(passages_fn=fake_passages):
             index_chunks(chunks, embed=True)
 
         with patch(
@@ -147,13 +160,13 @@ class TestEmbeddingCache(unittest.TestCase):
             self.assertEqual(result, {})
 
     def test_index_writes_new_embeddings_to_cache(self) -> None:
-        def fake_embed(texts, *, input_type="passage", model=None):
+        def fake_passages(texts):
             return [[0.1, 0.2, 0.3] for _ in texts]
 
         chunks = [_make_chunk("c1", "GROW coaching model")]
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = str(Path(tmp) / "cache.json")
-            with patch("app.core.embeddings.embed_texts", side_effect=fake_embed):
+            with _mock_embed_provider(passages_fn=fake_passages):
                 index_chunks(chunks, embed=True, cache_path=cache_path)
 
             cache = _load_cache(cache_path)
@@ -161,7 +174,7 @@ class TestEmbeddingCache(unittest.TestCase):
             self.assertIsInstance(list(cache.values())[0], list)
 
     def test_index_reuses_cached_embeddings(self) -> None:
-        """Second ingest does not call embed_texts for already-cached chunks."""
+        """Second ingest does not call embed_passages for already-cached chunks."""
         chunks = [_make_chunk("c1", "GROW coaching model")]
         cache_key = _cache_key(chunks[0])
 
@@ -169,11 +182,12 @@ class TestEmbeddingCache(unittest.TestCase):
             cache_path = str(Path(tmp) / "cache.json")
             _save_cache(cache_path, {cache_key: [0.9, 0.1, 0.0]})
 
-            with patch("app.core.embeddings.embed_texts") as mock_embed:
-                mock_embed.return_value = [[0.5, 0.5, 0.0]]
+            provider = MagicMock()
+            provider.embed_passages.return_value = [[0.5, 0.5, 0.0]]
+            with patch("app.rag.retriever.get_embed_provider", return_value=provider):
                 clear_index()
                 index_chunks(chunks, embed=True, cache_path=cache_path)
-                mock_embed.assert_not_called()
+                provider.embed_passages.assert_not_called()
 
     def test_index_reset_prunes_stale_cache_keys(self) -> None:
         """Full reindex rewrites the cache so keys from removed docs do not linger."""
@@ -187,10 +201,11 @@ class TestEmbeddingCache(unittest.TestCase):
                 {"orphan::deadbeef": [0.1, 0.2], cache_key: [0.9, 0.1, 0.0]},
             )
 
-            with patch("app.core.embeddings.embed_texts") as mock_embed:
+            provider = MagicMock()
+            with patch("app.rag.retriever.get_embed_provider", return_value=provider):
                 clear_index()
                 index_chunks(chunks, reset=True, embed=True, cache_path=cache_path)
-                mock_embed.assert_not_called()
+                provider.embed_passages.assert_not_called()
 
             cache = _load_cache(cache_path)
             self.assertEqual(set(cache.keys()), {cache_key})
@@ -213,14 +228,14 @@ class TestIngestAndIndexDirectory(unittest.TestCase):
             self.assertGreaterEqual(chunks, 1)
 
     def test_ingest_directory_embedding_backend(self) -> None:
-        def fake_embed(texts, *, input_type="passage", model=None):
+        def fake_passages(texts):
             return [[0.1, 0.2] for _ in texts]
 
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "doc.txt").write_text("Coaching with MI and GROW", encoding="utf-8")
             with (
                 tempfile.TemporaryDirectory() as cache_tmp,
-                patch("app.core.embeddings.embed_texts", side_effect=fake_embed),
+                _mock_embed_provider(passages_fn=fake_passages),
             ):
                 cache_path = str(Path(cache_tmp) / "rag.json")
                 docs, chunks = ingest_and_index_directory(
