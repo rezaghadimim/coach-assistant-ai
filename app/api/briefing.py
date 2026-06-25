@@ -17,7 +17,7 @@ from app.core.llm_providers.ollama import OllamaProvider
 from app.core.prompts import BRIEFING_PROMPT
 from app.memory.store import MemoryStore
 from app.models.schemas import BriefingRequest, CoachBriefing
-from app.rag.retriever import format_retrieval_context, retrieve
+from app.rag.retriever import format_coach_retrieval_context, retrieve_coach_context
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +33,8 @@ def _build_briefing_context(request: BriefingRequest, store: MemoryStore) -> str
 
     # RAG knowledge context
     if settings.rag_enabled:
-        chunks = retrieve(
-            request.question,
-            top_k=settings.rag_top_k,
-            min_score=settings.rag_min_score,
-            backend=settings.rag_backend,  # type: ignore[arg-type]
-        )
-        rag_context = format_retrieval_context(chunks)
+        result = retrieve_coach_context(request.question)
+        rag_context = format_coach_retrieval_context(result)
         if rag_context:
             sections.append(rag_context)
 

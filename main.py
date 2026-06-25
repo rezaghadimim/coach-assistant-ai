@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 from app.api.briefing import router as briefing_router
 from app.api.chat import router as chat_router
+from app.api.collections import router as collections_router
 from app.api.ingest import router as ingest_router
 from app.api.openai_compat import router as openai_compat_router
 from app.api.tools import router as tools_router
@@ -49,18 +50,21 @@ async def lifespan(_app: FastAPI):
 
     if settings.rag_enabled:
         from app.core.knowledge_paths import knowledge_starter_dir
+        from app.knowledge.jobs import process_pending_sources
         from app.rag.retriever import ingest_and_index_knowledge
         from app.core.embeddings import probe_embed_model
 
         if knowledge_starter_dir().exists():
+            process_pending_sources()
             use_embed = settings.rag_backend == "embedding" or (
-                settings.rag_backend == "auto" and probe_embed_model()
+                settings.rag_backend == "auto" and probe_embed_model(corpus="framework")
             )
             docs, chunks = ingest_and_index_knowledge(
                 chunk_size=settings.rag_chunk_size,
                 chunk_overlap=settings.rag_chunk_overlap,
                 embed=use_embed,
                 cache_path=settings.rag_index_cache_path if use_embed else None,
+                include_collections=True,
             )
             logger.info(
                 "rag: index ready | backend=%s docs=%d chunks=%d",
@@ -95,6 +99,7 @@ app = FastAPI(
 
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(ingest_router, prefix="/api", tags=["ingest"])
+app.include_router(collections_router, prefix="/api", tags=["collections"])
 app.include_router(briefing_router, prefix="/api", tags=["briefing"])
 app.include_router(users_router, prefix="/api", tags=["users"])
 app.include_router(tools_router, prefix="/api", tags=["tools"])

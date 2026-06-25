@@ -14,17 +14,45 @@ For behavior (coaching tone, style, questioning strategy), see [`FINETUNE.md`](F
 ## What is implemented
 
 - Local ingestion of `.txt`, `.md`, and `.pdf` from **starter + private** knowledge dirs (`app/rag/ingest.py`, `app/core/knowledge_paths.py`)
-- Heading-aware chunking for markdown (splits on `##` / `###` before fixed-size windows)
-- Two-stage in-memory retrieval index (`app/rag/retriever.py`):
-  - **Stage 1** — bi-encoder cosine (E5-small via Ollama), TF cosine fallback, or **hybrid RRF** merge when `RAG_HYBRID_RRF_ENABLED=true`; retrieves a wider candidate pool (`RAG_RETRIEVE_K`, default 30)
-  - **Stage 2** — optional local cross-encoder reranker (`app/core/rerank.py` + `app/rag/reranker.py`) narrows pool to final `RAG_TOP_K` (default 2)
+- **Per-person video/transcript collections** under `data/knowledge/collections/` with SRT/VTT/txt/md support (`app/rag/transcript.py`, `app/knowledge/ingest.py`)
+- Optional media jobs: local video/audio → Whisper (`app/knowledge/jobs.py`); YouTube URLs → yt-dlp captions or Whisper fallback
+- **Dual in-memory indices** (`app/rag/retriever.py`): `framework_index` (starter + private) and `collection_index` (expert video knowledge)
+- **Pluggable embedding providers** (`app/core/embed_providers/`): Ollama (default), OpenRouter, OpenAI — framework vs collection corpora can use different providers
+- Heading-aware chunking for markdown (splits on `##` / `###` before fixed-size windows); time-aware chunking for transcripts
+- Two-stage retrieval per phase (bi-encoder → cross-encoder rerank):
+  - **Stage 1** — bi-encoder cosine (E5-small via Ollama, or cloud embed for collection index), TF cosine fallback, or **hybrid RRF** merge when `RAG_HYBRID_RRF_ENABLED=true`
+  - **Stage 2** — optional local cross-encoder reranker (`app/core/rerank.py` + `app/rag/reranker.py`)
+- **Two-phase coach retrieval** (`retrieve_coach_context()`): phase 1 aligns on the coaching situation; phase 2 expands expert solutions across collections with `diversify_by_collection()`
 - Off-topic abstention: scope guard short-circuits retrieval before similarity search (`app/core/scope.py`)
-- Source-level deduplication: only the highest-scoring chunk per source file reaches context
+- Source-level deduplication; collection-aware dedup key `(collection_id, source_path)` in phase 2
 - Private overrides: same relative path in `private/` wins over `starter/`
-- API endpoint to reindex documents (`POST /api/ingest` → `starter_dir`, `private_dir`, `docs_dir` summary)
-- Chat integration that injects retrieved chunks into system prompt
+- API: `POST /api/ingest` (framework + collections), `GET/POST /api/collections`, `POST /api/collections/{id}/reindex`, `POST /api/collections/process-jobs`
+- Chat/briefing integration via `format_coach_retrieval_context()` — situation + per-expert solution sections
 
-## Retrieval pipeline
+## Retrieval pipeline (coach chat)
+
+When `RAG_TWO_PHASE_ENABLED=true` (default):
+
+```
+Coach message
+  → off-topic check (scope guard)
+  → Phase 1 — problem alignment
+      → search framework_index + collection_index (RRF merge)
+      → rerank with original query
+      → top RAG_PROBLEM_TOP_K chunks (default 3)
+  → Phase 2 — expert solutions
+      → build solution query from phase-1 hits
+      → search collection_index only
+      → rerank → diversify_by_collection (min RAG_MIN_COLLECTIONS experts)
+      → top RAG_EXPERT_TOP_K chunks (default 6)
+  → format_coach_retrieval_context()
+  → build_system_prompt()
+  → LLM
+```
+
+Legacy single-index path (`retrieve()` on framework corpus only) remains for tests and simple callers.
+
+### Single-corpus pipeline (framework-only)
 
 ```
 Query
@@ -39,15 +67,22 @@ Query
 
 ## Grounding contract
 
-Every context window that contains retrieved chunks is prepended with a strict instruction:
+Coach chat uses **two prompt sections** when two-phase retrieval is enabled:
+
+1. **Relevant Coaching Knowledge (situation)** — frameworks and context for understanding the problem. Do not invent facts beyond these passages.
+2. **Expert Perspectives (stored solutions)** — attributed solutions from stored video/transcript knowledge. Present each expert separately; note agreements and differences.
+
+The LLM is instructed to structure replies as: brief coaching suggestion → per-expert recommendations (with guide title + timestamp) → comparison when relevant.
+
+Every context window that contains retrieved chunks is also governed by a strict abstention rule:
 
 > **Use ONLY the passages below to answer factual questions about coaching methods, frameworks, or techniques. If the answer is not contained in these passages, say you do not have that in your knowledge base and continue from general coaching principles — never invent sources, studies, statistics, or quotes.**
 
-This prevents the LLM from hallucinating "facts" when retrieved chunks are marginally relevant.  Each chunk is also tagged with its `source_path` filename so the model can attribute answers rather than fabricate citations.
+This prevents the LLM from hallucinating "facts" when retrieved chunks are marginally relevant. Framework chunks are tagged by filename; collection chunks include **expert name**, **guide title**, and **timestamp range** when available.
 
-When no chunk clears the `RAG_MIN_SCORE` floor (default `0.15`), **no context is injected at all** — avoiding the negative priming effect where low-score chunks suggest plausible-sounding but wrong content.
+When no chunk clears the score floor, **no context is injected at all** — avoiding negative priming from low-score chunks.
 
-Off-topic queries detected by the scope guard (`app/core/scope.py`) return zero chunks immediately — retrieval abstains before any similarity search runs.
+Off-topic queries detected by the scope guard (`app/core/scope.py`) return zero chunks immediately.
 
 This follows the *retrieval-conditional abstain* pattern: inject context only when the retriever is confident, and let the model abstain gracefully when it is not.
 
@@ -69,6 +104,24 @@ as a submodule at `private/`. See
 
 On every ingest, starter files are indexed first, then private files are **appended**.
 Same relative path in both → **private wins**.
+
+### Expert video collections
+
+Per-person guides (video transcripts, local media, YouTube) live under:
+
+```text
+data/knowledge/collections/
+└── {slug}/
+    ├── collection.json       # person_name, title, optional embed_provider override
+    └── sources/
+        └── {source-id}/
+            ├── meta.json     # title, source_type, uri
+            └── transcript.vtt   # or .srt / .txt / .md / video file
+```
+
+Metadata is mirrored in SQLite (`app/knowledge/store.py`). On startup and `POST /api/ingest`, framework docs and all collection transcripts are indexed into separate in-memory indices.
+
+See [`docs/knowledge/README.md`](knowledge/README.md) for collection workflow.
 
 ## Ingestion
 
@@ -119,8 +172,19 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 | `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default) |
 | `RAG_KNOWLEDGE_STARTER_DIR` | `docs/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
 | `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Private knowledge (git submodule → `coach-knowledge`) merged on ingest |
-| `RAG_TOP_K` | `2` | Final number of chunks injected into prompt |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings only** (stage 1) |
+| `RAG_TOP_K` | `2` | Final chunks for legacy `retrieve()` (framework only) |
+| `RAG_TWO_PHASE_ENABLED` | `true` | Enable two-phase coach retrieval in chat/briefing |
+| `RAG_PROBLEM_TOP_K` | `3` | Phase-1 situation chunks |
+| `RAG_EXPERT_TOP_K` | `6` | Phase-2 expert solution chunks |
+| `RAG_MIN_COLLECTIONS` | `2` | Minimum distinct experts in phase 2 |
+| `RAG_MAX_CHUNKS_PER_COLLECTION` | `2` | Cap per expert in phase 2 |
+| `RAG_EMBED_PROVIDER` | `ollama` | Framework + query default: `ollama` \| `openrouter` \| `openai` |
+| `RAG_EMBED_MODEL` | `karuniaperjuangan/multilingual-e5-small` | Model for framework corpus |
+| `RAG_COLLECTION_EMBED_PROVIDER` | `openrouter` | Collection ingest: `openrouter` \| `openai` \| `ollama` |
+| `RAG_COLLECTION_EMBED_MODEL` | `openai/text-embedding-3-small` | Model for collection corpus (batch at ingest) |
+| `RAG_COLLECTIONS_DIR` | `data/knowledge/collections` | Filesystem root for per-person collections |
+| `OPENAI_API_KEY` | *(empty)* | Required when `RAG_*_EMBED_PROVIDER=openai` |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings** (stage 1) |
 
 `OLLAMA_RERANK_MODEL` is still accepted as a legacy alias for `RAG_RERANK_MODEL`.
 
@@ -166,6 +230,11 @@ python3 -m unittest discover -s tests -p "test_*.py"
 - `tests/test_rerank.py` — unit tests with a mocked encoder (fast, offline)
 - `tests/test_rag_rerank.py` — two-stage `retrieve()` pipeline tests (mocked reranker)
 - `tests/test_rag_rrf.py` — hybrid RRF stage-1 merge tests
+- `tests/test_transcript_parser.py` — SRT/VTT parsing and time-aware chunks
+- `tests/test_collection_ingest.py` — filesystem collection discovery
+- `tests/test_two_phase_retrieval.py` — `retrieve_coach_context()` and diversity
+- `tests/test_embed_providers.py` — Ollama / OpenRouter / OpenAI factory
+- `tests/test_knowledge_jobs.py` — media job error paths (offline-safe)
 - `tests/test_rerank_integration.py` — optional end-to-end test against the real ONNX model (skipped when the model is not cached; set `RUN_RERANK_INTEGRATION=1` to download and run)
 
 ## Grounding eval

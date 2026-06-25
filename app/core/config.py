@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:8b"
     ollama_timeout: float = 120.0
 
+    # OpenAI (optional — direct embeddings when rag_*_embed_provider=openai)
+    openai_api_key: str = ""
+
     # OpenRouter (optional cloud provider — leave api_key empty to disable)
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -114,6 +117,30 @@ class Settings(BaseSettings):
     # Where fastembed caches the downloaded reranker model. Kept under data/ so it
     # survives restarts (and lands in the mounted Docker volume) instead of /tmp.
     rag_rerank_cache_dir: str = "data/rerank_cache"
+    # Embedding providers: ollama | openrouter | openai
+    rag_embed_provider: str = "ollama"
+    rag_embed_model: str = Field(
+        default="karuniaperjuangan/multilingual-e5-small",
+        validation_alias=AliasChoices("rag_embed_model", "RAG_EMBED_MODEL"),
+    )
+    rag_collection_embed_provider: str = "openrouter"
+    rag_collection_embed_model: str = Field(
+        default="openai/text-embedding-3-small",
+        validation_alias=AliasChoices(
+            "rag_collection_embed_model",
+            "RAG_COLLECTION_EMBED_MODEL",
+        ),
+    )
+    rag_collections_dir: str = Field(
+        default="data/knowledge/collections",
+        validation_alias=AliasChoices("rag_collections_dir", "RAG_COLLECTIONS_DIR"),
+    )
+    # Two-phase coach retrieval
+    rag_problem_top_k: int = 3
+    rag_expert_top_k: int = 6
+    rag_min_collections: int = 2
+    rag_max_chunks_per_collection: int = 2
+    rag_two_phase_enabled: bool = True
 
     # Tool Router
     tool_router_enabled: bool = True
@@ -227,6 +254,10 @@ class Settings(BaseSettings):
         project_root = Path(__file__).resolve().parent.parent.parent
         if self.rag_rerank_cache_dir and not Path(self.rag_rerank_cache_dir).is_absolute():
             self.rag_rerank_cache_dir = str(project_root / self.rag_rerank_cache_dir)
+        if self.rag_collections_dir and not Path(self.rag_collections_dir).is_absolute():
+            self.rag_collections_dir = str(project_root / self.rag_collections_dir)
+        if self.rag_index_cache_path and not Path(self.rag_index_cache_path).is_absolute():
+            self.rag_index_cache_path = str(project_root / self.rag_index_cache_path)
         return self
 
 settings = Settings()

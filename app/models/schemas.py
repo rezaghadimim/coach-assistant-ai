@@ -215,3 +215,71 @@ class ToolReindexResponse(BaseModel):
 
     examples_indexed: int
     backend: str
+
+
+# ------------------------------------------------------------------
+# Knowledge collections
+# ------------------------------------------------------------------
+
+
+class CollectionCreateRequest(BaseModel):
+    """Create a per-person knowledge collection."""
+
+    slug: str = Field(..., min_length=1, pattern=r"^[a-z0-9-]+$")
+    person_name: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    description: str = ""
+    embed_provider: Optional[str] = None
+    embed_model: Optional[str] = None
+
+
+class CollectionResponse(BaseModel):
+    """Knowledge collection metadata."""
+
+    id: str
+    slug: str
+    person_name: str
+    title: str
+    description: str = ""
+    embed_provider: str = "openrouter"
+    embed_model: str = ""
+    source_count: int = 0
+    chunk_count: int = 0
+    created_at: Optional[str] = None
+
+
+class SourceCreateRequest(BaseModel):
+    """Register a transcript, media file, or URL source."""
+
+    title: str = Field(..., min_length=1)
+    source_type: str = Field(..., min_length=1)
+    uri: str = ""
+    source_id: Optional[str] = None
+
+
+class SourceResponse(BaseModel):
+    """Knowledge source metadata."""
+
+    id: str
+    collection_id: str
+    title: str
+    source_type: str
+    uri: str = ""
+    duration_sec: Optional[float] = None
+    status: str
+    error_message: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class CollectionReindexResponse(BaseModel):
+    """Result of reindexing one collection."""
+
+    collection_id: str
+    sources_indexed: int
+    chunks_indexed: int
+
+
+class ProcessJobsResponse(BaseModel):
+    """Result of running pending media/URL jobs."""
+
+    processed_source_ids: list[str]

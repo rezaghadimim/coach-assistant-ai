@@ -1,7 +1,17 @@
 # ADR-0003: In-Memory Token-Similarity RAG Retrieval
 
 **Date:** 2024-01-01
-**Status:** Accepted
+**Status:** Accepted (extended by ADR-0008, ADR-0011 — see below)
+
+> **Update (2026-06-25):** ADR-0011 extends this decision with dual in-memory indices
+> (`framework_index` + `collection_index`), pluggable embedding providers (Ollama /
+> OpenRouter / OpenAI), per-person video/transcript collections, and two-phase coach
+> retrieval (`retrieve_coach_context()`). The core in-memory design and stable
+> `retrieve()` interface are unchanged. See [ADR-0011](0011-collection-video-knowledge.md).
+
+> **Update (2026-06):** Stage-1 retrieval now uses Ollama E5 embeddings with TF cosine
+> fallback and optional hybrid RRF; stage-2 uses a local fastembed cross-encoder
+> (ADR-0008). The original TF-only description below reflects the initial MVP.
 
 ## Context
 

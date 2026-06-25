@@ -1,15 +1,17 @@
 # RAG Knowledge Base
 
-Two sources are indexed together on every startup and `POST /api/ingest`:
+Three sources are indexed together on every startup and `POST /api/ingest`:
 
-| Directory | Git | Purpose |
-|-----------|-----|---------|
-| [`starter/`](starter/) | **This repo** | Bundled coaching frameworks (GROW, MI, SMART, …). Safe for public git. |
-| [`private/`](private/) | **Submodule** → [`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge) | Your real manuals and overrides |
+| Source | Location | Git | Purpose |
+|--------|----------|-----|---------|
+| Starter | [`starter/`](starter/) | **This repo** | Bundled coaching frameworks (GROW, MI, SMART, …) |
+| Private | [`private/`](private/) | **Submodule** → [`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge) | Your manuals and overrides |
+| Collections | `data/knowledge/collections/` | **Local data** (not in git by default) | Per-person video/transcript expert guides |
 
-**Merge rule:** all starter files are indexed. Private files are **appended**.
-If the same relative path exists in both (e.g. `grow_model.md`), the **private
-copy overrides** the starter copy.
+**Merge rule (starter + private):** all starter files are indexed. Private files are **appended**.
+If the same relative path exists in both (e.g. `grow_model.md`), the **private copy overrides** the starter copy.
+
+**Collections** are indexed into a separate in-memory index with their own embedding provider (default: OpenRouter/OpenAI at ingest time). See [Collection workflow](#expert-video-collections) below.
 
 ## First-time setup (private repo)
 
@@ -37,21 +39,100 @@ git add . && git commit -m "Update GROW notes" && git push
 cd ../../.. && python3 scripts/ingest.py
 ```
 
+## Expert video collections
+
+Each person (coach, trainer, author) gets a **collection** — their video guides embedded as searchable knowledge with citations (who said what, which guide, timestamp).
+
+### Filesystem layout
+
+```text
+data/knowledge/collections/
+└── jane-doe/
+    ├── collection.json
+    └── sources/
+        └── handling-resistance/
+            ├── meta.json
+            └── transcript.vtt
+```
+
+`collection.json` example:
+
+```json
+{
+  "slug": "jane-doe",
+  "person_name": "Jane Doe",
+  "title": "Jane Doe",
+  "description": "Resistance and accountability guides",
+  "embed_provider": "openrouter",
+  "embed_model": "openai/text-embedding-3-small"
+}
+```
+
+`meta.json` example:
+
+```json
+{
+  "title": "Handling resistance",
+  "source_type": "transcript",
+  "uri": ""
+}
+```
+
+Supported transcript files: `.vtt`, `.srt`, `.txt`, `.md`.  
+For local video/audio (`.mp4`, `.mp3`, …) or YouTube URLs, register via API with `source_type` `local_media` or `youtube` and run `POST /api/collections/process-jobs`.
+
+### API workflow
+
+```bash
+# Create collection
+curl -X POST http://localhost:8000/api/collections \
+  -H "Content-Type: application/json" \
+  -d '{"slug":"jane-doe","person_name":"Jane Doe","title":"Jane Doe"}'
+
+# Register a transcript source (place files under data/knowledge/collections/jane-doe/sources/...)
+curl -X POST http://localhost:8000/api/collections/jane-doe/sources \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Handling resistance","source_type":"transcript","source_id":"handling-resistance"}'
+
+# Reindex one collection (or reindex everything)
+curl -X POST http://localhost:8000/api/collections/jane-doe/reindex
+curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -d '{}'
+```
+
+### How retrieval uses collections
+
+Chat uses **two-phase retrieval** (see [`docs/RAG.md`](../RAG.md)):
+
+1. **Situation** — frameworks + relevant expert context from all indices.
+2. **Expert solutions** — practical passages from **multiple people** so the coach can compare perspectives.
+
 ## Starter disclaimer
 
 Files in `starter/` are **bootstrap content** for retrieval testing — general
 coaching framework summaries, not authoritative clinical or licensed material.
-Put production content in your **private repo**.
+Put production content in your **private repo** or **collections**.
 
 ## Environment
 
 ```env
 RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
 RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
-# Documented for teammates only — not read by the app:
-PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/coach-knowledge.git
+RAG_COLLECTIONS_DIR=data/knowledge/collections
+
+# Framework corpus (default: local Ollama E5)
+RAG_EMBED_PROVIDER=ollama
+RAG_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
+
+# Collection corpus — embedded once at ingest (default: OpenRouter)
+RAG_COLLECTION_EMBED_PROVIDER=openrouter
+RAG_COLLECTION_EMBED_MODEL=openai/text-embedding-3-small
+OPENROUTER_API_KEY=sk-or-v1-...
+# or OPENAI_API_KEY=sk-... when using openai provider
+
+# Two-phase coach retrieval
+RAG_TWO_PHASE_ENABLED=true
 ```
 
 Legacy `RAG_KNOWLEDGE_TEMPLATES_DIR` and `RAG_DOCS_DIR` map to the starter directory.
 
-See [`docs/RAG.md`](../RAG.md) for the full retrieval pipeline.
+See [`docs/RAG.md`](../RAG.md) for the full retrieval pipeline and [ADR-0011](../adr/0011-collection-video-knowledge.md) for design rationale.

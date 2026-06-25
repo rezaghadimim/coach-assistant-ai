@@ -6,6 +6,9 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+_OLLAMA_HTTPX = "app.core.embed_providers.ollama.httpx.Client"
+_OLLAMA_SETTINGS = "app.core.config.settings"
+
 
 def _mock_httpx_client(embedding: list[float]):
     """Return a mock httpx.Client context manager that yields a fixed embedding."""
@@ -25,7 +28,7 @@ class EmbedTextsTests(unittest.TestCase):
     def test_returns_one_vector_per_text(self) -> None:
         from app.core.embeddings import embed_texts
         vec = [0.1, 0.2, 0.3]
-        with patch("app.core.embeddings.httpx.Client", return_value=_mock_httpx_client(vec)):
+        with patch(_OLLAMA_HTTPX, return_value=_mock_httpx_client(vec)):
             results = embed_texts(["hello", "world"], input_type="passage")
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0], vec)
@@ -50,10 +53,11 @@ class EmbedTextsTests(unittest.TestCase):
 
         mock_client.post = capture_post
 
-        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
-            with patch("app.core.embeddings.settings") as s:
+        with patch(_OLLAMA_HTTPX, return_value=mock_client):
+            with patch(_OLLAMA_SETTINGS) as s:
+                s.rag_embed_provider = "ollama"
+                s.rag_embed_model = "test-model"
                 s.tool_router_use_e5_prefix = True
-                s.ollama_embed_model = "test-model"
                 s.ollama_base_url = "http://localhost:11434"
                 s.ollama_timeout = 30.0
                 embed_texts(["hello world"], input_type="passage")
@@ -80,10 +84,11 @@ class EmbedTextsTests(unittest.TestCase):
 
         mock_client.post = capture_post
 
-        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
-            with patch("app.core.embeddings.settings") as s:
+        with patch(_OLLAMA_HTTPX, return_value=mock_client):
+            with patch(_OLLAMA_SETTINGS) as s:
+                s.rag_embed_provider = "ollama"
+                s.rag_embed_model = "test-model"
                 s.tool_router_use_e5_prefix = True
-                s.ollama_embed_model = "test-model"
                 s.ollama_base_url = "http://localhost:11434"
                 s.ollama_timeout = 30.0
                 embed_texts(["user message"], input_type="query")
@@ -109,10 +114,11 @@ class EmbedTextsTests(unittest.TestCase):
 
         mock_client.post = capture_post
 
-        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
-            with patch("app.core.embeddings.settings") as s:
+        with patch(_OLLAMA_HTTPX, return_value=mock_client):
+            with patch(_OLLAMA_SETTINGS) as s:
+                s.rag_embed_provider = "ollama"
+                s.rag_embed_model = "test-model"
                 s.tool_router_use_e5_prefix = False
-                s.ollama_embed_model = "test-model"
                 s.ollama_base_url = "http://localhost:11434"
                 s.ollama_timeout = 30.0
                 embed_texts(["hello"], input_type="query")
@@ -152,10 +158,11 @@ class TruncateForEmbedTests(unittest.TestCase):
         mock_client.post = capture_post
 
         long_text = " ".join(f"word{i}" for i in range(500))
-        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
-            with patch("app.core.embeddings.settings") as s:
+        with patch(_OLLAMA_HTTPX, return_value=mock_client):
+            with patch(_OLLAMA_SETTINGS) as s:
+                s.rag_embed_provider = "ollama"
+                s.rag_embed_model = "test-model"
                 s.tool_router_use_e5_prefix = True
-                s.ollama_embed_model = "test-model"
                 s.ollama_base_url = "http://localhost:11434"
                 s.ollama_timeout = 30.0
                 embed_texts([long_text], input_type="passage", max_words=3)
@@ -181,10 +188,11 @@ class TruncateForEmbedTests(unittest.TestCase):
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post = MagicMock(side_effect=[too_long, ok])
 
-        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
-            with patch("app.core.embeddings.settings") as s:
+        with patch(_OLLAMA_HTTPX, return_value=mock_client):
+            with patch(_OLLAMA_SETTINGS) as s:
+                s.rag_embed_provider = "ollama"
+                s.rag_embed_model = "test-model"
                 s.tool_router_use_e5_prefix = False
-                s.ollama_embed_model = "test-model"
                 s.ollama_base_url = "http://localhost:11434"
                 s.ollama_timeout = 30.0
                 results = embed_texts(["hello world"], input_type="passage")
@@ -220,8 +228,10 @@ class ProbeEmbedModelTests(unittest.TestCase):
     def test_returns_true_when_ok(self) -> None:
         from app.core.embeddings import probe_embed_model
         vec = [0.1, 0.2]
-        with patch("app.core.embeddings.httpx.Client", return_value=_mock_httpx_client(vec)):
-            with patch("app.core.embeddings.settings") as s:
+        with patch(_OLLAMA_HTTPX, return_value=_mock_httpx_client(vec)):
+            with patch(_OLLAMA_SETTINGS) as s:
+                s.rag_embed_provider = "ollama"
+                s.rag_embed_model = "test"
                 s.tool_router_use_e5_prefix = True
                 s.ollama_embed_model = "test"
                 s.ollama_base_url = "http://localhost:11434"
@@ -238,6 +248,6 @@ class ProbeEmbedModelTests(unittest.TestCase):
         mock_client.__exit__ = MagicMock(return_value=False)
         mock_client.post = MagicMock(side_effect=httpx.ConnectError("unreachable"))
 
-        with patch("app.core.embeddings.httpx.Client", return_value=mock_client):
+        with patch(_OLLAMA_HTTPX, return_value=mock_client):
             result = probe_embed_model()
         self.assertFalse(result)

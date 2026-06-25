@@ -14,7 +14,7 @@ from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
 from app.core.tools import TOOL_DEFINITIONS
 from app.memory import MemoryStore, SessionManager
 from app.models.schemas import ChatRequest, ChatResponse
-from app.rag.retriever import format_retrieval_context, retrieve
+from app.rag.retriever import format_coach_retrieval_context, retrieve_coach_context
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,14 +37,8 @@ def build_system_prompt(user_id: str, message: str) -> str:
     sections = [COACH_ASSISTANT_SYSTEM_PROMPT]
 
     if settings.rag_enabled:
-        from app.rag.retriever import Backend
-        context_chunks = retrieve(
-            message,
-            top_k=settings.rag_top_k,
-            min_score=settings.rag_min_score,
-            backend=settings.rag_backend,  # type: ignore[arg-type]
-        )
-        rag_context = format_retrieval_context(context_chunks)
+        result = retrieve_coach_context(message)
+        rag_context = format_coach_retrieval_context(result)
         if rag_context:
             sections.append(rag_context)
 

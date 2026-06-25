@@ -20,12 +20,22 @@ class ToolRouterTokenBackendTests(unittest.TestCase):
     """Core token-backend classify() behaviour."""
 
     def setUp(self) -> None:
+        from app.core.config import settings
         from app.core.tool_router import reset_index
+
+        self._settings_patch = patch.multiple(
+            settings,
+            tool_router_backend="token",
+            tool_router_rerank_enabled=False,
+        )
+        self._settings_patch.start()
         reset_index()
 
     def tearDown(self) -> None:
         from app.core.tool_router import reset_index
+
         reset_index()
+        self._settings_patch.stop()
 
     # ------------------------------------------------------------------
     # index loading
@@ -234,13 +244,23 @@ class OutOfVocabWithLexiconTests(unittest.TestCase):
     """Token-backend tests for out-of-vocab phrasings helped by the lexicon."""
 
     def setUp(self) -> None:
+        from app.core.config import settings
         from app.core.tool_router import reset_index
+
+        self._settings_patch = patch.multiple(
+            settings,
+            tool_router_backend="token",
+            tool_router_rerank_enabled=False,
+        )
+        self._settings_patch.start()
         reset_index()
         build_router()
 
     def tearDown(self) -> None:
         from app.core.tool_router import reset_index
+
         reset_index()
+        self._settings_patch.stop()
 
     def test_visitors_in_table_routes_list_clients(self) -> None:
         from app.core.tool_router import classify_tool

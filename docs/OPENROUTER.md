@@ -12,6 +12,8 @@ Ollama unless you explicitly configure an API key.
   too slow.
 - **Prompt tuning**: get fast, high-quality responses while iterating on system
   prompts before finalising for local deployment.
+- **Collection embeddings**: batch-embed video/transcript knowledge once at ingest
+  (`RAG_COLLECTION_EMBED_PROVIDER=openrouter`) without slowing every chat query.
 
 > **Privacy notice**: selecting the cloud model sends conversation content to
 > OpenRouter and the underlying model provider. Do not use the cloud model for
@@ -127,3 +129,19 @@ OpenRouter passes through the upstream provider's pricing. A few common choices:
 | `meta-llama/llama-3.1-8b-instruct:free` | Comparable to local | Free (rate-limited) |
 
 Prices change; check <https://openrouter.ai/models> for current rates.
+
+## Collection embeddings (RAG)
+
+OpenRouter can also serve the **embeddings API** for per-person video/transcript
+collections. This is separate from the chat LLM — passages are embedded **once**
+at ingest, not on every message.
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+RAG_COLLECTION_EMBED_PROVIDER=openrouter
+RAG_COLLECTION_EMBED_MODEL=openai/text-embedding-3-small
+```
+
+Framework docs (`starter/` + `private/`) continue to use local Ollama E5 by
+default (`RAG_EMBED_PROVIDER=ollama`). See [`RAG.md`](RAG.md) and
+[ADR-0011](adr/0011-collection-video-knowledge.md).

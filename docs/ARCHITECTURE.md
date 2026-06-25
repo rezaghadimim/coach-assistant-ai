@@ -9,9 +9,11 @@ Open WebUI (browser) → FastAPI ───────────────�
                            ├─ /v1/chat/completions (model=cloud)  → OpenRouter (optional)
                            |                                         │
                            ├─ Local RAG Index (in-memory)           │
+                           │    framework_index + collection_index    │
+                           ├─ Knowledge Collections API               │
                            └─ SQLite Memory Store                   │
                                  (users, sessions, messages,        │
-                                  client notes)                     │
+                                  client notes, knowledge metadata)  │
 ```
 
 The cloud OpenRouter provider is optional and only activated when
@@ -24,17 +26,21 @@ The local Ollama provider is always the default.
 
 - Main endpoint: `POST /api/chat`
 - Loads active session history from SQLite
-- Injects optional RAG context, client profile, client notes, and session summary into system prompt
+- Injects optional **two-phase RAG context** (situation + expert perspectives), client profile, client notes, and session summary into system prompt
 - Persists user/assistant messages
 - LLM tool calling for client management (create client, add notes, look up profiles)
 
 ### 2) RAG Ingestion + Retrieval (`app/rag/`)
 
-- `ingest.py`: document discovery + heading-aware chunking (`.txt`, `.md`, `.pdf`); merges `starter/` + `private/` (private wins on path collision)
+- `ingest.py`: document discovery + heading-aware chunking (`.txt`, `.md`, `.pdf`); merges `starter/` + `private/` (private wins on path collision); extended `DocumentChunk` with collection/timestamp metadata
+- `transcript.py`: SRT/VTT parsing and time-aware chunking for video guides
 - `knowledge_paths.py`: resolves configured starter and private directories
-- `retriever.py`: two-stage retrieval — bi-encoder, TF cosine, or hybrid RRF (stage 1) followed by optional local cross-encoder reranking (stage 2); off-topic abstention; per-source deduplication before context assembly
+- `retriever.py`: **dual indices** (`framework_index`, `collection_index`); two-phase `retrieve_coach_context()` for chat; legacy `retrieve()` on framework corpus; bi-encoder, TF cosine, or hybrid RRF (stage 1) + cross-encoder rerank (stage 2); `diversify_by_collection()` for multi-expert phase 2
 - `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); graceful fallback when fastembed is unavailable
-- `POST /api/ingest`: reindex starter + private knowledge directories
+- `POST /api/ingest`: reindex starter + private + all collections
+- `app/knowledge/`: collection store, filesystem ingest, media jobs (Whisper, yt-dlp)
+- `app/api/collections.py`: collection CRUD, source registration, reindex, `process-jobs`
+- `app/core/embed_providers/`: Ollama, OpenRouter, OpenAI embedding backends
 
 ### 3) Memory System (`app/memory/`)
 
@@ -122,10 +128,10 @@ The local Ollama provider is always the default.
 
 1. Client sends `POST /api/chat {user_id, message}`
 2. Backend gets/creates active session for `user_id`
-3. Backend retrieves top matching chunks from local RAG index (stage-1 bi-encoder/token → stage-2 cross-encoder rerank → per-source dedup)
+3. Backend runs **two-phase RAG** when enabled: phase 1 (situation) across framework + collection indices; phase 2 (expert solutions) across collections with diversity across people
 4. Backend composes system prompt with:
   - base coaching prompt
-  - RAG context (if available)
+  - RAG context — situation + expert perspectives (if available)
   - user profile
   - client notes/stories/decisions
   - previous session summary
@@ -147,13 +153,15 @@ The local Ollama provider is always the default.
 app/
 ├── api/
 │   ├── chat.py
+│   ├── collections.py     ← per-person video knowledge API
 │   ├── ingest.py
 │   ├── openai_compat.py
 │   ├── tools.py           ← tool routing API (classify + reindex)
 │   └── users.py
 ├── core/
 │   ├── config.py
-│   ├── embeddings.py      ← Ollama embedding client (E5 prefix, retry)
+│   ├── embed_providers/   ← Ollama, OpenRouter, OpenAI embed backends
+│   ├── embeddings.py      ← embedding facade (RAG + tool router)
 │   ├── lexicon.py         ← domain synonym normalization (router-local)
 │   ├── llm_router.py      ← constrained LLM tool classifier (fallback)
 │   ├── rerank.py          ← local fastembed cross-encoder (RAG + tool router)
@@ -174,8 +182,13 @@ app/
 │       └── openrouter.py
 ├── rag/
 │   ├── ingest.py
+│   ├── transcript.py      ← SRT/VTT parse + time-aware chunks
 │   ├── retriever.py
 │   └── reranker.py        ← RAG stage-2 reranker (fastembed / ONNX wrapper)
+├── knowledge/
+│   ├── store.py           ← collections / sources / chunks (SQLite)
+│   ├── ingest.py          ← filesystem collection discovery
+│   └── jobs.py            ← Whisper + yt-dlp media pipeline
 ├── memory/
 │   ├── session.py
 │   ├── store.py
@@ -193,6 +206,8 @@ docs/
 │       └── routing.jsonl
 
 data/
+├── knowledge/
+│   └── collections/       ← per-person video/transcript corpora
 └── eval/
     ├── tool_routing.jsonl       ← in-distribution eval set
     ├── tool_routing_hard.jsonl  ← held-out out-of-vocab eval set
@@ -215,6 +230,11 @@ tests/
 ├── test_tool_router.py            ← token backend + 6 out-of-vocab cases via lexicon
 ├── test_tools_api.py              ← API schema fields + data-request guard tests
 ├── test_response_formatter.py    ← formatter unit + integration tests (mocked provider)
-└── test_routing_observability.py ← deferral recording + /health tool_router stats
+├── test_routing_observability.py ← deferral recording + /health tool_router stats
+├── test_transcript_parser.py     ← SRT/VTT + timestamp chunking
+├── test_collection_ingest.py     ← filesystem collection ingest
+├── test_two_phase_retrieval.py   ← coach retrieval phases + diversity
+├── test_embed_providers.py       ← embed provider factory
+└── test_knowledge_jobs.py        ← media job offline tests
 ```
 

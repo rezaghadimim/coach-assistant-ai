@@ -1,15 +1,32 @@
 """Core document loading and chunking logic for RAG ingestion."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 import re
 import tempfile
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 DEFAULT_CHUNK_SIZE = 300
 DEFAULT_CHUNK_OVERLAP = 50
 SUPPORTED_FILE_EXTENSIONS = (".txt", ".md", ".pdf")
+TRANSCRIPT_FILE_EXTENSIONS = (".txt", ".md", ".srt", ".vtt")
 _SECTION_SPLIT = re.compile(r"^(#{2,3}\s+.+)$", re.MULTILINE)
+_SOLUTION_HINTS = re.compile(
+    r"\b(how to|steps?|solution|approach|technique|exercise|practice|try this|reframe)\b",
+    re.IGNORECASE,
+)
+
+CorpusKind = Literal["framework", "collection"]
+ChunkRole = Literal["general", "problem", "solution"]
+
+
+def infer_chunk_role(text: str) -> ChunkRole:
+    """Heuristic tag for solution-oriented transcript chunks."""
+    if _SOLUTION_HINTS.search(text):
+        return "solution"
+    return "general"
 
 
 @dataclass(frozen=True)
@@ -21,6 +38,15 @@ class DocumentChunk:
     text: str
     start_token: int
     end_token: int
+    collection_id: str | None = None
+    collection_slug: str | None = None
+    person_name: str | None = None
+    source_title: str | None = None
+    start_sec: float | None = None
+    end_sec: float | None = None
+    corpus: CorpusKind = "framework"
+    embed_profile_id: str = "ollama/multilingual-e5-small"
+    chunk_role: ChunkRole = "general"
 
 
 def discover_documents(docs_dir: str) -> List[Path]:
@@ -246,6 +272,22 @@ def ingest_documents_from_dir(
             )
         )
     return chunks
+
+
+def discover_collection_sources(collections_dir: str) -> list[Path]:
+    """Discover transcript files under ``collections/*/sources/**``."""
+    root = Path(collections_dir).expanduser().resolve()
+    if not root.exists():
+        return []
+    files: list[Path] = []
+    for collection_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        sources_dir = collection_dir / "sources"
+        if not sources_dir.exists():
+            continue
+        for path in sorted(sources_dir.rglob("*")):
+            if path.is_file() and path.suffix.lower() in TRANSCRIPT_FILE_EXTENSIONS:
+                files.append(path)
+    return files
 
 
 def _tokenize(text: str) -> List[str]:

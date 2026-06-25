@@ -92,6 +92,35 @@ RAG_RERANK_ENABLED=true python3 main.py
 
 See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-cross-encoder-rag-reranker.md) for the rationale.
 
+### Phase 2E: Per-Collection Video Knowledge — Multi-Expert RAG
+
+**Problem solved:** coaches need answers grounded in **multiple experts' video guides**, with attributed citations (person, guide, timestamp), while framework docs stay on fast local embeddings.
+
+**Done:**
+- [x] Dual in-memory indices: `framework_index` + `collection_index` (`app/rag/retriever.py`)
+- [x] Pluggable embed providers: Ollama, OpenRouter, OpenAI (`app/core/embed_providers/`)
+- [x] Collection SQLite + filesystem layout (`app/knowledge/store.py`, `data/knowledge/collections/`)
+- [x] SRT/VTT transcript parsing and time-aware chunking (`app/rag/transcript.py`)
+- [x] Two-phase coach retrieval: situation alignment + expert solution expansion with `diversify_by_collection()`
+- [x] Collections API: `GET/POST /api/collections`, sources, reindex, `process-jobs`
+- [x] Media jobs: ffmpeg + faster-whisper (local), yt-dlp (YouTube) — optional host dependencies
+- [x] Tests: `test_transcript_parser.py`, `test_collection_ingest.py`, `test_two_phase_retrieval.py`, `test_embed_providers.py`, `test_knowledge_jobs.py`
+- [x] Docs: `RAG.md`, `ARCHITECTURE.md`, `knowledge/README.md`, ADR-0011
+
+**To operate:**
+```bash
+# Optional: cloud embed for collections
+export OPENROUTER_API_KEY=sk-or-v1-...
+
+# Add collection files under data/knowledge/collections/{slug}/...
+curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -d '{}'
+
+# Optional media pipeline (requires ffmpeg, yt-dlp, pip install faster-whisper)
+curl -X POST http://localhost:8000/api/collections/process-jobs
+```
+
+See [`RAG.md`](RAG.md) and [ADR-0011](adr/0011-collection-video-knowledge.md).
+
 ### Phase 2D: Response Formatter — Human-Friendly Data Replies
 
 **Problem solved:** fast-path data replies were accurate but mechanical ("Here are the details on file:\n\nClient ID: ali\n..."). A coach asking "what is Ali's email?" received a full profile block. The small-model risk of letting the LLM decide *what* to fetch was eliminated by keeping routing and tool execution deterministic and adding an optional LLM pass only for *presentation*.

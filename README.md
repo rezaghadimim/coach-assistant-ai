@@ -12,7 +12,7 @@ Runs locally using open-source LLMs.  **English-only interface.**
 |------|--------|
 | LLM | Llama 3.1 8B (via Ollama) |
 | Embed model | multilingual-e5-small (via Ollama, for tool routing + RAG stage-1) |
-| RAG | Two-stage retrieval: E5 bi-encoder (Ollama) → local cross-encoder rerank (`BAAI/bge-reranker-base` via fastembed); grounding contract prevents hallucinated "facts" |
+| RAG | Two-phase retrieval: situation (framework + collections) + expert solutions (multi-person); dual embed indices; E5 (Ollama) + optional cloud collection embed |
 | Tool Routing | 307-example corpus; token → embedding → rerank → LLM router (structured JSON output at temp=0); 95.77% hard-set accuracy |
 | Generation | Per-task temperatures: `0.0` for tool/data calls, `0.5` for coaching advice |
 | Backend | FastAPI (Python) |
@@ -29,7 +29,7 @@ Runs locally using open-source LLMs.  **English-only interface.**
 - **Session Continuity**: Coach references past sessions, notes, and decisions automatically
 - **Actionable Coaching**: Direct coaching advice using GROW model and other frameworks
 - **Progress Monitoring**: Track goals, action items, and outcomes across sessions
-- **Coaching-only Scope**: Stays focused on coaching — off-topic requests are declined and redirected, and follow-up/starter suggestions remain coaching-focused
+- **Expert Video Knowledge**: Per-person collections from transcripts/videos; multi-expert perspectives with attributed citations in chat
 
 ## Prerequisites
 
@@ -117,6 +117,11 @@ model options, cost reference, and troubleshooting.
 - `GET /health`
 - `POST /api/chat`
 - `POST /api/ingest`
+- `GET /api/collections` — list per-person knowledge collections
+- `POST /api/collections` — create collection
+- `POST /api/collections/{id}/sources` — register transcript, media, or URL
+- `POST /api/collections/{id}/reindex` — reindex one collection
+- `POST /api/collections/process-jobs` — run pending Whisper/YouTube jobs
 - `POST /api/tools/classify` — debug tool routing for a message
 - `POST /api/tools/reindex` — rebuild routing index after editing corpus
 - `POST /api/users`

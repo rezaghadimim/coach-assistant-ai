@@ -17,6 +17,7 @@ Each ADR captures a significant architectural or technical decision, its context
 | [0008](0008-cross-encoder-rag-reranker.md) | Cross-encoder reranker for two-stage RAG retrieval | Accepted |
 | [0009](0009-tool-routing-synonym-rerank-llm-fallback.md) | Tool routing overhaul — synonym lexicon, rerank, LLM fallback | Accepted |
 | [0010](0010-llm-response-formatter.md) | Optional LLM formatting pass for human-friendly data replies | Accepted |
+| [0011](0011-collection-video-knowledge.md) | Per-collection video knowledge, dual embed providers, two-phase coach retrieval | Accepted |
 
 ## Template
 
