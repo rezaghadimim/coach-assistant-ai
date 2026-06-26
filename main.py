@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.briefing import router as briefing_router
 from app.api.chat import router as chat_router
@@ -96,6 +97,8 @@ app = FastAPI(
     description="AI-powered coaching assistant — manage clients, track stories, and deliver actionable coaching guidance.",
     lifespan=lifespan,
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(ingest_router, prefix="/api", tags=["ingest"])

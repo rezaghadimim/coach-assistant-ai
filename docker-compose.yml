@@ -33,6 +33,7 @@ services:
       - coach_data:/app/data
       - ./docs/knowledge:/app/docs/knowledge:ro
       - ./docs/tool-knowledge:/app/docs/tool-knowledge:ro
+      - ./static:/app/static:ro
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')" ]
@@ -66,6 +67,8 @@ services:
       OPENAI_API_KEY: "not-needed"
       # Coach branding for the UI
       WEBUI_NAME: "Coach Assistant AI"
+      WEBUI_LOGO_URL: "http://localhost:8000/static/logo.svg"
+      WEBUI_FAVICON_URL: "http://localhost:8000/static/logo.svg"
       DEFAULT_MODELS: "coach-assistant-ai"
       # Forward logged-in user id/name to the Coach API on each chat request.
       ENABLE_FORWARD_USER_INFO_HEADERS: "true"
