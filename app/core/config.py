@@ -197,6 +197,9 @@ class Settings(BaseSettings):
     # When True, message/reply text snippets are included in step logs.
     # Set to False to suppress content previews (e.g. for privacy).
     log_step_payloads: bool = True
+    # Optional path for ERROR-level logs (e.g. /app/logs/errors.log in Docker Compose).
+    # Leave empty to log to stdout only.
+    log_error_file: str = ""
 
     @model_validator(mode="before")
     @classmethod
@@ -258,6 +261,8 @@ class Settings(BaseSettings):
             self.rag_collections_dir = str(project_root / self.rag_collections_dir)
         if self.rag_index_cache_path and not Path(self.rag_index_cache_path).is_absolute():
             self.rag_index_cache_path = str(project_root / self.rag_index_cache_path)
+        if self.log_error_file and not Path(self.log_error_file).is_absolute():
+            self.log_error_file = str(project_root / self.log_error_file)
         return self
 
 settings = Settings()

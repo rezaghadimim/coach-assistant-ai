@@ -25,6 +25,7 @@ import logging
 import sys
 import uuid
 from contextvars import ContextVar, Token
+from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -76,24 +77,45 @@ _LOG_FORMAT = "%(asctime)s %(levelname)-5s [msg=%(msg_id)s user=%(user)s] %(name
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
+def _attach_error_file_handler(root: logging.Logger, path: str) -> None:
+    """Append an ERROR-only file handler if *path* is set and not already attached."""
+    if not path:
+        return
+    for handler in root.handlers:
+        if getattr(handler, "_coach_error_file", False):
+            return
+
+    log_path = Path(path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.ERROR)
+    file_handler.addFilter(_ContextFilter())
+    file_handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT))
+    file_handler._coach_error_file = True  # type: ignore[attr-defined]
+    root.addHandler(file_handler)
+
+
 def setup_logging(level: str | None = None) -> None:
-    """Configure the root logger with a single stdout handler.
+    """Configure the root logger with a stdout handler and optional error file.
 
     Safe to call multiple times — subsequent calls are no-ops unless *level*
     changes.  Pass ``level`` to override ``settings.log_level``.
     """
+    from app.core.config import settings
+
     if level is None:
-        from app.core.config import settings
         level = settings.log_level
 
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
     root = logging.getLogger()
-    # If we already attached our handler, just update the level and return.
+    # If we already attached our handler, update levels and ensure file handler exists.
     for handler in root.handlers:
         if getattr(handler, "_coach_observability", False):
             root.setLevel(numeric_level)
             handler.setLevel(numeric_level)
+            _attach_error_file_handler(root, settings.log_error_file)
             return
 
     # Remove any stale handlers (e.g. from a previous uvicorn reload).
@@ -107,6 +129,7 @@ def setup_logging(level: str | None = None) -> None:
 
     root.setLevel(numeric_level)
     root.addHandler(handler)
+    _attach_error_file_handler(root, settings.log_error_file)
 
     # Keep uvicorn's own loggers in sync so their output uses our format.
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):

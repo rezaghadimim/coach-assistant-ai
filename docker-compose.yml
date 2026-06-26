@@ -29,8 +29,13 @@ services:
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       # Set to false to suppress message/reply text in step logs (privacy)
       LOG_STEP_PAYLOADS: "${LOG_STEP_PAYLOADS:-true}"
+      # ERROR logs are written here so you can verify the stack after testing:
+      #   cat logs/errors.log          # empty = no errors during the run
+      #   docker compose logs coach-api | grep outcome=error
+      LOG_ERROR_FILE: "/app/logs/errors.log"
     volumes:
       - coach_data:/app/data
+      - ./logs:/app/logs
       - ./docs/knowledge:/app/docs/knowledge:ro
       - ./docs/tool-knowledge:/app/docs/tool-knowledge:ro
       - ./static:/app/static:ro
