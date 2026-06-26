@@ -70,6 +70,9 @@ services:
       WEBUI_LOGO_URL: "http://localhost:8000/static/logo.svg"
       WEBUI_FAVICON_URL: "http://localhost:8000/static/logo.svg"
       DEFAULT_MODELS: "coach-assistant-ai"
+      # Replace Open WebUI's generic starters (code snippets, trivia, etc.) with coaching prompts.
+      DEFAULT_PROMPT_SUGGESTIONS: >-
+        [{"title":["Prepare for","a client session"],"content":"Help me prepare for my next coaching session with a client who feels stuck on their career goals."},{"title":["Powerful questions","for ambivalence"],"content":"Suggest powerful questions I can use when a client is ambivalent about making a change."},{"title":["Choose a","coaching framework"],"content":"A client keeps setting goals but not following through. Which coaching framework should I use and why?"},{"title":["List my","clients"],"content":"Show me all my clients and their key details."}]
       # Forward logged-in user id/name to the Coach API on each chat request.
       ENABLE_FORWARD_USER_INFO_HEADERS: "true"
     volumes:
