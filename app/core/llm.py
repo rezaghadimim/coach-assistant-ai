@@ -48,6 +48,14 @@ _DATA_REQUEST_PATTERNS = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Guardrail E: phrasing that asserts specific note/goal/decision content.
+# Used to catch a reply that invents such content for a client with none on file.
+_NOTE_CONTENT_HINT_RE = re.compile(
+    r"\b(?:goal|goals|decided|decision|decisions|progress|story|stories|"
+    r"mentioned|noted|working on|wants?\s+to|plans?\s+to|committed\s+to)\b",
+    re.IGNORECASE,
+)
+
 
 def _last_user_message(messages: list[dict]) -> str:
     for message in reversed(messages):
@@ -108,13 +116,26 @@ def _references_unknown_client(message: str, store: "MemoryStore") -> str | None
     return ref
 
 
+def _notes_grounded(record: str, reply: str) -> bool:
+    """Guardrail E: block invented note/goal/decision content.
+
+    When the client's stored record has no notes at all, a reply that still
+    asserts specific goal/decision/story content has nothing on file to draw
+    that content from — it can only be fabricated.
+    """
+    if "No notes on file." not in record:
+        return True
+    return not _NOTE_CONTENT_HINT_RE.search(reply)
+
+
 def _ground_data_reply(reply: str, last_user: str, store: "MemoryStore") -> str:
-    """Guardrail A/B: discard fabricated client data in a free-form reply.
+    """Guardrail A/B/E: discard fabricated client data in a free-form reply.
 
     For a data request about a client on file, verify the reply invents no PII
-    (email/phone) absent from that client's stored record.  On a mismatch the
-    untrusted free-form text is replaced with the client's real record so the
-    coach still receives a truthful answer rather than a hallucinated one.
+    (email/phone) absent from that client's stored record, and no note/goal/
+    decision content when none is on file.  On a mismatch the untrusted
+    free-form text is replaced with the client's real record so the coach
+    still receives a truthful answer rather than a hallucinated one.
     """
     if not (reply and last_user and _is_data_request(last_user)):
         return reply
@@ -132,11 +153,11 @@ def _ground_data_reply(reply: str, last_user: str, store: "MemoryStore") -> str:
     if record.startswith("❌"):
         return reply
 
-    if _pii_preserved(record, reply):
+    if _pii_preserved(record, reply) and _notes_grounded(record, reply):
         return reply
 
     log_step(logger, "llm.guard", "hallucination", level=logging.WARNING,
-             reason="fabricated_pii", client=client_id)
+             reason="fabricated_pii_or_notes", client=client_id)
     return _format_direct_lookup_reply(record)
 
 

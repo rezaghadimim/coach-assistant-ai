@@ -6,6 +6,7 @@ client data:
 - ``_is_data_request``  — broadened recall (guardrail D)
 - ``_references_unknown_client`` — entity grounding short-circuit (guardrail C)
 - ``_ground_data_reply`` — fabricated-PII guard on free-form replies (guardrail A/B)
+- ``_notes_grounded`` — fabricated note/goal/decision content guard (guardrail E)
 """
 
 import unittest
@@ -14,6 +15,7 @@ from app.api.chat import reset_runtime_state, store
 from app.core.llm import (
     _ground_data_reply,
     _is_data_request,
+    _notes_grounded,
     _references_unknown_client,
 )
 from app.core.tools import execute_tool
@@ -111,6 +113,41 @@ class GroundDataReplyTests(unittest.TestCase):
         reply = "Their email is something@example.com."
         out = _ground_data_reply(reply, "what is their email", store)
         self.assertEqual(out, reply)
+
+    def test_fabricated_goal_is_replaced_when_no_notes_on_file(self) -> None:
+        _create_client("ali", "Ali")
+        fabricated = "Ali's goal is to become a team lead by next quarter."
+        out = _ground_data_reply(fabricated, "what are Ali's goals", store)
+        self.assertNotIn("team lead", out)
+        self.assertIn("No notes on file.", out)
+
+    def test_honest_no_notes_reply_is_preserved(self) -> None:
+        _create_client("ali", "Ali")
+        honest = "There's nothing on file yet for Ali."
+        out = _ground_data_reply(honest, "what are Ali's goals", store)
+        self.assertEqual(out, honest)
+
+
+class NotesGroundedTests(unittest.TestCase):
+    """Guardrail E: block invented note/goal/decision content."""
+
+    def test_content_claim_without_notes_fails(self) -> None:
+        record = "## Profile\nClient ID: ali\n\n## Notes\nNo notes on file."
+        reply = "Ali decided to start a new fitness routine."
+        self.assertFalse(_notes_grounded(record, reply))
+
+    def test_plain_reply_without_notes_passes(self) -> None:
+        record = "## Profile\nClient ID: ali\n\n## Notes\nNo notes on file."
+        reply = "There's nothing on file yet for Ali."
+        self.assertTrue(_notes_grounded(record, reply))
+
+    def test_content_claim_with_real_notes_passes(self) -> None:
+        record = (
+            "## Profile\nClient ID: ali\n\n## Notes\n"
+            "- [GOAL] (2026-05-01)\n  Become a team lead by next quarter."
+        )
+        reply = "Ali's goal is to become a team lead by next quarter."
+        self.assertTrue(_notes_grounded(record, reply))
 
 
 if __name__ == "__main__":
