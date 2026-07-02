@@ -15,11 +15,11 @@ def test_framework_profile_defaults_to_ollama() -> None:
     assert profile.provider == "ollama"
 
 
-def test_collection_profile_uses_openrouter_by_default() -> None:
+def test_collection_profile_inherits_framework_ollama() -> None:
     profile = embed_profile_for_corpus("collection")
     provider = get_embed_provider(profile)
-    assert isinstance(provider, OpenRouterEmbedProvider)
-    assert profile.provider == "openrouter"
+    assert isinstance(provider, OllamaEmbedProvider)
+    assert profile.provider == "ollama"
 
 
 def test_openai_provider_when_configured() -> None:

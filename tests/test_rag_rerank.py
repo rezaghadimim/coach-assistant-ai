@@ -163,8 +163,22 @@ class TestRetrieveWithRerank(unittest.TestCase):
                 "rerank should change the top result when scores invert",
             )
 
-    def test_skip_rerank_when_pool_le_top_k(self) -> None:
+    def test_rerank_runs_when_multiple_candidates_even_if_pool_le_top_k(self) -> None:
         self._index_n_chunks(2, prefix="small")
+
+        with (
+            patch("app.rag.reranker.rerank_documents") as mock_rerank,
+            patch("app.core.config.settings.rag_rerank_enabled", True),
+            patch("app.core.config.settings.rag_retrieve_k", 5),
+        ):
+            mock_rerank.return_value = iter([(0, 0.9), (1, 0.8)])
+            results = retrieve("coaching goal", top_k=3, min_score=0.0, backend="token")
+
+        mock_rerank.assert_called_once()
+        self.assertLessEqual(len(results), 2)
+
+    def test_skip_rerank_when_only_one_candidate(self) -> None:
+        self._index_n_chunks(1, prefix="solo")
 
         with (
             patch("app.rag.reranker.rerank_documents") as mock_rerank,
@@ -174,7 +188,7 @@ class TestRetrieveWithRerank(unittest.TestCase):
             results = retrieve("coaching goal", top_k=3, min_score=0.0, backend="token")
 
         mock_rerank.assert_not_called()
-        self.assertLessEqual(len(results), 2)
+        self.assertEqual(len(results), 1)
 
     def test_rerank_disabled_returns_stage1_order(self) -> None:
         self._index_n_chunks(5, prefix="dis")

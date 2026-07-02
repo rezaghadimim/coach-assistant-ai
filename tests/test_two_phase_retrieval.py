@@ -102,3 +102,31 @@ def test_retrieve_coach_context_uses_collection_index() -> None:
         with patch("app.core.config.settings.rag_rerank_enabled", False):
             result = retrieve_coach_context("client keeps canceling sessions")
     assert isinstance(result, CoachRetrievalResult)
+
+
+def test_small_collection_phase2_reranks_even_when_fewer_than_top_k() -> None:
+    clear_index()
+    chunks = [
+        _collection_chunk(
+            "whitmore:0",
+            "GROW model Goal Reality Options Will structure every coaching session",
+            person="Sir John Whitmore",
+            collection_id="c-grow",
+        ),
+        _collection_chunk(
+            "goldsmith:0",
+            "feedforward practical coaching steps for future behavior change",
+            person="Marshall Goldsmith",
+            collection_id="c-feed",
+        ),
+    ]
+    index_chunks(chunks, embed=False, corpus="collection", reset=True)
+
+    with patch("app.core.config.settings.rag_two_phase_enabled", True):
+        with patch("app.core.config.settings.rag_rerank_enabled", True):
+            with patch("app.rag.reranker.rerank") as mock_rerank:
+                mock_rerank.side_effect = lambda query, candidates, top_k: candidates[:top_k]
+                result = retrieve_coach_context("How do I structure a session using GROW?")
+
+    assert result.expert_chunks
+    mock_rerank.assert_called()

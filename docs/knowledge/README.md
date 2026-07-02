@@ -119,15 +119,13 @@ RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
 RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
 RAG_COLLECTIONS_DIR=data/knowledge/collections
 
-# Framework corpus (default: local Ollama E5)
+# Framework + collections use the same local Ollama embed model (OLLAMA_EMBED_MODEL).
 RAG_EMBED_PROVIDER=ollama
 RAG_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
-
-# Collection corpus — embedded once at ingest (default: OpenRouter)
-RAG_COLLECTION_EMBED_PROVIDER=openrouter
-RAG_COLLECTION_EMBED_MODEL=openai/text-embedding-3-small
-OPENROUTER_API_KEY=sk-or-v1-...
-# or OPENAI_API_KEY=sk-... when using openai provider
+OLLAMA_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
+# Optional cloud embed for collections only:
+# RAG_COLLECTION_EMBED_PROVIDER=openrouter
+# RAG_COLLECTION_EMBED_MODEL=openai/text-embedding-3-small
 
 # Two-phase coach retrieval
 RAG_TWO_PHASE_ENABLED=true

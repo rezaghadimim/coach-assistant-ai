@@ -52,7 +52,7 @@ def ingest_collection_chunks_from_disk(
 
     store = knowledge_store or KnowledgeStore(settings.memory_db_path)
     all_chunks: list[DocumentChunk] = []
-    collection_profile = embed_profile_for_corpus("collection")
+    default_profile = embed_profile_for_corpus("collection")
 
     for collection_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         meta = _load_collection_meta(collection_dir)
@@ -60,8 +60,8 @@ def ingest_collection_chunks_from_disk(
         person_name = meta.get("person_name", slug)
         title = meta.get("title", slug)
         description = meta.get("description", "")
-        embed_provider = meta.get("embed_provider", settings.rag_collection_embed_provider)
-        embed_model = meta.get("embed_model", settings.rag_collection_embed_model)
+        embed_provider = meta.get("embed_provider") or default_profile.provider
+        embed_model = meta.get("embed_model") or default_profile.model
 
         existing = store.get_collection(slug)
         if existing is None:
@@ -78,14 +78,17 @@ def ingest_collection_chunks_from_disk(
         collection_id = collection["id"]
 
         profile = embed_profile_for_corpus("collection")
-        if embed_model:
+        if meta.get("embed_provider") or meta.get("embed_model"):
             from app.core.embed_providers.types import EmbedProfile
 
+            resolved_model = (
+                settings.ollama_embed_model if embed_provider == "ollama" else embed_model
+            )
             profile = EmbedProfile(
                 provider=embed_provider,  # type: ignore[arg-type]
-                model=embed_model,
+                model=resolved_model,
                 dimensions=profile.dimensions,
-                use_e5_prefix=False,
+                use_e5_prefix=embed_provider == "ollama" and settings.tool_router_use_e5_prefix,
             )
         embed_profile_id = profile.profile_id
 

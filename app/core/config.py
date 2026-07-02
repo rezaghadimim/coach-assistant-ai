@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -123,9 +124,9 @@ class Settings(BaseSettings):
         default="karuniaperjuangan/multilingual-e5-small",
         validation_alias=AliasChoices("rag_embed_model", "RAG_EMBED_MODEL"),
     )
-    rag_collection_embed_provider: str = "openrouter"
-    rag_collection_embed_model: str = Field(
-        default="openai/text-embedding-3-small",
+    rag_collection_embed_provider: Optional[str] = None
+    rag_collection_embed_model: Optional[str] = Field(
+        default=None,
         validation_alias=AliasChoices(
             "rag_collection_embed_model",
             "RAG_COLLECTION_EMBED_MODEL",

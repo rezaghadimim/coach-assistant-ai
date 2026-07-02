@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
+from app.core.embed_providers import embed_profile_for_corpus
 from app.core.embeddings import probe_embed_model
 from app.knowledge.ingest import ingest_collection_chunks_from_disk
 from app.knowledge.jobs import process_pending_sources
@@ -27,14 +28,15 @@ store = KnowledgeStore(settings.memory_db_path)
 
 
 def _collection_response(row: dict) -> CollectionResponse:
+    default_profile = embed_profile_for_corpus("collection")
     return CollectionResponse(
         id=row["id"],
         slug=row["slug"],
         person_name=row["person_name"],
         title=row["title"],
         description=row.get("description") or "",
-        embed_provider=row.get("embed_provider") or settings.rag_collection_embed_provider,
-        embed_model=row.get("embed_model") or settings.rag_collection_embed_model,
+        embed_provider=row.get("embed_provider") or default_profile.provider,
+        embed_model=row.get("embed_model") or default_profile.model,
         source_count=int(row.get("source_count") or 0),
         chunk_count=int(row.get("chunk_count") or 0),
         created_at=row.get("created_at"),
@@ -65,13 +67,14 @@ async def create_collection(request: CollectionCreateRequest) -> CollectionRespo
     if store.get_collection(request.slug):
         raise HTTPException(status_code=409, detail=f"Collection already exists: {request.slug}")
 
+    default_profile = embed_profile_for_corpus("collection")
     payload = {
         "slug": request.slug,
         "person_name": request.person_name,
         "title": request.title,
         "description": request.description,
-        "embed_provider": request.embed_provider or settings.rag_collection_embed_provider,
-        "embed_model": request.embed_model or settings.rag_collection_embed_model,
+        "embed_provider": request.embed_provider or default_profile.provider,
+        "embed_model": request.embed_model or default_profile.model,
     }
     store.write_collection_json(request.slug, settings.rag_collections_dir, payload)
     row = store.create_collection(

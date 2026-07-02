@@ -26,11 +26,15 @@ def embed_profile_for_corpus(corpus: CorpusKind) -> EmbedProfile:
     from app.core.config import settings
 
     if corpus == "collection":
-        provider = settings.rag_collection_embed_provider
-        model = settings.rag_collection_embed_model
+        provider = settings.rag_collection_embed_provider or settings.rag_embed_provider
+        model = settings.rag_collection_embed_model or settings.rag_embed_model
     else:
         provider = settings.rag_embed_provider
         model = settings.rag_embed_model
+
+    if provider == "ollama":
+        model = settings.ollama_embed_model
+
     return EmbedProfile(
         provider=provider,  # type: ignore[arg-type]
         model=model,

@@ -242,7 +242,11 @@ def ingest_and_index_knowledge(
 
     collection_embed = embed
     if include_collections and collection_chunks:
-        if settings.rag_collection_embed_provider != settings.rag_embed_provider:
+        from app.core.embed_providers import embed_profile_for_corpus
+
+        framework_profile = embed_profile_for_corpus("framework")
+        collection_profile = embed_profile_for_corpus("collection")
+        if collection_profile.profile_id != framework_profile.profile_id:
             from app.core.embeddings import probe_embed_model
 
             collection_embed = probe_embed_model(corpus="collection") or embed
@@ -315,6 +319,8 @@ def retrieve_coach_context(query: str) -> CoachRetrievalResult:
         min_collections=settings.rag_min_collections,
         max_per_collection=settings.rag_max_chunks_per_collection,
     )
+    if not expert_chunks:
+        expert_chunks = _collection_hits_from_problem_phase(problem_chunks)
     return CoachRetrievalResult(
         problem_chunks=problem_chunks,
         expert_chunks=expert_chunks,
@@ -356,6 +362,8 @@ def format_coach_retrieval_context(result: CoachRetrievalResult) -> str:
             "## Relevant Coaching Knowledge (situation)",
             (
                 "Use these passages to understand the coaching situation. "
+                "When a passage names an expert and guide, preserve that attribution "
+                "in your reply (person, guide title, timestamp if shown). "
                 "Do not invent facts beyond what is written here."
             ),
             "",
@@ -478,7 +486,7 @@ def _retrieve_from_indices(
 
     rerank_applied = False
     effective_query = rerank_query or query
-    if settings.rag_rerank_enabled and len(candidates) > top_k:
+    if settings.rag_rerank_enabled and len(candidates) > 1:
         try:
             from app.rag.reranker import rerank
 
@@ -507,6 +515,23 @@ def _dedup_key(chunk: RetrievedChunk, *, mode: str) -> str:
     if mode == "collection":
         return f"{chunk.collection_id or ''}:{chunk.source_path}"
     return chunk.source_path
+
+
+def _collection_hits_from_problem_phase(
+    problem_chunks: list[RetrievedChunk],
+) -> list[RetrievedChunk]:
+    """Promote attributed collection hits when phase-2 expert search is empty."""
+    promoted: list[RetrievedChunk] = []
+    seen: set[str] = set()
+    for chunk in problem_chunks:
+        if not chunk.person_name or not chunk.collection_id:
+            continue
+        key = f"{chunk.collection_id}:{chunk.source_path}"
+        if key in seen:
+            continue
+        seen.add(key)
+        promoted.append(chunk)
+    return promoted
 
 
 def _build_solution_query(query: str, problem_chunks: list[RetrievedChunk]) -> str:
