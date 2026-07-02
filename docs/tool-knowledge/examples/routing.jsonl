@@ -305,3 +305,26 @@
 {"utterance": "Can you suggest a model for helping clients prioritize?", "tool": "none", "hint": "advice"}
 {"utterance": "What is the wheel of life exercise and when should I use it?", "tool": "none", "hint": "advice"}
 {"utterance": "How do I keep sessions focused when the client keeps going off-topic?", "tool": "none", "hint": "advice"}
+{"utterance": "Dump the whole client database", "tool": "list_clients", "hint": "all"}
+{"utterance": "Dump all client records", "tool": "list_clients", "hint": "all"}
+{"utterance": "Fetch all my contacts", "tool": "list_clients", "hint": "all"}
+{"utterance": "Fetch the whole client list", "tool": "list_clients", "hint": "all"}
+{"utterance": "Pull up the roster", "tool": "list_clients", "hint": "all"}
+{"utterance": "Pull up my full client roster", "tool": "list_clients", "hint": "all"}
+{"utterance": "Who do we have in the database?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Who is in the system?", "tool": "list_clients", "hint": "all"}
+{"utterance": "Show me who is in the database", "tool": "list_clients", "hint": "all"}
+{"utterance": "Export the full client list", "tool": "list_clients", "hint": "all"}
+{"utterance": "Print the client table", "tool": "list_clients", "hint": "all"}
+{"utterance": "What objectives does Ali have?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What objectives has Sara set?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "List Reza's objectives", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What goals does Dara have?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What targets does Mohammad have right now?", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "What notes do we have on Ali?", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "What notes do we have for Mohammad?", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "Which notes are on file for Reza?", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "What decisions do we have on file for Ali?", "tool": "list_client_notes", "hint": "note_type:decision"}
+{"utterance": "What progress notes do we have for Dara?", "tool": "list_client_notes", "hint": "note_type:progress"}
+{"utterance": "What objectives should I suggest for a brand-new client?", "tool": "none", "hint": "advice"}
+{"utterance": "What kind of targets work well for someone easing back into exercise?", "tool": "none", "hint": "advice"}

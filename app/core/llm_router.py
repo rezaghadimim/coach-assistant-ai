@@ -81,11 +81,17 @@ Rules:
 
 Examples:
 - "give me all visitors in a table" → {"tool": "list_clients"}
+- "who is in the database?" → {"tool": "list_clients"}
 - "what is Ali's age?" → {"tool": "get_client"}
 - "show me everything about Sara" → {"tool": "get_client_full"}
 - "what are Ali's goals?" → {"tool": "list_client_notes"}
+- "what notes do we have on Sara?" → {"tool": "list_client_notes"}
+- "add Dara as a new client" → {"tool": "create_client"}
+- "Sara's phone number is 09121112233" → {"tool": "create_client"}
 - "note that Reza finished the leadership course" → {"tool": "add_client_note"}
+- "update note 3 to say he moved to Berlin" → {"tool": "update_client_note"}
 - "remove note 4 from Ali's record" → {"tool": "delete_client_note"}
+- "delete client Hassan and all his data" → {"tool": "delete_client"}
 - "how can I help Ali feel less overwhelmed?" → {"tool": "none"}
 - "what's a good first goal to set with someone who feels stuck?" → {"tool": "none"}
 - "what kind of notes are worth taking in a first meeting?" → {"tool": "none"}

@@ -99,7 +99,13 @@ class _TokenBackend:
         self._examples: list[_Example] = []
 
     def add(self, ex: _Example) -> None:
-        tokens = _tokenize(ex.utterance)
+        # Normalize symmetrically with classify(): queries get canonical synonym
+        # tokens appended, so examples must too — otherwise the appended tokens
+        # dilute the query norm and an exact utterance match scores well below
+        # 1.0 (e.g. "Fetch all contacts" ≈ 0.61 against its own corpus entry).
+        from app.core.lexicon import normalize_for_routing
+
+        tokens = _tokenize(normalize_for_routing(ex.utterance))
         if not tokens:
             return
         tf = Counter(tokens)
