@@ -42,10 +42,22 @@ class RetrievedChunk:
     collection_id: str | None = None
     person_name: str | None = None
     source_title: str | None = None
+    source_uri: str | None = None
     start_sec: float | None = None
     end_sec: float | None = None
     chunk_role: str = "general"
     corpus: str = "framework"
+
+    @property
+    def has_timing(self) -> bool:
+        """True when the chunk carries a real video/audio time range.
+
+        Plain-text transcripts are ingested with a 0.0–0.0 placeholder range,
+        which must not be presented as a video timestamp.
+        """
+        if self.start_sec is None or self.end_sec is None:
+            return False
+        return self.end_sec > 0.0
 
 
 @dataclass(frozen=True)
@@ -550,7 +562,7 @@ def _format_chunk_citation(index: int, chunk: RetrievedChunk) -> str:
         from app.rag.transcript import format_timestamp
 
         ts = ""
-        if chunk.start_sec is not None and chunk.end_sec is not None:
+        if chunk.has_timing:
             ts = f" ({format_timestamp(chunk.start_sec)}–{format_timestamp(chunk.end_sec)})"
         return (
             f"[{index}] Expert: {chunk.person_name} — "
@@ -565,7 +577,7 @@ def _format_expert_header(chunk: RetrievedChunk) -> str:
     person = chunk.person_name or "Expert"
     title = chunk.source_title or os.path.basename(chunk.source_path)
     ts = ""
-    if chunk.start_sec is not None and chunk.end_sec is not None:
+    if chunk.has_timing:
         ts = f" ({format_timestamp(chunk.start_sec)}–{format_timestamp(chunk.end_sec)})"
     return f"### {person} — \"{title}\"{ts}"
 
@@ -733,6 +745,7 @@ def _to_retrieved_chunk(indexed: _IndexedChunk, score: float) -> RetrievedChunk:
         collection_id=chunk.collection_id,
         person_name=chunk.person_name,
         source_title=chunk.source_title,
+        source_uri=chunk.source_uri,
         start_sec=chunk.start_sec,
         end_sec=chunk.end_sec,
         chunk_role=chunk.chunk_role,

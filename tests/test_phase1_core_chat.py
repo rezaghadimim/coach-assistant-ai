@@ -44,6 +44,7 @@ class Phase1CoreChatTests(unittest.TestCase):
                 "user_id": "client-1",
                 "message": "I want to improve focus.",
                 "reply": "Let's define a concrete next action.",
+                "expert_ideas": [],
             },
         )
         mocked_generate.assert_awaited_once()

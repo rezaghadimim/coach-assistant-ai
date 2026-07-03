@@ -1,10 +1,12 @@
-"""SRT/VTT transcript parsing and time-aware chunking."""
+"""SRT/VTT/JSON transcript parsing and time-aware chunking."""
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from app.rag.ingest import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DocumentChunk, infer_chunk_role
 
@@ -63,10 +65,57 @@ def parse_srt_or_vtt(text: str) -> list[TranscriptSegment]:
     return segments
 
 
+_JSON_TEXT_KEYS = ("text", "message", "content")
+_JSON_START_KEYS = ("start_sec", "start", "time", "timestamp", "offset")
+_JSON_END_KEYS = ("end_sec", "end")
+
+
+def _segment_from_json_item(item: Any) -> TranscriptSegment | None:
+    if not isinstance(item, dict):
+        return None
+    text = next(
+        (str(item[key]).strip() for key in _JSON_TEXT_KEYS if item.get(key)),
+        "",
+    )
+    if not text:
+        return None
+    start = next(
+        (float(item[key]) for key in _JSON_START_KEYS if item.get(key) is not None),
+        0.0,
+    )
+    end = next(
+        (float(item[key]) for key in _JSON_END_KEYS if item.get(key) is not None),
+        start,
+    )
+    return TranscriptSegment(text=text, start_sec=start, end_sec=end)
+
+
+def parse_json_transcript(text: str) -> list[TranscriptSegment]:
+    """Parse a JSON transcript into timed segments.
+
+    Accepts a bare list of segment objects, or an object with a ``segments``
+    or ``messages`` list (Whisper-style output and chat-message exports).
+    Each item carries its text under ``text``/``message``/``content`` and its
+    timing under ``start``/``end`` (or ``start_sec``/``end_sec``/``time``/
+    ``timestamp``), expressed in seconds.
+    """
+    data = json.loads(text)
+    if isinstance(data, dict):
+        items = data.get("segments") or data.get("messages") or []
+    elif isinstance(data, list):
+        items = data
+    else:
+        items = []
+    segments = (_segment_from_json_item(item) for item in items)
+    return [segment for segment in segments if segment is not None]
+
+
 def read_transcript_file(path: Path) -> list[TranscriptSegment]:
     suffix = path.suffix.lower()
     if suffix in {".srt", ".vtt"}:
         return parse_srt_or_vtt(path.read_text(encoding="utf-8"))
+    if suffix == ".json":
+        return parse_json_transcript(path.read_text(encoding="utf-8"))
     if suffix in {".txt", ".md"}:
         text = path.read_text(encoding="utf-8").strip()
         if not text:
@@ -85,6 +134,7 @@ def build_transcript_chunks(
     person_name: str,
     source_title: str,
     embed_profile_id: str,
+    source_uri: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> list[DocumentChunk]:
@@ -120,6 +170,7 @@ def build_transcript_chunks(
                 collection_slug=collection_slug,
                 person_name=person_name,
                 source_title=source_title,
+                source_uri=source_uri,
                 start_sec=start_sec,
                 end_sec=end_sec,
                 corpus="collection",

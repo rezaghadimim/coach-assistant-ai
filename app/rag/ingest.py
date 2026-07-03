@@ -11,7 +11,7 @@ from typing import List, Literal, Optional
 DEFAULT_CHUNK_SIZE = 300
 DEFAULT_CHUNK_OVERLAP = 50
 SUPPORTED_FILE_EXTENSIONS = (".txt", ".md", ".pdf")
-TRANSCRIPT_FILE_EXTENSIONS = (".txt", ".md", ".srt", ".vtt")
+TRANSCRIPT_FILE_EXTENSIONS = (".txt", ".md", ".srt", ".vtt", ".json")
 _SECTION_SPLIT = re.compile(r"^(#{2,3}\s+.+)$", re.MULTILINE)
 _SOLUTION_HINTS = re.compile(
     r"\b(how to|steps?|solution|approach|technique|exercise|practice|try this|reframe)\b",
@@ -42,6 +42,7 @@ class DocumentChunk:
     collection_slug: str | None = None
     person_name: str | None = None
     source_title: str | None = None
+    source_uri: str | None = None
     start_sec: float | None = None
     end_sec: float | None = None
     corpus: CorpusKind = "framework"

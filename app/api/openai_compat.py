@@ -35,7 +35,8 @@ from fastapi import APIRouter, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app.api.chat import build_system_prompt, session_manager, store
+from app.api.chat import build_prompt_and_ideas, session_manager, store
+from app.rag.expert_ideas import format_expert_ideas_markdown
 from app.core.config import settings
 from app.core.llm import generate_response, try_direct_reply_with_meta
 from app.core.model_registry import (
@@ -244,6 +245,7 @@ async def _stream_and_persist(
     model_id: str = LOCAL_MODEL_ID,
     *,
     direct_reply: Optional[str] = None,
+    ideas_markdown: str = "",
 ) -> AsyncGenerator[str, None]:
     """Tool-calling + optional streaming response, then persist the full reply."""
     if direct_reply is not None:
@@ -260,6 +262,8 @@ async def _stream_and_persist(
         system_prompt=system_prompt,
         model_id=model_id,
     )
+    if ideas_markdown:
+        full_reply = f"{full_reply}\n\n{ideas_markdown}"
 
     async for chunk in _stream_text_reply(
         full_reply, session_id, completion_id, created
@@ -359,10 +363,12 @@ async def chat_completions(
 
     if request.stream:
         system_prompt = ""
+        ideas_markdown = ""
         if direct_reply is None:
-            system_prompt = await asyncio.to_thread(
-                build_system_prompt, user_id, last_user_message
+            system_prompt, ideas = await asyncio.to_thread(
+                build_prompt_and_ideas, user_id, last_user_message
             )
+            ideas_markdown = format_expert_ideas_markdown(ideas)
         path = "direct" if direct_reply is not None else "llm"
         ms = int((time.monotonic() - t0) * 1000)
         log_step(logger, "message", "done", endpoint="/v1/chat/completions",
@@ -377,6 +383,7 @@ async def chat_completions(
                 created,
                 model_id=model_id,
                 direct_reply=direct_reply,
+                ideas_markdown=ideas_markdown,
             ),
             media_type="text/event-stream",
         )
@@ -385,14 +392,17 @@ async def chat_completions(
         reply = direct_reply
         path = "direct"
     else:
-        system_prompt = await asyncio.to_thread(
-            build_system_prompt, user_id, last_user_message
+        system_prompt, ideas = await asyncio.to_thread(
+            build_prompt_and_ideas, user_id, last_user_message
         )
         reply = await _generate_reply_or_unavailable(
             history=history,
             system_prompt=system_prompt,
             model_id=model_id,
         )
+        ideas_markdown = format_expert_ideas_markdown(ideas)
+        if ideas_markdown:
+            reply = f"{reply}\n\n{ideas_markdown}"
         path = "llm"
     store.add_message(session_id, "assistant", reply)
     await session_manager.maybe_update_summary(

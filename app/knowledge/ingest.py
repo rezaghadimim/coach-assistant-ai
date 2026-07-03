@@ -105,7 +105,9 @@ def ingest_collection_chunks_from_disk(
             transcript_files = [
                 path
                 for path in source_dir.iterdir()
-                if path.is_file() and path.suffix.lower() in {".srt", ".vtt", ".txt", ".md"}
+                if path.is_file()
+                and path.suffix.lower() in {".srt", ".vtt", ".txt", ".md", ".json"}
+                and path.name not in {"meta.json", "collection.json"}
             ]
             media_files = [
                 path
@@ -161,6 +163,7 @@ def ingest_collection_chunks_from_disk(
                         collection_slug=slug,
                         person_name=person_name,
                         source_title=source_title,
+                        source_uri=uri or None,
                         embed_profile_id=embed_profile_id,
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,

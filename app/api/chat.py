@@ -13,8 +13,17 @@ from app.core.observability import bind_message, log_step, preview, reset_messag
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
 from app.core.tools import TOOL_DEFINITIONS
 from app.memory import MemoryStore, SessionManager
-from app.models.schemas import ChatRequest, ChatResponse
-from app.rag.retriever import format_coach_retrieval_context, retrieve_coach_context
+from app.models.schemas import ChatRequest, ChatResponse, ExpertIdeaItem
+from app.rag.expert_ideas import (
+    ExpertIdea,
+    build_expert_ideas,
+    format_expert_ideas_markdown,
+)
+from app.rag.retriever import (
+    CoachRetrievalResult,
+    format_coach_retrieval_context,
+    retrieve_coach_context,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -33,11 +42,15 @@ def reset_runtime_state() -> None:
     store.clear_all_data()
 
 
-def build_system_prompt(user_id: str, message: str) -> str:
+def build_system_prompt(
+    user_id: str,
+    message: str,
+    retrieval: CoachRetrievalResult | None = None,
+) -> str:
     sections = [COACH_ASSISTANT_SYSTEM_PROMPT]
 
     if settings.rag_enabled:
-        result = retrieve_coach_context(message)
+        result = retrieval if retrieval is not None else retrieve_coach_context(message)
         rag_context = format_coach_retrieval_context(result)
         if rag_context:
             sections.append(rag_context)
@@ -65,6 +78,39 @@ def build_system_prompt(user_id: str, message: str) -> str:
     return "\n\n".join(sections)
 
 
+def build_prompt_and_ideas(user_id: str, message: str) -> tuple[str, list[ExpertIdea]]:
+    """Retrieve once, then build both the system prompt and the expert ideas.
+
+    The ideas are assembled deterministically from the same retrieval result
+    injected into the prompt, so the attached section always matches what the
+    model was grounded on.
+    """
+    retrieval: CoachRetrievalResult | None = None
+    ideas: list[ExpertIdea] = []
+    if settings.rag_enabled:
+        retrieval = retrieve_coach_context(message)
+        if settings.rag_attach_expert_ideas:
+            ideas = build_expert_ideas(
+                retrieval,
+                max_ideas=settings.rag_ideas_max,
+                excerpt_words=settings.rag_ideas_excerpt_words,
+            )
+    return build_system_prompt(user_id, message, retrieval=retrieval), ideas
+
+
+def _idea_to_item(idea: ExpertIdea) -> ExpertIdeaItem:
+    return ExpertIdeaItem(
+        person_name=idea.person_name,
+        source_title=idea.source_title,
+        excerpt=idea.excerpt,
+        start_sec=idea.start_sec,
+        end_sec=idea.end_sec,
+        timestamp=idea.timestamp,
+        source_uri=idea.source_uri,
+        video_url=idea.video_url,
+    )
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """Handle a coaching chat message and persist user context."""
@@ -84,11 +130,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
         history = store.get_session_messages(session_id)
         _sessions[request.user_id] = history
 
+        ideas: list[ExpertIdea] = []
         direct_meta = try_direct_reply_with_meta(request.message, store, history)
         if direct_meta is None:
             path = "llm"
-            system_prompt = await asyncio.to_thread(
-                build_system_prompt, request.user_id, request.message
+            system_prompt, ideas = await asyncio.to_thread(
+                build_prompt_and_ideas, request.user_id, request.message
             )
             reply = await generate_response(
                 messages=history,
@@ -96,6 +143,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 tools=TOOL_DEFINITIONS,
                 store=store,
             )
+            ideas_section = format_expert_ideas_markdown(ideas)
+            if ideas_section:
+                reply = f"{reply}\n\n{ideas_section}"
         else:
             path = "direct"
             reply = direct_meta.reply
@@ -141,4 +191,5 @@ async def chat(request: ChatRequest) -> ChatResponse:
         user_id=request.user_id,
         message=request.message,
         reply=reply,
+        expert_ideas=[_idea_to_item(idea) for idea in ideas],
     )

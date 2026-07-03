@@ -40,7 +40,8 @@ class Phase2RagIntegrationTests(unittest.TestCase):
             self.assertEqual(docs_count, 2)
             self.assertGreaterEqual(chunks_count, 2)
 
-            results = retrieve("how to explore goal and reality", top_k=2, min_score=0.0)
+            with patch("app.core.config.settings.rag_rerank_enabled", False):
+                results = retrieve("how to explore goal and reality", top_k=2, min_score=0.0)
             self.assertTrue(results)
             self.assertIn("grow", results[0].source_path)
 
@@ -52,9 +53,11 @@ class Phase2RagIntegrationTests(unittest.TestCase):
             original_starter = settings.rag_knowledge_starter_dir
             original_private = settings.rag_knowledge_private_dir
             original_cache = settings.rag_index_cache_path
+            original_collections = settings.rag_collections_dir
             settings.rag_knowledge_starter_dir = temp_dir
             settings.rag_knowledge_private_dir = str(root / "empty_private")
             settings.rag_index_cache_path = str(root / "test_rag_cache.json")
+            settings.rag_collections_dir = str(root / "empty_collections")
             try:
                 response = self.client.post(
                     "/api/ingest",
@@ -64,6 +67,7 @@ class Phase2RagIntegrationTests(unittest.TestCase):
                 settings.rag_knowledge_starter_dir = original_starter
                 settings.rag_knowledge_private_dir = original_private
                 settings.rag_index_cache_path = original_cache
+                settings.rag_collections_dir = original_collections
 
             self.assertEqual(response.status_code, 200)
             body = response.json()

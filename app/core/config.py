@@ -142,6 +142,12 @@ class Settings(BaseSettings):
     rag_min_collections: int = 2
     rag_max_chunks_per_collection: int = 2
     rag_two_phase_enabled: bool = True
+    # Post-answer expert ideas: attach a deterministic section quoting what each
+    # stored expert said (person, source title, video timestamp + link). Built
+    # verbatim from retrieval results so attributions cannot be hallucinated.
+    rag_attach_expert_ideas: bool = True
+    rag_ideas_max: int = 4
+    rag_ideas_excerpt_words: int = 60
 
     # Tool Router
     tool_router_enabled: bool = True

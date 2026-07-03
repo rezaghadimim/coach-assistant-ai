@@ -12,12 +12,26 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
 
 
+class ExpertIdeaItem(BaseModel):
+    """One attributed expert idea retrieved from the knowledge base."""
+
+    person_name: str
+    source_title: str = ""
+    excerpt: str
+    start_sec: Optional[float] = None
+    end_sec: Optional[float] = None
+    timestamp: str = ""
+    source_uri: Optional[str] = None
+    video_url: Optional[str] = None
+
+
 class ChatResponse(BaseModel):
     """Outgoing chat response payload."""
 
     user_id: str
     message: str
     reply: str
+    expert_ideas: list[ExpertIdeaItem] = Field(default_factory=list)
 
 
 class IngestRequest(BaseModel):
