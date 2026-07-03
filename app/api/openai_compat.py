@@ -147,6 +147,7 @@ async def _generate_reply_or_unavailable(
             tools=TOOL_DEFINITIONS,
             store=store,
             model_id=model_id,
+            skip_direct_reply=True,
         )
     except Exception as exc:
         logger.exception("LLM request failed during chat completion")

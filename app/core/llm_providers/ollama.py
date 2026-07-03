@@ -33,9 +33,11 @@ class OllamaProvider:
             "model": settings.ollama_model,
             "messages": messages,
             "stream": stream,
+            "keep_alive": settings.ollama_keep_alive,
             "options": {
                 "temperature": temperature if temperature is not None else settings.temperature,
                 "num_predict": num_predict if num_predict is not None else settings.max_tokens,
+                "num_ctx": settings.ollama_num_ctx,
                 "top_p": settings.top_p,
                 "repeat_penalty": settings.repeat_penalty,
             },

@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_timeout: float = 120.0
+    # Context window for chat completions. Ollama's default (often 2048–4096)
+    # silently truncates from the top — dropping the system prompt and tool
+    # definitions once RAG context + client notes are injected.
+    ollama_num_ctx: int = 8192
+    # How long Ollama keeps the model loaded after a request ("30m", "-1" = forever).
+    # The 5-minute default forces a full model reload after short idle periods.
+    ollama_keep_alive: str = "30m"
 
     # OpenAI (optional — direct embeddings when rag_*_embed_provider=openai)
     openai_api_key: str = ""

@@ -37,6 +37,10 @@ class OllamaEmbedProvider:
         )
 
     def embed_passages(self, texts: list[str]) -> list[list[float]]:
+        if len(texts) > 1:
+            batched = self._embed_batch(texts, input_type="passage")
+            if batched is not None:
+                return batched
         return self._embed_many(texts, input_type="passage")
 
     def embed_query(self, text: str) -> list[float]:
@@ -49,6 +53,53 @@ class OllamaEmbedProvider:
         except Exception as exc:
             logger.debug("ollama embed probe failed: %s", exc)
             return False
+
+    def _embed_batch(
+        self, texts: list[str], *, input_type: str
+    ) -> list[list[float]] | None:
+        """Embed *texts* in one request via ``POST /api/embed`` (batch endpoint).
+
+        Returns ``None`` when the endpoint is unavailable or the batch fails so
+        the caller falls back to the per-text ``/api/embeddings`` path, which
+        has the word-limit retry ladder for context-length errors.
+        """
+        from app.core.config import settings
+
+        prompts = [
+            self._apply_prefix(
+                _truncate_words(text, _EMBED_RETRY_WORD_LIMITS[0]), input_type
+            )
+            for text in texts
+        ]
+        try:
+            with httpx.Client(
+                base_url=settings.ollama_base_url,
+                timeout=settings.ollama_timeout,
+            ) as client:
+                response = client.post(
+                    "/api/embed",
+                    json={"model": self.profile.model, "input": prompts},
+                )
+                if not response.is_success:
+                    logger.debug(
+                        "ollama /api/embed unavailable (HTTP %s) — falling back "
+                        "to per-text /api/embeddings",
+                        response.status_code,
+                    )
+                    return None
+                embeddings = response.json().get("embeddings")
+        except Exception as exc:
+            logger.debug("ollama batch embed failed (%s) — falling back", exc)
+            return None
+
+        if not isinstance(embeddings, list) or len(embeddings) != len(texts):
+            logger.warning(
+                "ollama batch embed returned %s vectors for %d texts — falling back",
+                len(embeddings) if isinstance(embeddings, list) else "no",
+                len(texts),
+            )
+            return None
+        return embeddings
 
     def _embed_many(self, texts: list[str], *, input_type: str) -> list[list[float]]:
         from app.core.config import settings

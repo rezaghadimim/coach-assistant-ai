@@ -69,23 +69,22 @@ class TestRerankerModule(unittest.TestCase):
 
         self.assertEqual(len(result), 3)
 
-    def test_rerank_fallback_on_ollama_error(self) -> None:
+    def test_rerank_raises_on_scoring_error(self) -> None:
+        """Scoring failures must propagate so the retriever falls back to
+        stage-1 ordering with the original scores (not rerank-thresholded)."""
         chunks = [
             _make_retrieved("a", score=0.3),
             _make_retrieved("b", score=0.8),
-            _make_retrieved("c", score=0.5),
         ]
 
         with patch(
             "app.rag.reranker.rerank_documents",
-            side_effect=RuntimeError("Ollama unreachable"),
+            side_effect=RuntimeError("cross-encoder unavailable"),
         ):
             from app.rag.reranker import rerank
 
-            result = rerank("query", chunks, top_k=3)
-
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0].chunk_id, "a")
+            with self.assertRaises(RuntimeError):
+                rerank("query", chunks, top_k=2)
 
     def test_rerank_empty_input(self) -> None:
         from app.rag.reranker import rerank
@@ -226,6 +225,119 @@ class TestRetrieveWithRerank(unittest.TestCase):
             )
 
         self.assertLessEqual(len(results), 3)
+
+    def test_rerank_failure_falls_back_to_stage1_scores(self) -> None:
+        """Regression: a broken cross-encoder must degrade to stage-1 results.
+
+        Previously the fallback chunks kept RRF/stage-1 scores but were still
+        filtered at rag_rerank_min_score, silently emptying retrieval."""
+        self._index_n_chunks(5, prefix="fb")
+
+        with (
+            patch(
+                "app.rag.reranker.rerank_documents",
+                side_effect=RuntimeError("model load failed"),
+            ),
+            patch("app.core.config.settings.rag_rerank_enabled", True),
+            patch("app.core.config.settings.rag_rerank_min_score", 0.42),
+        ):
+            results = retrieve("coaching goal", top_k=3, min_score=0.0, backend="token")
+
+        self.assertTrue(results, "rerank failure must not empty retrieval")
+        # Stage-1 token-cosine scores survive (not overwritten, not thresholded
+        # against the rerank floor).
+        self.assertGreater(results[0].score, 0.0)
+
+    def test_rerank_skipped_when_probe_cached_false(self) -> None:
+        """A known-broken reranker is skipped without attempting to score."""
+        self._index_n_chunks(5, prefix="probe")
+
+        with (
+            patch("app.rag.retriever._rerank_usable", return_value=False),
+            patch("app.rag.reranker.rerank_documents") as mock_rerank,
+            patch("app.core.config.settings.rag_rerank_enabled", True),
+        ):
+            results = retrieve("coaching goal", top_k=3, min_score=0.0, backend="token")
+
+        mock_rerank.assert_not_called()
+        self.assertTrue(results)
+
+
+class TestHybridRRFScorePreservation(unittest.TestCase):
+    """RRF fusion must order by fused rank but keep real similarity scores."""
+
+    def setUp(self) -> None:
+        clear_index()
+
+    @staticmethod
+    def _hits(*pairs: tuple[str, float]) -> list[RetrievedChunk]:
+        return [_make_retrieved(cid, score=s) for cid, s in pairs]
+
+    def test_rrf_preserves_original_scores(self) -> None:
+        from app.rag.retriever import _reciprocal_rank_fusion
+
+        fused = _reciprocal_rank_fusion(
+            [
+                self._hits(("a", 0.9), ("b", 0.7)),
+                self._hits(("b", 0.8), ("c", 0.6)),
+            ]
+        )
+        by_id = {chunk.chunk_id: chunk.score for chunk in fused}
+        # "b" appears in both lists → highest fused rank, but keeps its best
+        # original score instead of a ~0.03 fused score.
+        self.assertEqual(fused[0].chunk_id, "b")
+        self.assertAlmostEqual(by_id["b"], 0.8)
+        self.assertAlmostEqual(by_id["a"], 0.9)
+
+    def test_hybrid_retrieval_survives_min_score_filter_without_rerank(self) -> None:
+        """Regression: fused RRF scores (~0.03) used to be filtered out by
+        rag_min_score whenever the reranker was disabled or failed."""
+        chunks = [
+            _make_doc_chunk("h1", "GROW model goal reality options will framework"),
+            _make_doc_chunk("h2", "motivational interviewing ambivalence change talk"),
+        ]
+        index_chunks(chunks, embed=False)
+
+        embedding_hits = self._hits(("h1", 0.85), ("h2", 0.80))
+        token_hits = self._hits(("h2", 0.75), ("h1", 0.70))
+
+        with (
+            patch("app.rag.retriever._framework_embedding_ready", True),
+            patch("app.core.config.settings.rag_hybrid_rrf_enabled", True),
+            patch("app.core.config.settings.rag_rerank_enabled", False),
+            patch("app.rag.retriever._retrieve_embedding", return_value=embedding_hits),
+            patch("app.rag.retriever._retrieve_token", return_value=token_hits),
+        ):
+            results = retrieve("GROW model", top_k=2, min_score=0.15, backend="embedding")
+
+        self.assertEqual(len(results), 2)
+        for chunk in results:
+            self.assertGreaterEqual(chunk.score, 0.15)
+
+    def test_hybrid_retrieval_survives_rerank_failure(self) -> None:
+        chunks = [
+            _make_doc_chunk("h1", "GROW model goal reality options will framework"),
+            _make_doc_chunk("h2", "motivational interviewing ambivalence change talk"),
+        ]
+        index_chunks(chunks, embed=False)
+
+        embedding_hits = self._hits(("h1", 0.85), ("h2", 0.80))
+        token_hits = self._hits(("h2", 0.75), ("h1", 0.70))
+
+        with (
+            patch("app.rag.retriever._framework_embedding_ready", True),
+            patch("app.core.config.settings.rag_hybrid_rrf_enabled", True),
+            patch("app.core.config.settings.rag_rerank_enabled", True),
+            patch(
+                "app.rag.reranker.rerank_documents",
+                side_effect=RuntimeError("cross-encoder unavailable"),
+            ),
+            patch("app.rag.retriever._retrieve_embedding", return_value=embedding_hits),
+            patch("app.rag.retriever._retrieve_token", return_value=token_hits),
+        ):
+            results = retrieve("GROW model", top_k=2, min_score=0.15, backend="embedding")
+
+        self.assertEqual(len(results), 2)
 
 
 if __name__ == "__main__":

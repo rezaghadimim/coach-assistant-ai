@@ -36,7 +36,7 @@ The local Ollama provider is always the default.
 - `transcript.py`: SRT/VTT parsing and time-aware chunking for video guides
 - `knowledge_paths.py`: resolves configured starter and private directories
 - `retriever.py`: **dual indices** (`framework_index`, `collection_index`); two-phase `retrieve_coach_context()` for chat; legacy `retrieve()` on framework corpus; bi-encoder, TF cosine, or hybrid RRF (stage 1) + cross-encoder rerank (stage 2); `diversify_by_collection()` for multi-expert phase 2
-- `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); graceful fallback when fastembed is unavailable
+- `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); raises on scoring failure — the retriever falls back to stage-1 ordering with original stage-1 scores (filtered by `RAG_MIN_SCORE`, not the rerank floor), and a failed model load is cached so later queries skip the reranker cheaply
 - `POST /api/ingest`: reindex starter + private + all collections
 - `app/knowledge/`: collection store, filesystem ingest, media jobs (Whisper, yt-dlp)
 - `app/api/collections.py`: collection CRUD, source registration, reindex, `process-jobs`

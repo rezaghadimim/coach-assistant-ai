@@ -142,6 +142,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 system_prompt=system_prompt,
                 tools=TOOL_DEFINITIONS,
                 store=store,
+                skip_direct_reply=True,
             )
             ideas_section = format_expert_ideas_markdown(ideas)
             if ideas_section:

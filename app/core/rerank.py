@@ -201,7 +201,15 @@ def rerank_documents(
 
     passages = [_truncate(doc, max_chars) for doc in documents]
 
-    encoder = _get_encoder(model_name)
+    try:
+        encoder = _get_encoder(model_name)
+    except Exception:
+        # Model load failure (missing dependency, broken download) is sticky:
+        # cache it so per-query callers skip the reranker cheaply instead of
+        # re-attempting the load/download on every request.  A later successful
+        # probe (e.g. via /health) resets the flag.
+        _probe_ok = False
+        raise
     logits = [float(score) for score in encoder.rerank(query, passages, batch_size=batch)]
     scores = [_sigmoid(logit) for logit in logits]
 

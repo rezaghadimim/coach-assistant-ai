@@ -13,7 +13,7 @@ import math
 import os
 import re
 from collections import Counter
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Literal
 
@@ -25,6 +25,10 @@ from app.rag.ingest import DocumentChunk, ingest_documents_from_dir
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[\w'']+", re.UNICODE)
+
+# Uncached chunks are embedded in batches of this size during ingest (one
+# Ollama /api/embed request per batch instead of one request per chunk).
+_EMBED_INGEST_BATCH_SIZE = 64
 
 Backend = Literal["auto", "embedding", "token"]
 CorpusKind = Literal["framework", "collection"]
@@ -144,28 +148,44 @@ def index_chunks(
     newly_embedded: dict[str, list[float]] = {}
     added = 0
 
+    indexed_entries: list[_IndexedChunk] = []
+    # Chunks whose embedding was not cached, embedded in batches below.
+    pending: list[tuple[_IndexedChunk, str]] = []
+
     for chunk in chunk_list:
         tokens = _tokenize(chunk.text)
         if not tokens:
             continue
         tf = Counter(tokens)
         norm = math.sqrt(sum(value * value for value in tf.values()))
-        embedding: list[float] = []
+        entry = _IndexedChunk(chunk=chunk, tf=tf, norm=norm)
 
         if embed and provider is not None:
             cache_key = _cache_key(chunk)
             if cache_key in cache:
-                embedding = cache[cache_key]
+                entry.embedding = cache[cache_key]
             else:
-                try:
-                    vectors = provider.embed_passages([chunk.text])
-                    embedding = vectors[0] if vectors else []
-                    if embedding:
-                        newly_embedded[cache_key] = embedding
-                except Exception as exc:
-                    logger.warning("embed failed for chunk %s: %s", chunk.chunk_id, exc)
+                pending.append((entry, cache_key))
 
-        target.append(_IndexedChunk(chunk=chunk, tf=tf, norm=norm, embedding=embedding))
+        indexed_entries.append(entry)
+
+    for batch_start in range(0, len(pending), _EMBED_INGEST_BATCH_SIZE):
+        batch = pending[batch_start : batch_start + _EMBED_INGEST_BATCH_SIZE]
+        try:
+            vectors = provider.embed_passages([entry.chunk.text for entry, _ in batch])
+        except Exception as exc:
+            logger.warning(
+                "embed failed for batch of %d chunks (%s..): %s",
+                len(batch), batch[0][0].chunk.chunk_id, exc,
+            )
+            continue
+        for (entry, cache_key), vector in zip(batch, vectors):
+            if vector:
+                entry.embedding = vector
+                newly_embedded[cache_key] = vector
+
+    for entry in indexed_entries:
+        target.append(entry)
         added += 1
 
     if embed:
@@ -498,17 +518,19 @@ def _retrieve_from_indices(
 
     rerank_applied = False
     effective_query = rerank_query or query
-    if settings.rag_rerank_enabled and len(candidates) > 1:
+    if settings.rag_rerank_enabled and len(candidates) > 1 and _rerank_usable():
         try:
             from app.rag.reranker import rerank
 
-            candidates = rerank(effective_query, candidates, top_k=top_k)
+            # Rerank the full pool (scoring cost is identical) so source dedup
+            # below never leaves fewer than top_k results when distinct
+            # candidates were available.
+            candidates = rerank(effective_query, candidates, top_k=len(candidates))
             rerank_applied = True
         except Exception as exc:
+            # Fall back to stage-1 ordering; chunks keep their stage-1 scores
+            # so the min_score filter below stays meaningful.
             log_step(logger, "rag.rerank", "fail", level=logging.WARNING, exc=type(exc).__name__)
-            candidates = candidates[:top_k]
-    else:
-        candidates = candidates[:top_k]
 
     seen: set[str] = set()
     deduped: list[RetrievedChunk] = []
@@ -521,6 +543,18 @@ def _retrieve_from_indices(
 
     final_min = settings.rag_rerank_min_score if rerank_applied else min_score
     return [chunk for chunk in deduped if chunk.score >= final_min][:top_k]
+
+
+def _rerank_usable() -> bool:
+    """True unless the cross-encoder is known to be unavailable.
+
+    ``rerank_probe_cached()`` is ``None`` before the first scoring attempt and
+    ``False`` after a failed model load, so a broken reranker costs one failed
+    attempt instead of a re-download on every query.
+    """
+    from app.core.rerank import rerank_probe_cached
+
+    return rerank_probe_cached() is not False
 
 
 def _dedup_key(chunk: RetrievedChunk, *, mode: str) -> str:
@@ -638,6 +672,13 @@ def _reciprocal_rank_fusion(
     *,
     k: int = 60,
 ) -> list[RetrievedChunk]:
+    """Merge ranked lists by RRF, using fused scores for ORDERING only.
+
+    Each chunk keeps its best stage-1 similarity score.  Fused scores are
+    capped at ~len(ranked_lists)/(k+1) ≈ 0.03 and must never be compared
+    against ``rag_min_score`` / ``rag_rerank_min_score`` — doing so filtered
+    every result out whenever the reranker was disabled or failed.
+    """
     fused_scores: dict[str, float] = {}
     best_chunk: dict[str, RetrievedChunk] = {}
 
@@ -653,10 +694,7 @@ def _reciprocal_rank_fusion(
                 best_chunk[chunk.chunk_id] = chunk
 
     ordered = sorted(fused_scores.items(), key=lambda item: item[1], reverse=True)
-    return [
-        replace(best_chunk[chunk_id], score=score)
-        for chunk_id, score in ordered
-    ]
+    return [best_chunk[chunk_id] for chunk_id, _score in ordered]
 
 
 def _resolve_backend(backend: Backend, index_name: IndexName) -> bool:

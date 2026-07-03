@@ -360,6 +360,7 @@ async def generate_response(
     tools: Optional[list[dict]] = None,
     store: Optional["MemoryStore"] = None,
     model_id: Optional[str] = None,
+    skip_direct_reply: bool = False,
 ) -> Union[str, AsyncGenerator[str, None]]:
     """Send messages to the resolved provider and return the assistant response.
 
@@ -371,6 +372,10 @@ async def generate_response(
         store: MemoryStore instance required when tools are provided.
         model_id: Virtual model ID (e.g. "coach-assistant-ai-cloud").
                   Defaults to local Ollama when None or unrecognised.
+        skip_direct_reply: Set True when the caller already ran
+                  ``try_direct_reply_with_meta`` on the last user message (both
+                  API endpoints do) so the fast-path check — including its
+                  tool-router embed + cross-encoder pass — is not repeated.
 
     Returns:
         The assistant's reply as a string (non-streaming) or an async generator
@@ -387,7 +392,10 @@ async def generate_response(
     if tools:
         if store is None:
             raise ValueError("store is required when tools are provided")
-        return await _generate_with_tools(messages, system_prompt, tools, store, provider)
+        return await _generate_with_tools(
+            messages, system_prompt, tools, store, provider,
+            skip_direct_reply=skip_direct_reply,
+        )
 
     full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
 
@@ -404,6 +412,8 @@ async def _generate_with_tools(
     tools: list[dict],
     store: "MemoryStore",
     provider=None,
+    *,
+    skip_direct_reply: bool = False,
 ) -> str:
     """Agentic tool-calling loop: execute tools until the LLM gives a final reply."""
     from app.core.llm_providers.ollama import OllamaProvider
@@ -431,7 +441,10 @@ async def _generate_with_tools(
     is_task = bool(last_user) and is_openwebui_task(last_user)
 
     if last_user and not is_task:
-        direct_meta = try_direct_reply_with_meta(last_user, store, messages)
+        direct_meta = (
+            None if skip_direct_reply
+            else try_direct_reply_with_meta(last_user, store, messages)
+        )
         if direct_meta is not None:
             from app.core.response_formatter import format_data_reply, is_formattable
             direct = direct_meta.reply

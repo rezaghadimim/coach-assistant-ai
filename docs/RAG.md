@@ -147,6 +147,12 @@ Legacy single-directory ingest still works for tests:
 python3 scripts/ingest.py --starter-dir ./my/docs --private-dir ./my/private
 ```
 
+Uncached chunks are embedded in batches of 64 through Ollama's `/api/embed`
+endpoint (one HTTP request per batch). On older Ollama versions without that
+endpoint, ingest transparently falls back to the per-text `/api/embeddings`
+path, which also handles context-length retries. Chunks already present in
+`RAG_INDEX_CACHE_PATH` are never re-embedded.
+
 ## Reranker setup
 
 Stage-2 reranking runs **locally in the API process** via [fastembed](https://github.com/qdrant/fastembed) (ONNX + onnxruntime). No Ollama, no PyTorch.
@@ -155,7 +161,10 @@ Default model: `BAAI/bge-reranker-base` (~1 GB). It is downloaded automatically 
 
 Ollama cannot serve cross-encoder reranker models (they crash llama.cpp with `GGML_ASSERT(n_outputs_max …)`; see [ollama/ollama#3368](https://github.com/ollama/ollama/issues/3368)), so reranking is not done through Ollama.
 
-When fastembed is missing or the model fails to load, the pipeline falls back to stage-1 ordering — no configuration change required.
+When fastembed is missing or the model fails to load, the pipeline falls back to stage-1 ordering — no configuration change required. Fallback semantics (fixed 2026-07):
+
+- Fallback results keep their **stage-1 similarity scores** and are filtered against `RAG_MIN_SCORE`, never against `RAG_RERANK_MIN_SCORE` (that floor only applies to real cross-encoder scores). RRF fusion is used for *ordering only* — fused rank scores (~0.03) are never compared against either floor.
+- A failed **model load** is cached: subsequent queries skip the reranker immediately instead of re-attempting the download. A later successful probe (e.g. the `/health` warmup) re-enables it; a restart also clears the flag.
 
 ### Key environment variables
 

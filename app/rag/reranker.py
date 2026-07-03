@@ -46,8 +46,10 @@ def rerank(
 ) -> list[RetrievedChunk]:
     """Rerank *chunks* against *query* with the local cross-encoder; return top_k.
 
-    Falls back to stage-1 ordering when the reranker dependency or model is
-    unavailable, or when scoring fails.
+    Raises on any scoring failure so the caller can fall back to stage-1
+    ordering with the original stage-1 scores intact.  Returning the input
+    chunks from here instead would hide the failure: the caller would apply
+    ``rag_rerank_min_score`` to scores that are not cross-encoder scores.
     """
     if not chunks:
         return []
@@ -55,18 +57,13 @@ def rerank(
     max_chars = settings.rag_rerank_max_passage_chars
     documents = [chunk.text[:max_chars] for chunk in chunks]
 
-    try:
-        scores = rerank_documents(
-            query,
-            documents,
-            model=settings.rag_rerank_model,
-            batch_size=settings.rag_rerank_batch_size,
-            max_passage_chars=max_chars,
-        )
-    except Exception as exc:
-        log_step(logger, "rag.rerank", "fail", level=logging.WARNING,
-                 exc=type(exc).__name__)
-        return chunks[:top_k]
+    scores = rerank_documents(
+        query,
+        documents,
+        model=settings.rag_rerank_model,
+        batch_size=settings.rag_rerank_batch_size,
+        max_passage_chars=max_chars,
+    )
 
     scored = sorted(zip(scores, chunks), key=lambda t: t[0], reverse=True)
     reranked = [replace(chunk, score=score) for score, chunk in scored]
