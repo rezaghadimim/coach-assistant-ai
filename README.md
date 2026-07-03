@@ -39,6 +39,15 @@ Runs locally using open-source LLMs.  **English-only interface.**
 - `ollama pull karuniaperjuangan/multilingual-e5-small` — embeddings + tool routing + RAG stage-1
 - RAG stage-2 reranking uses `fastembed` + `BAAI/bge-reranker-base` in-process (downloaded on first run; disable with `RAG_RERANK_ENABLED=false`)
 
+Want to run on a smaller machine or swap in a 3–4B model? See
+[docs/SMALL_MODELS.md](docs/SMALL_MODELS.md) — model inventory, swap-and-validate
+checklist (eval scripts + acceptance bar), and the latency/context knobs
+(`OLLAMA_NUM_CTX`, `OLLAMA_KEEP_ALIVE`, rerank pool sizes).
+
+Health & monitoring: run `.venv/bin/python scripts/benchmark_pipeline.py` to smoke-test
+every layer with latency budgets, and `./scripts/watch_health.sh` for instant
+alerts when anything degrades — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
 ## Getting Started
 
 ```bash

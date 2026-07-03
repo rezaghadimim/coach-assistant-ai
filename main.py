@@ -115,15 +115,40 @@ async def health_live():
     return {"status": "ok"}
 
 
+async def _probe_ollama_server() -> bool:
+    """Cheap reachability probe for the local Ollama server (no model load)."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(
+            base_url=settings.ollama_base_url, timeout=3.0
+        ) as client:
+            response = await client.get("/api/version")
+            return response.is_success
+    except Exception:
+        return False
+
+
 @app.get("/health")
 async def health_check():
-    """Report the application status and LLM provider availability."""
+    """Report application status and per-layer availability.
+
+    ``status`` is ``"ok"`` only when every enabled layer is actually usable;
+    otherwise ``"degraded"`` with a human-readable ``issues`` list. Monitors
+    should alert on ``status != "ok"`` (see docs/BENCHMARKS.md).
+    """
     from app.core.model_registry import (
         LOCAL_MODEL_ID,
         openrouter_availability_reason,
         openrouter_models,
         probe_openrouter,
     )
+
+    issues: list[str] = []
+
+    ollama_ok = await _probe_ollama_server()
+    if not ollama_ok:
+        issues.append(f"ollama unreachable at {settings.ollama_base_url}")
 
     cloud_ok = await probe_openrouter()
     openrouter_info: dict = {
@@ -132,6 +157,9 @@ async def health_check():
     }
     if not cloud_ok:
         openrouter_info["reason"] = openrouter_availability_reason()
+        # Optional provider: unavailability is only an issue when configured.
+        if settings.openrouter_api_key:
+            issues.append("openrouter configured but unavailable")
 
     from app.core.embeddings import probe_embed_model
 
@@ -142,6 +170,13 @@ async def health_check():
         "backend": settings.tool_router_backend,
         "enabled": settings.tool_router_enabled,
     }
+    if (
+        settings.tool_router_enabled
+        and settings.tool_router_backend == "embedding"
+        and not embed_available
+    ):
+        # "auto" degrades to token silently by design; forced embedding does not.
+        issues.append("embedding backend forced but embed model unavailable")
 
     from app.core.routing_observability import get_stats as routing_stats
 
@@ -168,14 +203,20 @@ async def health_check():
             rerank_info["status"] = "warming"
         else:
             rerank_info["available"] = cached is True
+            if cached is False:
+                issues.append(
+                    "reranker enabled but cross-encoder failed to load "
+                    "(retrieval falls back to stage-1)"
+                )
 
     return {
-        "status": "ok",
+        "status": "ok" if not issues else "degraded",
+        "issues": issues,
         "default_model": LOCAL_MODEL_ID,
         "providers": {
             "ollama": {
                 "model": settings.ollama_model,
-                "available": True,
+                "available": ollama_ok,
             },
             "openrouter": openrouter_info,
         },

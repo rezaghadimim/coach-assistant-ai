@@ -18,14 +18,59 @@ class Phase1CoreChatTests(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_health_endpoint_returns_status_and_model(self) -> None:
-        response = self.client.get("/health")
+        with (
+            patch("main._probe_ollama_server", new=AsyncMock(return_value=True)),
+            patch(
+                "app.core.model_registry.probe_openrouter",
+                new=AsyncMock(return_value=False),
+            ),
+            patch("app.core.embeddings.probe_embed_model", return_value=False),
+            patch("app.core.config.settings.openrouter_api_key", ""),
+        ):
+            response = self.client.get("/health")
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["issues"], [])
         self.assertIn("providers", body)
         self.assertIn("ollama", body["providers"])
         self.assertTrue(body["providers"]["ollama"]["model"])
+
+    def test_health_endpoint_reports_degraded_when_ollama_down(self) -> None:
+        """Monitors alert on status != ok — the endpoint must not mask outages."""
+        with (
+            patch("main._probe_ollama_server", new=AsyncMock(return_value=False)),
+            patch(
+                "app.core.model_registry.probe_openrouter",
+                new=AsyncMock(return_value=False),
+            ),
+            patch("app.core.embeddings.probe_embed_model", return_value=False),
+            patch("app.core.config.settings.openrouter_api_key", ""),
+        ):
+            response = self.client.get("/health")
+
+        body = response.json()
+        self.assertEqual(body["status"], "degraded")
+        self.assertTrue(any("ollama" in issue for issue in body["issues"]))
+        self.assertFalse(body["providers"]["ollama"]["available"])
+
+    def test_health_endpoint_reports_broken_reranker(self) -> None:
+        with (
+            patch("main._probe_ollama_server", new=AsyncMock(return_value=True)),
+            patch(
+                "app.core.model_registry.probe_openrouter",
+                new=AsyncMock(return_value=False),
+            ),
+            patch("app.core.embeddings.probe_embed_model", return_value=False),
+            patch("app.core.config.settings.openrouter_api_key", ""),
+            patch("app.core.rerank.rerank_probe_cached", return_value=False),
+        ):
+            response = self.client.get("/health")
+
+        body = response.json()
+        self.assertEqual(body["status"], "degraded")
+        self.assertTrue(any("reranker" in issue for issue in body["issues"]))
 
     def test_chat_returns_llm_reply(self) -> None:
         with patch(
