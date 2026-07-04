@@ -46,6 +46,38 @@ class ToolRouterTokenBackendTests(unittest.TestCase):
         count = build_index()
         self.assertGreater(count, 0, "build_index should load examples from routing.jsonl")
 
+    def test_token_backend_never_degraded(self) -> None:
+        from app.core.tool_router import build_index, effective_backend, is_degraded
+        build_index()
+        self.assertEqual(effective_backend(), "token")
+        self.assertFalse(is_degraded())
+
+
+class ToolRouterDegradationTests(unittest.TestCase):
+    """effective_backend()/is_degraded() reporting when auto falls back to token."""
+
+    def tearDown(self) -> None:
+        from app.core.tool_router import reset_index
+        reset_index()
+
+    def test_auto_reports_token_and_degraded_when_embed_unavailable(self) -> None:
+        import app.core.tool_router as tr
+        from app.core.config import settings
+        with patch.multiple(settings, tool_router_backend="auto"):
+            tr.reset_index()
+            tr._embed_available = False  # simulate Ollama probe failure
+            self.assertEqual(tr.effective_backend(), "token")
+            self.assertTrue(tr.is_degraded())
+
+    def test_explicit_embedding_backend_degraded_when_embed_unavailable(self) -> None:
+        import app.core.tool_router as tr
+        from app.core.config import settings
+        with patch.multiple(settings, tool_router_backend="embedding"):
+            tr.reset_index()
+            tr._embed_available = False
+            self.assertEqual(tr.effective_backend(), "token")
+            self.assertTrue(tr.is_degraded())
+
     def test_build_index_idempotent(self) -> None:
         from app.core.tool_router import build_index
         count1 = build_index()

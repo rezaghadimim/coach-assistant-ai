@@ -328,3 +328,35 @@
 {"utterance": "What progress notes do we have for Dara?", "tool": "list_client_notes", "hint": "note_type:progress"}
 {"utterance": "What objectives should I suggest for a brand-new client?", "tool": "none", "hint": "advice"}
 {"utterance": "What kind of targets work well for someone easing back into exercise?", "tool": "none", "hint": "advice"}
+{"utterance": "Reza's goals", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "Maryam's notes", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "notes for Nima", "tool": "list_client_notes", "hint": "note_type:general"}
+{"utterance": "Leila's progress", "tool": "list_client_notes", "hint": "note_type:progress"}
+{"utterance": "her decisions", "tool": "list_client_notes", "hint": "note_type:decision"}
+{"utterance": "his goals", "tool": "list_client_notes", "hint": "note_type:goal"}
+{"utterance": "Nima's story", "tool": "list_client_notes", "hint": "note_type:story"}
+{"utterance": "their progress", "tool": "list_client_notes", "hint": "note_type:progress"}
+{"utterance": "Reza's email", "tool": "get_client", "hint": "profile:email"}
+{"utterance": "Maryam's phone", "tool": "get_client", "hint": "profile:phone"}
+{"utterance": "his age", "tool": "get_client", "hint": "profile:age"}
+{"utterance": "her number", "tool": "get_client", "hint": "profile:phone"}
+{"utterance": "Nima's occupation", "tool": "get_client", "hint": "profile:occupation"}
+{"utterance": "Leila's job", "tool": "get_client", "hint": "profile:occupation"}
+{"utterance": "everything on Reza", "tool": "get_client_full", "hint": "full"}
+{"utterance": "all about Maryam", "tool": "get_client_full", "hint": "full"}
+{"utterance": "Nima's full record", "tool": "get_client_full", "hint": "full"}
+{"utterance": "the whole file on Leila", "tool": "get_client_full", "hint": "full"}
+{"utterance": "everyone", "tool": "list_clients", "hint": "all"}
+{"utterance": "all clients", "tool": "list_clients", "hint": "all"}
+{"utterance": "who's on file", "tool": "list_clients", "hint": "all"}
+{"utterance": "my roster", "tool": "list_clients", "hint": "all"}
+{"utterance": "the whole list", "tool": "list_clients", "hint": "all"}
+{"utterance": "add Reza", "tool": "create_client", "hint": "new_client"}
+{"utterance": "new client Maryam", "tool": "create_client", "hint": "new_client"}
+{"utterance": "create Nima", "tool": "create_client", "hint": "new_client"}
+{"utterance": "Leila is 40", "tool": "create_client", "hint": "profile:age"}
+{"utterance": "delete Reza", "tool": "delete_client", "hint": "client"}
+{"utterance": "remove Maryam", "tool": "delete_client", "hint": "client"}
+{"utterance": "drop Nima", "tool": "delete_client", "hint": "client"}
+{"utterance": "delete note 7", "tool": "delete_client_note", "hint": "note_id"}
+{"utterance": "trash note 5", "tool": "delete_client_note", "hint": "note_id"}

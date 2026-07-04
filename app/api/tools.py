@@ -53,7 +53,7 @@ async def reindex_tool_router() -> ToolReindexResponse:
     Call after editing ``docs/tool-knowledge/examples/routing.jsonl`` to pick
     up new examples without restarting the server.
     """
-    from app.core.tool_router import build_index, reset_index
+    from app.core.tool_router import build_index, effective_backend, is_degraded, reset_index
 
     reset_index()
     count = build_index(force=True)
@@ -61,4 +61,6 @@ async def reindex_tool_router() -> ToolReindexResponse:
     return ToolReindexResponse(
         examples_indexed=count,
         backend=settings.tool_router_backend,
+        effective_backend=effective_backend(),
+        degraded=is_degraded(),
     )

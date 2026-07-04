@@ -1,0 +1,25 @@
+{"utterance": "Sara's goals?", "expected_tool": "list_client_notes"}
+{"utterance": "Ali's notes", "expected_tool": "list_client_notes"}
+{"utterance": "notes on Sara", "expected_tool": "list_client_notes"}
+{"utterance": "Mohammad's progress", "expected_tool": "list_client_notes"}
+{"utterance": "her goals", "expected_tool": "list_client_notes"}
+{"utterance": "his decisions", "expected_tool": "list_client_notes"}
+{"utterance": "Sara's email", "expected_tool": "get_client"}
+{"utterance": "Ali's phone", "expected_tool": "get_client"}
+{"utterance": "her age", "expected_tool": "get_client"}
+{"utterance": "Sara's number", "expected_tool": "get_client"}
+{"utterance": "everything on Ali", "expected_tool": "get_client_full"}
+{"utterance": "all about Sara", "expected_tool": "get_client_full"}
+{"utterance": "Sara's full record", "expected_tool": "get_client_full"}
+{"utterance": "everyone", "expected_tool": "list_clients"}
+{"utterance": "all clients", "expected_tool": "list_clients"}
+{"utterance": "who's on file", "expected_tool": "list_clients"}
+{"utterance": "list everyone", "expected_tool": "list_clients"}
+{"utterance": "my roster", "expected_tool": "list_clients"}
+{"utterance": "add Sara", "expected_tool": "create_client"}
+{"utterance": "new client Ali", "expected_tool": "create_client"}
+{"utterance": "Sara is 34", "expected_tool": "create_client"}
+{"utterance": "delete Ali", "expected_tool": "delete_client"}
+{"utterance": "remove Sara", "expected_tool": "delete_client"}
+{"utterance": "delete note 4", "expected_tool": "delete_client_note"}
+{"utterance": "remove note 2", "expected_tool": "delete_client_note"}

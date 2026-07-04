@@ -489,6 +489,44 @@ def build_index(*, force: bool = False) -> int:
     return len(_token_backend)
 
 
+def effective_backend() -> str:
+    """Return the backend actually in use after index build + probes.
+
+    Differs from ``settings.tool_router_backend`` when "auto" or "embedding" has
+    silently degraded to token because the Ollama embed model (or the rerank
+    cross-encoder) is unavailable. Callers use this to surface the degradation
+    instead of reporting the configured value as if it were live.
+    """
+    configured = settings.tool_router_backend.lower()
+    if configured == "token":
+        return "token"
+    # "embedding" / "auto": embedding only runs when the probe passed and the
+    # index actually populated.
+    if not (_embed_available and len(_embed_backend) > 0):
+        return "token"
+    if settings.tool_router_rerank_enabled and _rerank_available:
+        return "rerank"
+    return "embedding"
+
+
+def is_degraded() -> bool:
+    """True when the configured backend could not be honored (running below it)."""
+    configured = settings.tool_router_backend.lower()
+    if configured in ("token", "auto"):
+        # "auto" degrading to token is expected fallback, but still worth flagging
+        # so operators notice Ollama is down; "token" is never degraded.
+        return configured == "auto" and effective_backend() == "token"
+    # Explicit "embedding"/"rerank" request that fell back to token is a hard miss.
+    return effective_backend() != _resolve_requested_backend(configured)
+
+
+def _resolve_requested_backend(configured: str) -> str:
+    """The best backend the configuration explicitly asked for."""
+    if configured == "embedding":
+        return "rerank" if settings.tool_router_rerank_enabled else "embedding"
+    return configured
+
+
 def reset_index() -> None:
     """Clear all indexes (used by tests)."""
     global _index_built, _embed_available, _rerank_available

@@ -48,6 +48,20 @@ _DATA_REQUEST_PATTERNS = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Short/elliptical data references that carry no leading verb — the verb-anchored
+# pattern above misses them, so terse queries like "Sara's goals" or "her email"
+# slipped past the data-request gate and reached the free-form loop ungrounded.
+# Matches a possessive ("Sara's", "client's") or a possessive pronoun
+# ("his"/"her"/"their"/"my"/"our"/"your") immediately followed by a data noun.
+_POSSESSIVE_DATA_PATTERN = re.compile(
+    r"(?:\b\w+['’]s|\b(?:his|her|their|my|our|your))\s+(?:"
+    r"notes?|goals?|decisions?|progress|story|stories|"
+    r"details?|info|information|profile|record|records|data|"
+    r"email|phone|mobile|cell|cellphone|number|age|occupation|job"
+    r")\b",
+    re.IGNORECASE,
+)
+
 # Guardrail E: phrasing that asserts specific note/goal/decision content.
 # Used to catch a reply that invents such content for a client with none on file.
 _NOTE_CONTENT_HINT_RE = re.compile(
@@ -92,7 +106,11 @@ def _sanitize_assistant_reply(content: str, *, last_user: str = "") -> str:
 
 def _is_data_request(message: str) -> bool:
     """Return True when *message* looks like a data retrieval request."""
-    return bool(_DATA_REQUEST_PATTERNS.search(message.strip()))
+    stripped = message.strip()
+    return bool(
+        _DATA_REQUEST_PATTERNS.search(stripped)
+        or _POSSESSIVE_DATA_PATTERN.search(stripped)
+    )
 
 
 def _references_unknown_client(message: str, store: "MemoryStore") -> str | None:

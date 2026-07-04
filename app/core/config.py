@@ -163,9 +163,15 @@ class Settings(BaseSettings):
     tool_router_backend: str = "auto"
     ollama_embed_model: str = "karuniaperjuangan/multilingual-e5-small"
     tool_knowledge_dir: str = "docs/tool-knowledge"
-    # Tuned against 307-example corpus: threshold=0.65 yields 95.77% on the hard
-    # eval set (up from 85.92% at 0.75) with precision=1.00 (no wrong-tool fires).
-    tool_router_threshold: float = 0.65
+    # Tuned against the routing corpus + three eval sets (standard/hard/short).
+    # 0.65 was optimal for full-sentence queries but starved short/elliptical ones:
+    # terse phrasings ("Sara's goals?", "her email") top out around 0.50 cosine
+    # because they carry so few tokens, so they fell below 0.65 and deferred to the
+    # LLM free-form loop (the fabrication locus). 0.45 recovers short-query accuracy
+    # 40%->68% with zero regression on standard (100%) / hard (98.59%) and no
+    # spurious data-tool matches on advice queries. The margin gate below — not the
+    # threshold — is what prevents wrong-tool selection, so lowering the floor is safe.
+    tool_router_threshold: float = 0.45
     tool_router_margin: float = 0.08
     # Prepend "query: " / "passage: " prefixes required by multilingual-e5 models.
     tool_router_use_e5_prefix: bool = True

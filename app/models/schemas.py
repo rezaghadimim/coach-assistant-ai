@@ -229,6 +229,10 @@ class ToolReindexResponse(BaseModel):
 
     examples_indexed: int
     backend: str
+    # The backend actually in use after probing (may differ from the configured
+    # ``backend`` when "auto" degrades to token because Ollama/rerank is down).
+    effective_backend: str
+    degraded: bool
 
 
 # ------------------------------------------------------------------

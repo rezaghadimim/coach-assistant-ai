@@ -54,6 +54,25 @@ class IsDataRequestTests(unittest.TestCase):
         self.assertFalse(_is_data_request("share an analogy about fear of failure"))
         self.assertFalse(_is_data_request("how do I run a GROW session"))
 
+    def test_short_possessive_forms_match(self) -> None:
+        # Terse queries with no leading verb previously slipped past the gate and
+        # reached the free-form loop ungrounded (guardrail broadening for shorts).
+        self.assertTrue(_is_data_request("Sara's goals?"))
+        self.assertTrue(_is_data_request("Ali's notes"))
+        self.assertTrue(_is_data_request("Sara's email"))
+        self.assertTrue(_is_data_request("Nima's occupation"))
+
+    def test_short_pronoun_forms_match(self) -> None:
+        self.assertTrue(_is_data_request("her goals"))
+        self.assertTrue(_is_data_request("his decisions"))
+        self.assertTrue(_is_data_request("her age"))
+        self.assertTrue(_is_data_request("their progress"))
+
+    def test_pronoun_followed_by_non_data_word_excluded(self) -> None:
+        # The word after the pronoun must be a data noun; "her set goals" is advice.
+        self.assertFalse(_is_data_request("help her set goals this week"))
+        self.assertFalse(_is_data_request("my plan for the session"))
+
     def test_advice_phrasing_with_object_noun_overtriggers_by_design(self) -> None:
         # "...good first goal..." contains the object noun "goal", so the broad
         # _is_data_request fires — exactly as the original "what is" form did.
