@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -380,6 +381,10 @@ def _rerank_candidates(
 _token_backend = _TokenBackend()
 _embed_backend = _EmbeddingBackend()
 _index_built = False
+# Serializes the clear/populate/set-flag sequence in build_index so a
+# concurrent classify_tool (or a second builder) can never observe a
+# half-cleared/half-populated index once workers or a threadpool are used.
+_build_lock = threading.Lock()
 # Cached result of the embed-model probe for "auto" backend
 _embed_available: Optional[bool] = None
 # Cached result of the rerank-model probe
@@ -423,6 +428,18 @@ def build_index(*, force: bool = False) -> int:
 
     if _index_built and not force:
         return len(_token_backend)
+
+    with _build_lock:
+        # Re-check under the lock: another thread may have finished building
+        # while we waited for it.
+        if _index_built and not force:
+            return len(_token_backend)
+        return _build_index_locked()
+
+
+def _build_index_locked() -> int:
+    """Build the index. Caller must hold ``_build_lock``."""
+    global _index_built, _embed_available, _rerank_available
 
     _token_backend.clear()
     _embed_backend.clear()

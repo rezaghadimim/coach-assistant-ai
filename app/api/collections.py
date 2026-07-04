@@ -105,7 +105,15 @@ async def add_source(collection_id: str, request: SourceCreateRequest) -> Source
     )
 
     if request.source_id:
-        source_dir = Path(settings.rag_collections_dir) / collection["slug"] / "sources" / request.source_id
+        collections_root = Path(settings.rag_collections_dir).resolve()
+        source_dir = (
+            collections_root / collection["slug"] / "sources" / request.source_id
+        )
+        # Defense in depth: the schema already restricts source_id to a slug,
+        # but re-verify the resolved path stays inside the collections dir
+        # before any mkdir/write so a traversal can never escape it.
+        if not source_dir.resolve().is_relative_to(collections_root):
+            raise HTTPException(status_code=400, detail="Invalid source_id")
         source_dir.mkdir(parents=True, exist_ok=True)
         meta = {
             "title": request.title,

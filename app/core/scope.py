@@ -1,9 +1,19 @@
 """Coaching-only scope guardrail.
 
-Deterministic backstop that keeps the assistant focused on coaching,
+Best-effort fast pre-filter that keeps the assistant focused on coaching,
 personal growth, wellbeing, and client-management topics. Clearly off-topic
-requests are declined with a fixed redirect, while Open WebUI's auto-generated
-task prompts (follow-up suggestions, title, tags) are always allowed through.
+requests are declined with a fixed redirect (no LLM call), while Open WebUI's
+auto-generated task prompts (follow-up suggestions, title, tags) are always
+allowed through.
+
+Scope enforcement is NOT guaranteed by this module. The regex denylist below
+is intentionally conservative and English-only, so it is trivially bypassed by
+novel phrasings or other languages. It exists only to short-circuit the obvious
+cases cheaply. The AUTHORITATIVE scope control is the "Scope (STRICT)" section
+of the system prompt (``app/core/prompts.py``): any off-topic request that slips
+past this denylist still reaches the model, which is instructed to decline and
+redirect. Treat this file as an optimization, never as a security or compliance
+boundary.
 """
 
 from __future__ import annotations

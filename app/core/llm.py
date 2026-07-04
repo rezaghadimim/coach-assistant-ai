@@ -459,7 +459,7 @@ async def _generate_with_tools(
         try_direct_client_action_with_meta,
     )
     from app.core.llm_providers.types import ToolCall
-    from app.core.scope import is_openwebui_task, scope_guard
+    from app.core.scope import is_openwebui_task
     from app.core.tools import execute_tool_outcome, sanitize_write_confirmation
 
     last_user = _last_user_message(messages)

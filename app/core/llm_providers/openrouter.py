@@ -8,9 +8,8 @@ import time
 import uuid
 from typing import AsyncGenerator, Optional
 
-import httpx
-
 from app.core.config import settings
+from app.core.llm_providers.http import get_client, post_with_retry
 from app.core.llm_providers.types import CompletionResult, ToolCall
 from app.core.observability import log_step
 
@@ -76,14 +75,17 @@ class OpenRouterProvider:
         )
         t0 = time.monotonic()
         try:
-            async with httpx.AsyncClient(
-                base_url=settings.openrouter_base_url,
-                timeout=settings.openrouter_timeout,
+            client = get_client(
+                settings.openrouter_base_url, settings.openrouter_timeout
+            )
+            response = await post_with_retry(
+                client,
+                "/chat/completions",
+                json=payload,
                 headers=self._headers(),
-            ) as client:
-                response = await client.post("/chat/completions", json=payload)
-                response.raise_for_status()
-                data = response.json()
+            )
+            response.raise_for_status()
+            data = response.json()
         except Exception as exc:
             ms = int((time.monotonic() - t0) * 1000)
             log_step(logger, "llm.provider", "fail", level=logging.ERROR,
@@ -130,31 +132,29 @@ class OpenRouterProvider:
             stream=True,
             temperature=temperature if temperature is not None else settings.temperature_advice,
         )
-        async with httpx.AsyncClient(
-            base_url=settings.openrouter_base_url,
-            timeout=settings.openrouter_timeout,
-            headers=self._headers(),
-        ) as client:
-            async with client.stream(
-                "POST", "/chat/completions", json=payload
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    raw = line[len("data: "):]
-                    if raw.strip() == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(raw)
-                        if content := (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content")
-                        ):
-                            yield content
-                    except json.JSONDecodeError:
-                        continue
+        client = get_client(
+            settings.openrouter_base_url, settings.openrouter_timeout
+        )
+        async with client.stream(
+            "POST", "/chat/completions", json=payload, headers=self._headers()
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                raw = line[len("data: "):]
+                if raw.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(raw)
+                    if content := (
+                        chunk.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content")
+                    ):
+                        yield content
+                except json.JSONDecodeError:
+                    continue
 
     def tool_result_message(self, tool_call: ToolCall, result: str) -> dict:
         """Build the tool-result message in OpenAI format."""

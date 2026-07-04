@@ -272,7 +272,9 @@ class SourceCreateRequest(BaseModel):
     title: str = Field(..., min_length=1)
     source_type: str = Field(..., min_length=1)
     uri: str = ""
-    source_id: Optional[str] = None
+    # Used as an on-disk directory segment; constrain to a slug so it cannot
+    # contain path separators or traversal sequences (`..`, `/`, absolute paths).
+    source_id: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]+$")
 
 
 class SourceResponse(BaseModel):

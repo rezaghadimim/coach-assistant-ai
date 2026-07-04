@@ -91,6 +91,10 @@ async def lifespan(_app: FastAPI):
         with suppress(asyncio.CancelledError):
             await rerank_warm_task
 
+    # Close pooled provider HTTP clients (REL-04).
+    from app.core.llm_providers.http import close_all
+    await close_all()
+
 
 app = FastAPI(
     title=settings.app_name,

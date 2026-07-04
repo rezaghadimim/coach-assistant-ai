@@ -389,10 +389,9 @@ async def chat_completions(
             media_type="text/event-stream",
         )
 
-    if direct_reply is not None:
-        reply = direct_reply
-        path = "direct"
-    else:
+    async def _run_non_streaming() -> tuple[str, str]:
+        if direct_reply is not None:
+            return direct_reply, "direct"
         system_prompt, ideas = await asyncio.to_thread(
             build_prompt_and_ideas, user_id, last_user_message
         )
@@ -404,7 +403,27 @@ async def chat_completions(
         ideas_markdown = format_expert_ideas_markdown(ideas)
         if ideas_markdown:
             reply = f"{reply}\n\n{ideas_markdown}"
-        path = "llm"
+        return reply, "llm"
+
+    try:
+        reply, path = await asyncio.wait_for(
+            _run_non_streaming(), timeout=settings.request_timeout_s
+        )
+    except asyncio.TimeoutError:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_step(logger, "message", "error", level=logging.ERROR,
+                 endpoint="/v1/chat/completions", ms=ms, exc="TimeoutError")
+        reset_message()
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error": {
+                    "message": "Request timed out.",
+                    "type": "timeout",
+                    "code": "request_timeout",
+                }
+            },
+        )
     store.add_message(session_id, "assistant", reply)
     session_manager.schedule_update_summary(
         session_id, threshold=settings.summary_trigger_messages

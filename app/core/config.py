@@ -223,6 +223,12 @@ class Settings(BaseSettings):
     # arbitrary local file reads via caller-supplied URIs.
     media_root: str = "data/media"
 
+    # Overall wall-clock budget for a single chat request. The handler chains
+    # several LLM hops (router + formatter + main loop), each able to hit the
+    # provider timeout; this caps their sum so a request returns 504 instead of
+    # hanging for minutes.
+    request_timeout_s: float = 90.0
+
     # Memory
     memory_db_path: str = "data/coach_assistant.db"
     summary_trigger_messages: int = 20

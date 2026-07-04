@@ -488,7 +488,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [
                         {
@@ -536,7 +536,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [{"role": "user", "content": "set phone 9892323442"}],
                     "system",
@@ -587,7 +587,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [{"role": "user", "content": "Ali is 23 years old"}],
                     "system",
@@ -652,7 +652,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [
                         {
@@ -700,7 +700,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     history,
                     "system",
@@ -741,7 +741,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     history,
                     "system",
@@ -801,7 +801,7 @@ class GenerateWithToolsTests(unittest.IsolatedAsyncioTestCase):
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("app.core.llm_providers.ollama.httpx.AsyncClient", return_value=mock_client):
+            with patch("app.core.llm_providers.ollama.get_client", return_value=mock_client):
                 reply = await _generate_with_tools(
                     [{"role": "user", "content": "Use the registry tool."}],
                     "system",

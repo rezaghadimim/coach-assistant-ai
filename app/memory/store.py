@@ -21,6 +21,12 @@ class MemoryStore:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        # WAL lets readers run concurrently with a single writer (default
+        # rollback journal blocks both), and busy_timeout makes a contending
+        # writer wait up to 5s for the lock instead of failing immediately with
+        # "database is locked" under concurrent access.
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
     def _init_schema(self) -> None:

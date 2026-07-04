@@ -23,14 +23,14 @@
 
 | Phase | Items | Done |
 |-------|-------|------|
-| A. Security | SEC-01 … SEC-08 | 4 / 8 |
+| A. Security | SEC-01 … SEC-08 | 5 / 8 |
 | B. Production / deploy | OPS-01 … OPS-04 | 0 / 4 |
-| C. Reliability | REL-01 … REL-06 | 1 / 6 |
-| D. AI reliability | AI-01 … AI-03 | 1 / 3 |
+| C. Reliability | REL-01 … REL-06 | 6 / 6 |
+| D. AI reliability | AI-01 … AI-03 | 3 / 3 |
 | E. Code quality | CQ-01 … CQ-02 | 1 / 2 |
 | F. Testing / DevOps hardening | TEST-01 … TEST-04 | 1 / 4 |
 | G. Improvements | IMP-01 … IMP-03 | 0 / 3 |
-| **Total** | **30** | **8 / 30** |
+| **Total** | **30** | **16 / 30** |
 
 > Update the "Done" column as you check items off.
 
@@ -75,8 +75,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Add `debug: bool = False` to `Settings` in `app/core/config.py`. In `main.py`, when constructing `FastAPI(...)`, set `docs_url`, `redoc_url`, and `openapi_url` to `None` unless `settings.debug` is true (otherwise keep defaults). Do not change routes. Verify `GET /docs` returns 404 under default settings and 200 when `DEBUG=true`. Run the unittest suite and report.
 
-### - [ ] SEC-04 — Validate `source_id` to block path traversal
-- **Area:** Security · **Severity:** High · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] SEC-04 — Validate `source_id` to block path traversal
+- **Area:** Security · **Severity:** High · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** `source_id` is used as a filesystem path segment with no validation.
 - **Location:** `app/models/schemas.py:275`; `app/api/collections.py:108`.
 - **Action:** Change field to `source_id: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]+$")`. After building `source_dir`, assert `source_dir.resolve().is_relative_to(Path(settings.rag_collections_dir).resolve())` and raise 400 otherwise.
@@ -184,8 +184,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In `app/memory/session.py`, make `maybe_update_summary` idempotent per boundary: record the message count/id last summarized (a column on `sessions` or an in-memory marker) and only re-summarize when a new threshold boundary is crossed, not on every message past the threshold. Make the summarization run without blocking the HTTP response (background task) with its own timeout. Update callers in `app/api/chat.py` and `app/api/openai_compat.py` accordingly. Add a test sending 25 messages that asserts summarization runs once, not repeatedly. Run the unittest suite and report.
 
-### - [ ] REL-02 — Enable SQLite WAL + busy_timeout
-- **Area:** Backend / Reliability · **Severity:** Medium (High under load) · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] REL-02 — Enable SQLite WAL + busy_timeout
+- **Area:** Backend / Reliability · **Severity:** Medium (High under load) · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** Default rollback journal, no busy timeout → `database is locked` under concurrent writes.
 - **Location:** `app/memory/store.py:20-24` (`_connect`).
 - **Action:** In `_connect`, after connecting, run `PRAGMA journal_mode=WAL;` and `PRAGMA busy_timeout=5000;`.
@@ -194,8 +194,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In `app/memory/store.py` `_connect`, after creating the connection, execute `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` (in addition to the existing `foreign_keys` pragma). Add a test spawning several concurrent writers to the same DB asserting no `sqlite3.OperationalError`. Run the unittest suite and report.
 
-### - [ ] REL-03 — Guard shared mutable module state with a lock
-- **Area:** Reliability · **Severity:** Medium (High with workers) · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] REL-03 — Guard shared mutable module state with a lock
+- **Area:** Reliability · **Severity:** Medium (High with workers) · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** `SessionManager.get_or_create_session_id` and `tool_router.build_index` mutate globals without synchronization.
 - **Location:** `app/memory/session.py:22-40`; `app/core/tool_router.py:416-489`.
 - **Action:** Add a `threading.Lock` around the check-then-create in `get_or_create_session_id` and around `build_index`'s clear/populate/set-flag sequence.
@@ -205,8 +205,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Add thread-safety to two spots. In `app/memory/session.py`, wrap the check-then-create logic of `get_or_create_session_id` in a `threading.Lock` held by the `SessionManager`. In `app/core/tool_router.py`, wrap the clear/populate/`_index_built=True` sequence of `build_index` in a module-level `threading.Lock`. Add a concurrency test asserting a single session id is returned for concurrent same-user calls. Run the unittest suite and report.
 
-### - [ ] REL-04 — Reuse a pooled httpx client per provider
-- **Area:** Performance / Reliability · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] REL-04 — Reuse a pooled httpx client per provider
+- **Area:** Performance / Reliability · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** A new `httpx.AsyncClient` is created/torn down per LLM call.
 - **Location:** `app/core/llm_providers/ollama.py:70,122`; `app/core/llm_providers/openrouter.py` (complete/stream); `app/core/model_registry.py:111`.
 - **Action:** Create one lifespan- or module-scoped `AsyncClient` per base URL (with limits/keep-alive) and reuse it; close on shutdown in `main.py` `lifespan`.
@@ -215,8 +215,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Introduce a shared, reusable `httpx.AsyncClient` per base URL for the Ollama and OpenRouter providers (created once, with sensible connection limits and keep-alive) instead of `async with httpx.AsyncClient(...)` per call in `app/core/llm_providers/ollama.py` and `openrouter.py`. Close the client(s) on app shutdown in `main.py`'s `lifespan`. Keep behavior and timeouts identical. Run the unittest suite (mocks should still pass) and report.
 
-### - [ ] REL-05 — Add bounded retries with backoff for transient provider errors
-- **Area:** Reliability · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] REL-05 — Add bounded retries with backoff for transient provider errors
+- **Area:** Reliability · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** Any 5xx/429/connection reset fails the request immediately.
 - **Location:** `app/core/llm_providers/ollama.py:77`; `app/core/llm_providers/openrouter.py` (complete/stream).
 - **Action:** Wrap `complete` in a retry (2–3 attempts, exponential backoff + jitter) for `httpx.ConnectError`, `httpx.TimeoutException`, HTTP 429/5xx; do not retry other 4xx.
@@ -225,8 +225,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Add bounded retry with exponential backoff + jitter to the `complete` methods of `app/core/llm_providers/ollama.py` and `openrouter.py`: retry up to 3 times on `httpx.ConnectError`, `httpx.TimeoutException`, and HTTP 429/5xx; never retry other 4xx. Keep the final raise on exhaustion. Add tests: a provider that fails once with 503 then returns 200 succeeds; a persistent 400 is not retried. Run the unittest suite and report.
 
-### - [ ] REL-06 — Add a per-request overall deadline
-- **Area:** Reliability · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] REL-06 — Add a per-request overall deadline
+- **Area:** Reliability · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** Sequential LLM hops (router + formatter + main + summary) can each hit 120s with no ceiling.
 - **Location:** `app/api/chat.py:114`; `app/api/openai_compat.py:292`.
 - **Action:** Wrap the handler body in `asyncio.wait_for(...)` with a configurable total budget (`request_timeout_s`); return 504 on breach.
@@ -249,8 +249,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Refactor the write-confirmation flow so it does not depend on re-parsing rendered preview text. When a write preview is produced (`app/core/tools.py`), store the pending `(tool_name, arguments)` as structured state keyed to the session. On user confirmation, replay the stored structure instead of regexing the assistant message in `app/core/confirmations.py`'s `parse_pending_write`. Keep the existing preview/confirm UX identical. Add a test that changing a preview template's wording does not break confirm-to-save. Run the unittest suite and report.
 
-### - [ ] AI-02 — Test the tool-loop iteration-exhaustion and multi-call paths
-- **Area:** Testing / AI · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] AI-02 — Test the tool-loop iteration-exhaustion and multi-call paths
+- **Area:** Testing / AI · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** `_MAX_TOOL_ITERATIONS` exhaustion and ≥2 sequential tool calls are unexercised.
 - **Location:** `app/core/llm.py:519-633`; add tests near `tests/test_tools.py`.
 - **Action:** With a mocked provider scripted to return tool calls for 5 iterations, assert the "unable to complete" fallback (`app/core/llm.py:633`); with a 2-tool script, assert both execute and the final content returns.
@@ -259,8 +259,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Add unit tests for the agentic loop in `app/core/llm.py` `_generate_with_tools`. (1) A mocked provider that returns a tool call on every iteration for at least `_MAX_TOOL_ITERATIONS` steps → assert the final return is the "unable to complete the action within the allowed steps" message. (2) A mocked provider that returns two different tool calls in sequence then a final text answer → assert both tools execute and the text is returned. Use the existing mocking style in `tests/test_tools.py`. Run the unittest suite and report.
 
-### - [ ] AI-03 — Strengthen scope enforcement beyond the denylist *(Requires codebase verification)*
-- **Area:** AI · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] AI-03 — Strengthen scope enforcement beyond the denylist *(Requires codebase verification)*
+- **Area:** AI · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Findings:** `scope_guard` fires only in `try_direct_reply_with_meta` (`llm.py:353`) as a fast pre-filter. On a miss the request falls through to `_generate_with_tools`, whose system prompt carries an authoritative "Scope (STRICT)" section (`prompts.py:82-95`) instructing the model to decline off-topic requests. Nothing treats the denylist as a hard guarantee; `is_off_topic` in the retriever only abstains from retrieval. Conclusion: enforcement is already layered correctly — the LLM is the authoritative control, the regex is best-effort. Action taken: documented `scope.py` as best-effort (not a security boundary), removed a dead `scope_guard` import in `llm.py`, and locked the contract with `tests/test_scope_enforcement.py`.
 - **Problem:** `is_off_topic` is a static regex denylist (`app/core/scope.py:41`), trivially bypassed and English-only.
 - **Location:** `app/core/scope.py`.
 - **Action:** **Verify first** how much scope enforcement is relied upon. If it is a security/compliance control, make the LLM's own scope refusal the primary control (already in the system prompt) and treat the denylist as a fast pre-filter only; document it as best-effort.
@@ -284,7 +285,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
   > Introduce a typed result for tool execution: add a small dataclass/enum (e.g. `ToolOutcome` with `status` in {preview, ok, error} plus `text`) and have `execute_tool` in `app/core/tools.py` return it. Replace the emoji-prefix control-flow checks (`reply.startswith(("⏳","✅","❌"))`) in `app/core/llm.py`, `app/core/response_formatter.py`, and `app/api/openai_compat.py` with checks on the typed field. Keep the emoji only in user-facing display strings. Ensure `grep -rn 'startswith("⏳'` (and ✅/❌) finds no control-flow uses. Run the unittest suite and report.
 
 ### - [ ] CQ-02 — Consolidate the deterministic intent layer *(Requires codebase verification)*
-- **Area:** Code / Architecture · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+- **Area:** Code / Architecture · **Severity:** Medium · **Status:** in-progress (audit delivered; consolidation pending decision) · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Audit:** [CQ-02_INTENT_LAYER_AUDIT.md](./CQ-02_INTENT_LAYER_AUDIT.md) — baselines captured (token routing 100% standard / 98.59% hard). Key finding: regex detectors and the router are **complementary, not duplicative** — the router selects the tool but delegates *argument extraction* back to the regexes, so blanket removal would break the deterministic write path. Safe wins are narrower than the review implied: (A) collapse duplicate tool-*selection* regexes into the router, (D) centralize JSON-parsing helpers. Both gated on a new full-path eval harness. **No code changed** per the report-first mandate; awaiting go-ahead.
 - **Problem:** ~80 regexes and duplicated intent logic across `client_intents.py`, `scope.py`, `llm.py`, `confirmations.py` overlap with LLM tool-calling.
 - **Location:** `app/core/client_intents.py` (775 lines) and peers.
 - **Action:** **Verify first** which fast-path detectors materially improve accuracy (use the existing eval scripts). Retire detectors the router/LLM already handle at equal accuracy; centralize the rest behind one documented module.
@@ -387,3 +389,12 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 | 2026-07-05 | AI-01 | done — previews register structured `(tool, args)` in `app/core/confirmations.py`; `parse_pending_write` replays the registry (regex kept only as post-restart fallback); reworded-template regression test in `tests/test_tool_outcome.py` | Claude (Fable 5) |
 | 2026-07-05 | CQ-01 | done — `ToolOutcome(status,text)` from `execute_tool_outcome`; `ClientActionResult.status` threads it through fast paths; zero `startswith("⏳/✅/❌")` control flow left in `app/` (verified by grep); legacy `execute_tool` str API kept for tests | Claude (Fable 5) |
 | 2026-07-05 | TEST-04 | done — covered by `tests/test_authz.py` (per-router 401s, cross-tenant note 404 + no mutation, fail-closed and debug modes) | Claude (Fable 5) |
+| 2026-07-05 | SEC-04 | done — `source_id` constrained to `^[a-z0-9-]+$` at the schema (422 before any write) + defense-in-depth `is_relative_to` containment check in `add_source`; tests in `tests/test_source_path_traversal.py` | Claude (Opus 4.8) |
+| 2026-07-05 | REL-02 | done — `PRAGMA journal_mode=WAL` + `busy_timeout=5000` in `MemoryStore._connect`; 8-thread concurrent-writer test asserts no lock errors (`tests/test_concurrency.py`) | Claude (Opus 4.8) |
+| 2026-07-05 | REL-03 | done — `threading.Lock` around `SessionManager.get_or_create_session_id` and a module `_build_lock` (double-checked) around `tool_router.build_index`; 16-thread same-user test asserts one session (`tests/test_concurrency.py`) | Claude (Opus 4.8) |
+| 2026-07-05 | REL-04 | done — pooled `httpx.AsyncClient` per base URL in new `app/core/llm_providers/http.py`; Ollama + OpenRouter complete/stream reuse it; closed in `main.py` lifespan. Existing tests repointed from `ollama.httpx.AsyncClient` to `ollama.get_client` | Claude (Opus 4.8) |
+| 2026-07-05 | REL-05 | done — `post_with_retry` (3 attempts, exp backoff + jitter) on ConnectError/Timeout/429/5xx, never other 4xx; wraps both providers' `complete`; tests in `tests/test_provider_retry.py` | Claude (Opus 4.8) |
+| 2026-07-05 | REL-06 | done — `request_timeout_s=90.0`; `/api/chat` and `/v1/chat/completions` non-streaming wrap core work in `asyncio.wait_for` → 504 on breach; tests with a stalled provider in `tests/test_request_deadline.py` | Claude (Opus 4.8) |
+| 2026-07-05 | AI-02 | done — scripted fake-provider tests for `_generate_with_tools`: iteration exhaustion → "unable to complete" fallback, and two sequential tool calls + final text (`tests/test_tool_loop.py`) | Claude (Opus 4.8) |
+| 2026-07-05 | AI-03 | done — verified enforcement is already layered (regex pre-filter + authoritative system-prompt scope refusal); documented `scope.py` as best-effort, removed dead import, added `tests/test_scope_enforcement.py` | Claude (Opus 4.8) |
+| 2026-07-05 | CQ-02 | audit delivered (`docs/CQ-02_INTENT_LAYER_AUDIT.md`) with token-routing baselines; found regex/router layers complementary; scoped safe consolidation; no code changed pending decision | Claude (Opus 4.8) |

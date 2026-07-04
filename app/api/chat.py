@@ -157,14 +157,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
     msg_id = bind_message(request.user_id)
     t0 = time.monotonic()
     path = "unknown"
-    try:
-        if settings.log_step_payloads:
-            log_step(logger, "message", "received", endpoint="/api/chat",
-                     len=len(request.message), text=preview(request.message))
-        else:
-            log_step(logger, "message", "received", endpoint="/api/chat",
-                     len=len(request.message))
 
+    async def _run() -> tuple[str, list[ExpertIdea]]:
+        nonlocal path
         session_id = session_manager.get_or_create_session_id(request.user_id)
         store.add_message(session_id, "user", request.message)
         history = store.get_session_messages(session_id)
@@ -209,6 +204,27 @@ async def chat(request: ChatRequest) -> ChatResponse:
             session_id,
             threshold=settings.summary_trigger_messages,
         )
+        return reply, ideas
+
+    try:
+        if settings.log_step_payloads:
+            log_step(logger, "message", "received", endpoint="/api/chat",
+                     len=len(request.message), text=preview(request.message))
+        else:
+            log_step(logger, "message", "received", endpoint="/api/chat",
+                     len=len(request.message))
+
+        reply, ideas = await asyncio.wait_for(
+            _run(), timeout=settings.request_timeout_s
+        )
+    except asyncio.TimeoutError as exc:
+        ms = int((time.monotonic() - t0) * 1000)
+        log_step(logger, "message", "error", level=logging.ERROR,
+                 endpoint="/api/chat", ms=ms, exc="TimeoutError")
+        raise HTTPException(
+            status_code=504,
+            detail="Request timed out.",
+        ) from exc
     except HTTPException:
         ms = int((time.monotonic() - t0) * 1000)
         log_step(logger, "message", "error", level=logging.ERROR,

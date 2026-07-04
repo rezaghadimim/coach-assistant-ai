@@ -7,9 +7,8 @@ import logging
 import time
 from typing import Any, AsyncGenerator, Optional
 
-import httpx
-
 from app.core.config import settings
+from app.core.llm_providers.http import get_client, post_with_retry
 from app.core.llm_providers.types import CompletionResult, ToolCall
 from app.core.observability import log_step
 
@@ -67,13 +66,10 @@ class OllamaProvider:
         )
         t0 = time.monotonic()
         try:
-            async with httpx.AsyncClient(
-                base_url=settings.ollama_base_url,
-                timeout=settings.ollama_timeout,
-            ) as client:
-                response = await client.post("/api/chat", json=payload)
-                response.raise_for_status()
-                data = response.json()
+            client = get_client(settings.ollama_base_url, settings.ollama_timeout)
+            response = await post_with_retry(client, "/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
         except Exception as exc:
             ms = int((time.monotonic() - t0) * 1000)
             log_step(logger, "llm.provider", "fail", level=logging.ERROR,
@@ -119,17 +115,14 @@ class OllamaProvider:
             stream=True,
             temperature=temperature if temperature is not None else settings.temperature_advice,
         )
-        async with httpx.AsyncClient(
-            base_url=settings.ollama_base_url,
-            timeout=settings.ollama_timeout,
-        ) as client:
-            async with client.stream("POST", "/api/chat", json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line:
-                        chunk = json.loads(line)
-                        if content := chunk.get("message", {}).get("content"):
-                            yield content
+        client = get_client(settings.ollama_base_url, settings.ollama_timeout)
+        async with client.stream("POST", "/api/chat", json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line:
+                    chunk = json.loads(line)
+                    if content := chunk.get("message", {}).get("content"):
+                        yield content
 
     def tool_result_message(self, tool_call: ToolCall, result: str) -> dict:
         """Build the tool-result message in Ollama's expected format."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import Optional
 
 from app.core.config import settings
@@ -18,6 +19,9 @@ class SessionManager:
 
     def __init__(self, store: MemoryStore) -> None:
         self.store = store
+        # Serializes the check-then-create in get_or_create_session_id so two
+        # concurrent requests for the same user cannot each create a session.
+        self._lock = threading.Lock()
         self._active_sessions: dict[str, str] = {}
         # Highest threshold boundary already summarized per session. Keeps the
         # summarizer from re-running its LLM call on every message past the
@@ -40,17 +44,18 @@ class SessionManager:
     ) -> str:
         self.store.upsert_user(user_id, name=coach_name, is_coach=True)
 
-        if user_id in self._active_sessions:
-            return self._active_sessions[user_id]
+        with self._lock:
+            if user_id in self._active_sessions:
+                return self._active_sessions[user_id]
 
-        existing = self.store.get_latest_open_session(user_id)
-        if existing:
-            self._active_sessions[user_id] = existing
-            return existing
+            existing = self.store.get_latest_open_session(user_id)
+            if existing:
+                self._active_sessions[user_id] = existing
+                return existing
 
-        created = self.store.create_session(user_id)
-        self._active_sessions[user_id] = created
-        return created
+            created = self.store.create_session(user_id)
+            self._active_sessions[user_id] = created
+            return created
 
     async def start_new_session(
         self,
