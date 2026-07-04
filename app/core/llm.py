@@ -161,15 +161,16 @@ def _ground_data_reply(reply: str, last_user: str, store: "MemoryStore") -> str:
     from app.core.client_intents import detect_client_mention
     # Reuse the formatter's canonical PII-grounding check for consistent behavior.
     from app.core.response_formatter import _pii_preserved
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
     client_id = detect_client_mention(last_user, store)
     if client_id is None:
         return reply
 
-    record = execute_tool("get_client_full", {"client_id": client_id}, store)
-    if record.startswith("❌"):
+    outcome = execute_tool_outcome("get_client_full", {"client_id": client_id}, store)
+    if outcome.status == "error":
         return reply
+    record = outcome.text
 
     if _pii_preserved(record, reply) and _notes_grounded(record, reply):
         return reply
@@ -228,21 +229,22 @@ def _empty_reply_fallback(last_user: str, store: "MemoryStore") -> str:
 
 
 def _client_context_for_prompt(client_id: str, store: "MemoryStore") -> str:
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
-    record = execute_tool("get_client_full", {"client_id": client_id}, store)
-    if record.startswith("❌"):
+    outcome = execute_tool_outcome("get_client_full", {"client_id": client_id}, store)
+    if outcome.status == "error":
         return ""
     return (
         "## Referenced Client Record\n"
         "The coach is asking about this client. Use their profile and notes "
         "below to give specific, actionable coaching guidance.\n\n"
-        f"{record}"
+        f"{outcome.text}"
     )
 
 
-def _format_direct_lookup_reply(tool_result: str) -> str:
-    if tool_result.startswith("❌"):
+def _format_direct_lookup_reply(tool_result: str, status: str = "info") -> str:
+    """Wrap a successful read in the data-reply template; errors pass through."""
+    if status == "error":
         return tool_result
     return f"Here are the details on file:\n\n{tool_result}"
 
@@ -264,7 +266,7 @@ async def _try_llm_router_action(
         detect_profile_update,
     )
     from app.core.llm_router import classify_tool_llm
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
     match = await classify_tool_llm(message, provider=provider)
     if match is None:
@@ -273,30 +275,38 @@ async def _try_llm_router_action(
     tool = match.tool
 
     if tool == "list_clients":
-        result = execute_tool("list_clients", {}, store)
-        return DirectReplyMeta(_format_direct_lookup_reply(result), tool=tool)
+        outcome = execute_tool_outcome("list_clients", {}, store)
+        return DirectReplyMeta(
+            _format_direct_lookup_reply(outcome.text, outcome.status), tool=tool
+        )
 
     if tool == "create_client":
         profile_args = detect_profile_update(message, store)
         if profile_args:
-            return execute_tool("create_client", profile_args, store)
+            outcome = execute_tool_outcome("create_client", profile_args, store)
+            return DirectReplyMeta(outcome.text, tool=tool)
         create_args = detect_create_client(message)
         if create_args:
-            return execute_tool("create_client", create_args, store)
+            outcome = execute_tool_outcome("create_client", create_args, store)
+            return DirectReplyMeta(outcome.text, tool=tool)
         return None
 
     if tool in ("get_client", "get_client_full"):
         client_ref = detect_client_lookup(message)
         if client_ref:
-            result = execute_tool(tool, {"client_id": client_ref}, store)
+            outcome = execute_tool_outcome(tool, {"client_id": client_ref}, store)
             return DirectReplyMeta(
-                _format_direct_lookup_reply(result), tool=tool, hint=match.hint
+                _format_direct_lookup_reply(outcome.text, outcome.status),
+                tool=tool,
+                hint=match.hint,
             )
         client_id = detect_client_mention(message, store)
         if client_id:
-            result = execute_tool(tool, {"client_id": client_id}, store)
+            outcome = execute_tool_outcome(tool, {"client_id": client_id}, store)
             return DirectReplyMeta(
-                _format_direct_lookup_reply(result), tool=tool, hint=match.hint
+                _format_direct_lookup_reply(outcome.text, outcome.status),
+                tool=tool,
+                hint=match.hint,
             )
         return None
 
@@ -304,9 +314,13 @@ async def _try_llm_router_action(
         client_id = detect_client_mention(message, store)
         if client_id is None:
             return None
-        result = execute_tool("list_client_notes", {"client_id": client_id}, store)
+        outcome = execute_tool_outcome(
+            "list_client_notes", {"client_id": client_id}, store
+        )
         return DirectReplyMeta(
-            _format_direct_lookup_reply(result), tool=tool, hint=match.hint
+            _format_direct_lookup_reply(outcome.text, outcome.status),
+            tool=tool,
+            hint=match.hint,
         )
 
     # For write/delete tools, defer to the full LLM loop for param extraction
@@ -346,13 +360,9 @@ def try_direct_reply_with_meta(
         log_step(logger, "direct_reply", "miss", level=logging.DEBUG)
         return None
 
-    outcome = (
-        "preview"
-        if action.reply.startswith("⏳")
-        else ("ok" if action.reply.startswith("✅") else "hit")
-    )
+    outcome = action.status if action.status in ("preview", "ok") else "hit"
     log_step(logger, "direct_reply", outcome)
-    if action.reply.startswith(("⏳", "✅", "❌")):
+    if action.is_terminal:
         return DirectReplyMeta(action.reply, tool=action.tool, hint=action.hint)
     return DirectReplyMeta(
         _format_direct_lookup_reply(action.reply),
@@ -446,11 +456,11 @@ async def _generate_with_tools(
         looks_like_malformed_tool_call,
         parse_text_tool_call,
         profile_update_from_add_note,
-        try_direct_client_action,
+        try_direct_client_action_with_meta,
     )
     from app.core.llm_providers.types import ToolCall
     from app.core.scope import is_openwebui_task, scope_guard
-    from app.core.tools import execute_tool, sanitize_write_confirmation
+    from app.core.tools import execute_tool_outcome, sanitize_write_confirmation
 
     last_user = _last_user_message(messages)
     # Open WebUI task prompts (follow-up suggestions, title, tags) are passed
@@ -557,13 +567,15 @@ async def _generate_with_tools(
                         tool_name = "create_client"
                         params = profile_args
                 params = sanitize_write_confirmation(tool_name, params, last_user)
-                tool_result = execute_tool(tool_name, params, store)
+                tool_outcome = execute_tool_outcome(tool_name, params, store)
                 full_messages.append(result.assistant_message)
-                full_messages.append(provider.tool_result_message(tc, tool_result))
-                if tool_result.startswith(("⏳", "✅", "❌")):
+                full_messages.append(
+                    provider.tool_result_message(tc, tool_outcome.text)
+                )
+                if tool_outcome.is_terminal:
                     log_step(logger, "llm", "final", reason="write_outcome",
                              iteration=iteration + 1)
-                    return tool_result
+                    return tool_outcome.text
                 continue
 
             if looks_like_malformed_tool_call(raw_content):
@@ -584,11 +596,11 @@ async def _generate_with_tools(
             if not content.strip() and last_user:
                 log_step(logger, "llm", "fallback", level=logging.WARNING,
                          reason="empty_reply", iteration=iteration + 1)
-                fallback = try_direct_client_action(last_user, store, messages)
+                fallback = try_direct_client_action_with_meta(last_user, store, messages)
                 if fallback is not None:
-                    if fallback.startswith(("⏳", "✅", "❌")):
-                        return fallback
-                    return _format_direct_lookup_reply(fallback)
+                    if fallback.is_terminal:
+                        return fallback.reply
+                    return _format_direct_lookup_reply(fallback.reply)
                 return _empty_reply_fallback(last_user, store)
             content = _ground_data_reply(content, last_user, store)
             log_step(logger, "llm", "final", reason="content",
@@ -619,14 +631,14 @@ async def _generate_with_tools(
             log_step(logger, "llm.tool_call", "executing",
                      tool=tool_name, iteration=iteration + 1)
             arguments = sanitize_write_confirmation(tool_name, arguments, last_user)
-            tool_result = execute_tool(tool_name, arguments, store)
-            full_messages.append(provider.tool_result_message(tc, tool_result))
+            tool_outcome = execute_tool_outcome(tool_name, arguments, store)
+            full_messages.append(provider.tool_result_message(tc, tool_outcome.text))
             # Stop after write previews, outcomes, and errors so the coach
             # must reply yes/confirm before anything is saved or deleted.
-            if tool_result.startswith(("⏳", "✅", "❌")):
+            if tool_outcome.is_terminal:
                 log_step(logger, "llm", "final", reason="write_outcome",
                          iteration=iteration + 1)
-                return tool_result
+                return tool_outcome.text
 
     log_step(logger, "llm", "fail", level=logging.WARNING,
              reason="max_iterations_reached", max=_MAX_TOOL_ITERATIONS)

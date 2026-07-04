@@ -21,14 +21,31 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ClientActionResult:
-    """Fast-path client command result with optional routing metadata for formatting."""
+    """Fast-path client command result with optional routing metadata for formatting.
+
+    ``status`` mirrors :class:`app.core.tools.ToolOutcome.status`
+    (preview/ok/error/info); ``None`` for replies not produced by a tool.
+    """
 
     reply: str
     tool: str | None = None
     hint: str | None = None
+    status: str | None = None
 
-# Returned (with a recognized status prefix so the LLM layer surfaces it
-# verbatim) when the coach declines a pending write preview.
+    @property
+    def is_terminal(self) -> bool:
+        """True when the reply must be surfaced verbatim (no lookup formatting)."""
+        return self.status in ("preview", "ok", "error")
+
+
+def _from_outcome(
+    outcome, *, tool: str | None = None, hint: str | None = None
+) -> ClientActionResult:
+    """Wrap a ToolOutcome into a ClientActionResult carrying its status."""
+    return ClientActionResult(outcome.text, tool=tool, hint=hint, status=outcome.status)
+
+
+# Surfaced verbatim (status "ok") when the coach declines a pending write preview.
 _CANCEL_REPLY = (
     "✅ Okay, I won't save that — nothing has been changed. "
     "Let me know if you'd like to adjust the details or work on something else."
@@ -536,7 +553,7 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
     Returns ``None`` when the router is not confident or params cannot be extracted.
     """
     from app.core.tool_router import classify_tool
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
     match = classify_tool(message)
     if match is None:
@@ -549,8 +566,8 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
              level=logging.DEBUG)
 
     if tool == "list_clients":
-        return ClientActionResult(
-            execute_tool("list_clients", {}, store),
+        return _from_outcome(
+            execute_tool_outcome("list_clients", {}, store),
             tool=tool,
             hint=match.hint,
         )
@@ -559,15 +576,15 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
         # Router says profile update; delegate to existing param extractors.
         profile_args = detect_profile_update(message, store)
         if profile_args:
-            return ClientActionResult(
-                execute_tool("create_client", profile_args, store),
+            return _from_outcome(
+                execute_tool_outcome("create_client", profile_args, store),
                 tool=tool,
                 hint=match.hint,
             )
         create_args = detect_create_client(message)
         if create_args:
-            return ClientActionResult(
-                execute_tool("create_client", create_args, store),
+            return _from_outcome(
+                execute_tool_outcome("create_client", create_args, store),
                 tool=tool,
                 hint=match.hint,
             )
@@ -577,15 +594,15 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
     if tool in ("get_client", "get_client_full"):
         client_ref = detect_client_lookup(message)
         if client_ref:
-            return ClientActionResult(
-                execute_tool(tool, {"client_id": client_ref}, store),
+            return _from_outcome(
+                execute_tool_outcome(tool, {"client_id": client_ref}, store),
                 tool=tool,
                 hint=match.hint,
             )
         client_id = detect_client_mention(message, store)
         if client_id:
-            return ClientActionResult(
-                execute_tool(tool, {"client_id": client_id}, store),
+            return _from_outcome(
+                execute_tool_outcome(tool, {"client_id": client_id}, store),
                 tool=tool,
                 hint=match.hint,
             )
@@ -600,8 +617,8 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
         if hint.startswith("note_type:"):
             note_type = hint.split(":", 1)[1]
             params["note_type"] = note_type
-        return ClientActionResult(
-            execute_tool("list_client_notes", params, store),
+        return _from_outcome(
+            execute_tool_outcome("list_client_notes", params, store),
             tool=tool,
             hint=match.hint,
         )
@@ -609,8 +626,8 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
     if tool == "update_client_note":
         id_match = _UPDATE_NOTE_ID.search(message)
         if id_match:
-            return ClientActionResult(
-                execute_tool(
+            return _from_outcome(
+                execute_tool_outcome(
                     "update_client_note",
                     {"note_id": int(id_match.group(1)), "content": message},
                     store,
@@ -621,21 +638,23 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
     if tool == "delete_client_note":
         id_match = _DELETE_NOTE_ID.search(message)
         if id_match:
-            return ClientActionResult(
-                execute_tool("delete_client_note", {"note_id": int(id_match.group(1))}, store)
+            return _from_outcome(
+                execute_tool_outcome(
+                    "delete_client_note", {"note_id": int(id_match.group(1))}, store
+                )
             )
         return None
 
     if tool == "delete_client":
         client_ref = detect_client_lookup(message)
         if client_ref:
-            return ClientActionResult(
-                execute_tool("delete_client", {"client_id": client_ref}, store)
+            return _from_outcome(
+                execute_tool_outcome("delete_client", {"client_id": client_ref}, store)
             )
         client_id = detect_client_mention(message, store)
         if client_id:
-            return ClientActionResult(
-                execute_tool("delete_client", {"client_id": client_id}, store)
+            return _from_outcome(
+                execute_tool_outcome("delete_client", {"client_id": client_id}, store)
             )
         return None
 
@@ -647,17 +666,19 @@ def try_direct_client_query_with_meta(
     message: str, store: MemoryStore
 ) -> ClientActionResult | None:
     """Run a read-only client query directly, with routing metadata when known."""
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
     if detect_list_clients(message):
         log_step(logger, "intent.regex", "hit", pattern="list_clients")
-        return ClientActionResult(execute_tool("list_clients", {}, store), tool="list_clients")
+        return _from_outcome(
+            execute_tool_outcome("list_clients", {}, store), tool="list_clients"
+        )
 
     client_ref = detect_client_lookup(message)
     if client_ref:
         log_step(logger, "intent.regex", "hit", pattern="client_lookup", ref=client_ref)
-        return ClientActionResult(
-            execute_tool("get_client_full", {"client_id": client_ref}, store),
+        return _from_outcome(
+            execute_tool_outcome("get_client_full", {"client_id": client_ref}, store),
             tool="get_client_full",
         )
 
@@ -667,7 +688,7 @@ def try_direct_client_query_with_meta(
 def _kb_client_query_with_meta(message: str, store: MemoryStore) -> ClientActionResult | None:
     """Knowledge-base fallback for read-only client queries."""
     from app.core.intent_kb import classify
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
     match = classify(message)
     if match is None:
@@ -676,7 +697,7 @@ def _kb_client_query_with_meta(message: str, store: MemoryStore) -> ClientAction
 
     if not match.requires_client:
         log_step(logger, "intent_kb", "hit", intent=match.intent, score=match.score)
-        return ClientActionResult(execute_tool(match.tool, {}, store), tool=match.tool)
+        return _from_outcome(execute_tool_outcome(match.tool, {}, store), tool=match.tool)
 
     client_id = detect_client_mention(message, store)
     if client_id is None:
@@ -690,8 +711,8 @@ def _kb_client_query_with_meta(message: str, store: MemoryStore) -> ClientAction
     log_step(logger, "intent_kb", "hit", intent=match.intent,
              score=match.score, client=client_id, note_type=match.note_type)
     hint = f"note_type:{match.note_type}" if match.note_type else None
-    return ClientActionResult(
-        execute_tool(match.tool, params, store),
+    return _from_outcome(
+        execute_tool_outcome(match.tool, params, store),
         tool=match.tool,
         hint=hint,
     )
@@ -714,7 +735,7 @@ def try_direct_client_action_with_meta(
     messages: Optional[list[dict]] = None,
 ) -> ClientActionResult | None:
     """Run client read/write commands directly, with routing metadata when known."""
-    from app.core.tools import execute_tool
+    from app.core.tools import execute_tool_outcome
 
     history = messages or []
 
@@ -722,12 +743,12 @@ def try_direct_client_action_with_meta(
     if pending:
         if is_user_cancellation(message):
             log_step(logger, "confirmation", "cancel")
-            return ClientActionResult(_CANCEL_REPLY)
+            return ClientActionResult(_CANCEL_REPLY, status="ok")
         if is_user_confirmation(message):
             tool_name, params = pending
             log_step(logger, "confirmation", "confirm", tool=tool_name)
-            return ClientActionResult(
-                execute_tool(tool_name, {**params, "confirmed": True}, store)
+            return _from_outcome(
+                execute_tool_outcome(tool_name, {**params, "confirmed": True}, store)
             )
         log_step(logger, "confirmation", "none", level=logging.DEBUG)
 
@@ -735,13 +756,13 @@ def try_direct_client_action_with_meta(
     if profile_args:
         log_step(logger, "intent.regex", "hit", pattern="profile_update",
                  client=profile_args.get("client_id", "?"))
-        return ClientActionResult(execute_tool("create_client", profile_args, store))
+        return _from_outcome(execute_tool_outcome("create_client", profile_args, store))
 
     create_args = detect_create_client(message)
     if create_args:
         log_step(logger, "intent.regex", "hit", pattern="create_client",
                  client=create_args.get("client_id", "?"))
-        return ClientActionResult(execute_tool("create_client", create_args, store))
+        return _from_outcome(execute_tool_outcome("create_client", create_args, store))
 
     text_tool = parse_text_tool_call(message)
     if text_tool:
@@ -750,7 +771,7 @@ def try_direct_client_action_with_meta(
         tool_name, params = text_tool
         log_step(logger, "intent.regex", "hit", pattern="text_tool_call", tool=tool_name)
         params = sanitize_write_confirmation(tool_name, params, message)
-        return ClientActionResult(execute_tool(tool_name, params, store))
+        return _from_outcome(execute_tool_outcome(tool_name, params, store))
 
     log_step(logger, "intent.regex", "miss", level=logging.DEBUG)
 

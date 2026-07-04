@@ -229,7 +229,7 @@ async def _stream_text_reply(
         await asyncio.sleep(0)
 
     store.add_message(session_id, "assistant", reply)
-    await session_manager.maybe_update_summary(
+    session_manager.schedule_update_summary(
         session_id, threshold=settings.summary_trigger_messages
     )
 
@@ -406,7 +406,7 @@ async def chat_completions(
             reply = f"{reply}\n\n{ideas_markdown}"
         path = "llm"
     store.add_message(session_id, "assistant", reply)
-    await session_manager.maybe_update_summary(
+    session_manager.schedule_update_summary(
         session_id, threshold=settings.summary_trigger_messages
     )
 

@@ -6,6 +6,7 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from app.core.config import settings
 from app.knowledge.store import KnowledgeStore
@@ -13,6 +14,39 @@ from app.knowledge.store import KnowledgeStore
 logger = logging.getLogger(__name__)
 
 _TRANSCRIPT_NAMES = ("transcript.txt", "transcript.vtt", "transcript.srt")
+
+# Hosts yt-dlp may be pointed at. Caller-supplied URIs otherwise allow SSRF
+# (internal/metadata services) and option injection into the yt-dlp argv.
+_ALLOWED_VIDEO_HOSTS = frozenset(
+    {
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtu.be",
+    }
+)
+
+
+def _validate_video_url(uri: str) -> str:
+    """Return ``uri`` if it is an https URL on an allowed video host; raise otherwise."""
+    parsed = urlsplit(uri)
+    if parsed.scheme != "https":
+        raise ValueError(f"Rejected video URI (https required): {uri!r}")
+    if parsed.hostname not in _ALLOWED_VIDEO_HOSTS:
+        raise ValueError(f"Rejected video URI (host not allowed): {uri!r}")
+    return uri
+
+
+def _validate_local_media_path(uri: str) -> Path:
+    """Resolve ``uri`` and require containment under ``settings.media_root``."""
+    media_root = Path(settings.media_root).resolve()
+    media_path = Path(uri).resolve()
+    if not media_path.is_relative_to(media_root):
+        raise ValueError(
+            f"Rejected local media path outside media_root ({media_root}): {uri!r}"
+        )
+    return media_path
 
 
 def process_pending_sources(
@@ -65,7 +99,7 @@ def _process_local_media_source(
     source: dict,
     root: Path,
 ) -> None:
-    media_path = Path(source["uri"])
+    media_path = _validate_local_media_path(source["uri"])
     if not media_path.exists():
         raise FileNotFoundError(f"Media file not found: {media_path}")
 
@@ -87,6 +121,7 @@ def _process_youtube_source(
     url = source["uri"]
     if not url:
         raise ValueError("YouTube source is missing uri")
+    url = _validate_video_url(url)
 
     if shutil.which("yt-dlp") is None:
         raise RuntimeError("yt-dlp is not installed")
@@ -104,6 +139,7 @@ def _process_youtube_source(
             "en.*,en",
             "-o",
             str(source_dir / "video.%(ext)s"),
+            "--",  # end of options: the URL can never be parsed as a flag
             url,
         ],
         capture_output=True,
@@ -124,6 +160,7 @@ def _process_youtube_source(
                 "wav",
                 "-o",
                 str(audio_path),
+                "--",
                 url,
             ],
             check=True,

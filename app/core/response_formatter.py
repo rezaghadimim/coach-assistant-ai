@@ -370,12 +370,9 @@ async def format_data_reply(
     Returns:
         A human-friendly string, or *reply* unchanged when formatting fails.
     """
-    if not reply or reply.startswith(("❌", "⏳", "✅")):
-        log_step(logger, "formatter", "skip", level=logging.DEBUG,
-                 reason="write_error_or_empty")
-        return reply
-
-    if not reply.startswith(_DATA_REPLY_PREFIX):
+    # The data-reply prefix gate also excludes write previews/outcomes/errors:
+    # those are surfaced verbatim by the caller and never carry the prefix.
+    if not reply or not reply.startswith(_DATA_REPLY_PREFIX):
         log_step(logger, "formatter", "skip", level=logging.DEBUG,
                  reason="no_data_prefix")
         return reply

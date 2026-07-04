@@ -3,7 +3,46 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from typing import Any, Optional
+
+# Structured pending-write state (AI-01): when a write preview is produced,
+# its exact rendered text is mapped to the (tool_name, arguments) to replay on
+# confirmation. Confirm-to-save therefore does not depend on re-parsing the
+# preview wording; the legacy regex parse below remains only as a fallback for
+# previews rendered before a restart.
+_MAX_PENDING_WRITES = 32
+_pending_writes: "OrderedDict[str, tuple[str, dict[str, Any]]]" = OrderedDict()
+
+
+def register_pending_write(
+    preview_text: str, tool_name: str, arguments: dict[str, Any]
+) -> None:
+    """Record the structured write behind a rendered preview."""
+    if not preview_text:
+        return
+    args = {k: v for k, v in arguments.items() if k != "confirmed"}
+    _pending_writes[preview_text] = (tool_name, args)
+    _pending_writes.move_to_end(preview_text)
+    while len(_pending_writes) > _MAX_PENDING_WRITES:
+        _pending_writes.popitem(last=False)
+
+
+def clear_pending_writes() -> None:
+    """Drop all registered pending writes (tests / runtime reset)."""
+    _pending_writes.clear()
+
+
+def _lookup_pending_write(content: str) -> Optional[tuple[str, dict[str, Any]]]:
+    """Match an assistant message against registered previews.
+
+    Containment (not equality) because endpoints may append sections (e.g.
+    expert ideas) to the assistant reply after the preview text.
+    """
+    for preview_text in reversed(_pending_writes):
+        if preview_text in content:
+            return _pending_writes[preview_text]
+    return None
 
 _CONFIRM = re.compile(
     r"^(?:"
@@ -84,12 +123,23 @@ def is_user_cancellation(message: str) -> bool:
 
 
 def parse_pending_write(messages: list[dict]) -> Optional[tuple[str, dict[str, Any]]]:
-    """Read tool name and arguments from the most recent write preview."""
+    """Read tool name and arguments from the most recent write preview.
+
+    The structured registry is authoritative; the text-parsing branches below
+    only serve previews whose registration was lost (process restart).
+    """
     for message in reversed(messages):
         if message.get("role") != "assistant":
             continue
         content = message.get("content", "")
-        if not isinstance(content, str) or "pending confirmation" not in content:
+        if not isinstance(content, str):
+            continue
+
+        registered = _lookup_pending_write(content)
+        if registered is not None:
+            return registered
+
+        if "pending confirmation" not in content:
             continue
 
         if "Delete client" in content:

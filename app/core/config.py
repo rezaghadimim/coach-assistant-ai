@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     app_name: str = "Coach Assistant AI"
     app_version: str = "0.3.0"
 
+    # Security
+    # Shared API key required on every API route (header `X-API-Key` or
+    # `Authorization: Bearer <key>`). When empty, all requests are rejected
+    # unless `debug` is true — auth fails closed in production.
+    api_key: str = ""
+    # Development mode: permits running without an API key and (future) dev-only
+    # surfaces. Never enable in production.
+    debug: bool = False
+
     # Ollama (local provider)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
@@ -208,9 +217,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Knowledge ingest
+    # Only local media files under this directory may be ingested
+    # (`local_media` sources); paths outside it are rejected to prevent
+    # arbitrary local file reads via caller-supplied URIs.
+    media_root: str = "data/media"
+
     # Memory
     memory_db_path: str = "data/coach_assistant.db"
     summary_trigger_messages: int = 20
+    # Ceiling for the background session-summarization task (it runs off the
+    # request path; this bounds how long a hung LLM call can linger).
+    summary_timeout_s: float = 90.0
 
     # Logging
     log_level: str = "INFO"
@@ -281,6 +299,8 @@ class Settings(BaseSettings):
             self.rag_collections_dir = str(project_root / self.rag_collections_dir)
         if self.rag_index_cache_path and not Path(self.rag_index_cache_path).is_absolute():
             self.rag_index_cache_path = str(project_root / self.rag_index_cache_path)
+        if self.media_root and not Path(self.media_root).is_absolute():
+            self.media_root = str(project_root / self.media_root)
         if self.log_error_file and not Path(self.log_error_file).is_absolute():
             self.log_error_file = str(project_root / self.log_error_file)
         return self

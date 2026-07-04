@@ -104,6 +104,7 @@ async def update_client_note(
         request.content,
         title=request.title,
         note_type=request.note_type,
+        user_id=user_id,
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Note not found")
@@ -117,7 +118,7 @@ async def update_client_note(
 @router.delete("/clients/{user_id}/notes/{note_id}")
 async def delete_client_note(user_id: str, note_id: int):
     """Delete a client note."""
-    ok = store.delete_client_note(note_id)
+    ok = store.delete_client_note(note_id, user_id=user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Note not found")
     return {"detail": "Note deleted"}

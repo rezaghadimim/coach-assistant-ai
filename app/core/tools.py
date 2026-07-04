@@ -1,12 +1,36 @@
 """LLM tool definitions and executor for client management via chat."""
 
 import logging
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Literal, Optional
 
 from app.core.observability import log_step
 from app.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
+
+ToolStatus = Literal["preview", "ok", "error", "info"]
+
+
+@dataclass(frozen=True)
+class ToolOutcome:
+    """Typed result of a tool execution.
+
+    ``status`` drives control flow; the emoji prefixes in ``text`` are
+    user-facing display only:
+      - ``preview``: a write is pending coach confirmation (nothing saved)
+      - ``ok``: a confirmed write completed
+      - ``error``: the tool could not run (unknown client/note, exception)
+      - ``info``: a successful read (profile, notes, client list)
+    """
+
+    status: ToolStatus
+    text: str
+
+    @property
+    def is_terminal(self) -> bool:
+        """True when the agentic loop must stop and surface ``text`` verbatim."""
+        return self.status in ("preview", "ok", "error")
 
 _PROFILE_FIELDS = ("email", "phone", "age", "occupation", "background")
 _CONFIRM_CLIENT_HINT = (
@@ -448,8 +472,22 @@ TOOL_DEFINITIONS = [
 ]
 
 
-def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> str:
-    """Execute a tool call and return the result as a string."""
+def _preview(tool_name: str, replay_args: dict[str, Any], text: str) -> ToolOutcome:
+    """Build a preview outcome and register its structured pending write.
+
+    The registered ``(tool_name, replay_args)`` is what a later confirmation
+    replays — confirm-to-save never depends on re-parsing the rendered text.
+    """
+    from app.core.confirmations import register_pending_write
+
+    register_pending_write(text, tool_name, replay_args)
+    return ToolOutcome("preview", text)
+
+
+def execute_tool_outcome(
+    name: str, arguments: dict[str, Any], store: MemoryStore
+) -> ToolOutcome:
+    """Execute a tool call and return a typed :class:`ToolOutcome`."""
     name = _TOOL_ALIASES.get(name, name)
     confirmed = _is_confirmed(arguments)
     try:
@@ -472,17 +510,23 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             profile = {**existing_profile, **updates}
             if not confirmed:
                 log_step(logger, "tool.create_client", "preview", client=client_id)
-                return _format_create_client_preview(
-                    client_id,
-                    client_name,
-                    profile,
-                    is_update=existing is not None,
+                return _preview(
+                    "create_client",
+                    {"client_id": client_id, "name": client_name, **updates},
+                    _format_create_client_preview(
+                        client_id,
+                        client_name,
+                        profile,
+                        is_update=existing is not None,
+                    ),
                 )
             store.upsert_user(
                 client_id, name=client_name, profile=profile, is_coach=False
             )
             log_step(logger, "tool.create_client", "ok", client=client_id)
-            return f"✅ Client '{client_name}' (ID: {client_id}) saved successfully."
+            return ToolOutcome(
+                "ok", f"✅ Client '{client_name}' (ID: {client_id}) saved successfully."
+            )
 
         if name == "add_client_note":
             client_ref = arguments["client_id"]
@@ -490,9 +534,10 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if resolved_id is None:
                 log_step(logger, "tool.add_client_note", "error",
                          level=logging.WARNING, reason="client_not_found", ref=client_ref)
-                return (
+                return ToolOutcome(
+                    "error",
                     f"❌ Client '{client_ref}' not found. "
-                    "Please create the client first using create_client."
+                    "Please create the client first using create_client.",
                 )
             note_type = _normalize_note_type(arguments.get("note_type", "general"))
             title = arguments.get("title")
@@ -500,7 +545,18 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if not confirmed:
                 log_step(logger, "tool.add_client_note", "preview",
                          client=resolved_id, note_type=note_type)
-                return _format_add_note_preview(resolved_id, content, note_type, title)
+                replay_args: dict[str, Any] = {
+                    "client_id": resolved_id,
+                    "content": content,
+                    "note_type": note_type,
+                }
+                if title:
+                    replay_args["title"] = title
+                return _preview(
+                    "add_client_note",
+                    replay_args,
+                    _format_add_note_preview(resolved_id, content, note_type, title),
+                )
             note_id = store.add_client_note(
                 resolved_id,
                 content,
@@ -509,7 +565,9 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             )
             log_step(logger, "tool.add_client_note", "ok",
                      client=resolved_id, note_id=note_id, note_type=note_type)
-            return f"✅ Note (ID: {note_id}) added for client '{resolved_id}'."
+            return ToolOutcome(
+                "ok", f"✅ Note (ID: {note_id}) added for client '{resolved_id}'."
+            )
 
         if name in ("get_client", "get_client_full"):
             client_ref = arguments["client_id"]
@@ -517,7 +575,7 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if resolved_id is None:
                 log_step(logger, f"tool.{name}", "error",
                          level=logging.WARNING, reason="client_not_found", ref=client_ref)
-                return f"❌ Client '{client_ref}' not found."
+                return ToolOutcome("error", f"❌ Client '{client_ref}' not found.")
             user = store.get_user(resolved_id)
             assert user is not None
             sections = ["## Profile\n" + _format_client_profile(user)]
@@ -525,7 +583,7 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
                 notes = store.get_client_notes(resolved_id)
                 sections.append("## Notes\n" + _format_client_notes(notes))
             log_step(logger, f"tool.{name}", "ok", client=resolved_id)
-            return "\n\n".join(sections)
+            return ToolOutcome("info", "\n\n".join(sections))
 
         if name == "list_client_notes":
             client_ref = arguments["client_id"]
@@ -533,23 +591,25 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if resolved_id is None:
                 log_step(logger, "tool.list_client_notes", "error",
                          level=logging.WARNING, reason="client_not_found", ref=client_ref)
-                return f"❌ Client '{client_ref}' not found."
+                return ToolOutcome("error", f"❌ Client '{client_ref}' not found.")
             note_type = arguments.get("note_type")
             notes = store.get_client_notes(resolved_id, note_type=note_type)
             if not notes:
                 label = f"of type '{note_type}' " if note_type else ""
                 log_step(logger, "tool.list_client_notes", "ok",
                          client=resolved_id, count=0, note_type=note_type)
-                return f"No notes {label}found for client '{resolved_id}'."
+                return ToolOutcome(
+                    "info", f"No notes {label}found for client '{resolved_id}'."
+                )
             log_step(logger, "tool.list_client_notes", "ok",
                      client=resolved_id, count=len(notes), note_type=note_type)
-            return _format_client_notes(notes)
+            return ToolOutcome("info", _format_client_notes(notes))
 
         if name == "list_clients":
             users = store.list_users(clients_only=True)
             if not users:
                 log_step(logger, "tool.list_clients", "ok", count=0)
-                return "No clients registered yet."
+                return ToolOutcome("info", "No clients registered yet.")
             lines = []
             for u in users:
                 profile = u.get("profile") or {}
@@ -558,7 +618,7 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
                     f"- {u['name'] or u['user_id']} (ID: {u['user_id']}, Email: {email})"
                 )
             log_step(logger, "tool.list_clients", "ok", count=len(users))
-            return "Registered clients:\n" + "\n".join(lines)
+            return ToolOutcome("info", "Registered clients:\n" + "\n".join(lines))
 
         if name == "update_client_note":
             note_id = int(arguments["note_id"])
@@ -566,7 +626,7 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if note is None:
                 log_step(logger, "tool.update_client_note", "error",
                          level=logging.WARNING, reason="note_not_found", note_id=note_id)
-                return f"❌ Note '{note_id}' not found."
+                return ToolOutcome("error", f"❌ Note '{note_id}' not found.")
             content = arguments["content"]
             note_type = _normalize_note_type(
                 arguments.get("note_type") or note["note_type"]
@@ -574,12 +634,23 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             title = arguments["title"] if "title" in arguments else note.get("title")
             if not confirmed:
                 log_step(logger, "tool.update_client_note", "preview", note_id=note_id)
-                return _format_update_note_preview(
-                    note_id,
-                    note["user_id"],
-                    content,
-                    note_type,
-                    title,
+                update_args: dict[str, Any] = {
+                    "note_id": note_id,
+                    "content": content,
+                    "note_type": note_type,
+                }
+                if title:
+                    update_args["title"] = title
+                return _preview(
+                    "update_client_note",
+                    update_args,
+                    _format_update_note_preview(
+                        note_id,
+                        note["user_id"],
+                        content,
+                        note_type,
+                        title,
+                    ),
                 )
             ok = store.update_client_note(
                 note_id,
@@ -590,10 +661,13 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if not ok:
                 log_step(logger, "tool.update_client_note", "error",
                          level=logging.WARNING, reason="note_not_found", note_id=note_id)
-                return f"❌ Note '{note_id}' not found."
+                return ToolOutcome("error", f"❌ Note '{note_id}' not found.")
             log_step(logger, "tool.update_client_note", "ok",
                      note_id=note_id, client=note["user_id"])
-            return f"✅ Note (ID: {note_id}) updated for client '{note['user_id']}'."
+            return ToolOutcome(
+                "ok",
+                f"✅ Note (ID: {note_id}) updated for client '{note['user_id']}'.",
+            )
 
         if name == "delete_client_note":
             note_id = int(arguments["note_id"])
@@ -601,17 +675,24 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if note is None:
                 log_step(logger, "tool.delete_client_note", "error",
                          level=logging.WARNING, reason="note_not_found", note_id=note_id)
-                return f"❌ Note '{note_id}' not found."
+                return ToolOutcome("error", f"❌ Note '{note_id}' not found.")
             if not confirmed:
                 log_step(logger, "tool.delete_client_note", "preview", note_id=note_id)
-                return _format_delete_note_preview(note_id, note["user_id"], note)
+                return _preview(
+                    "delete_client_note",
+                    {"note_id": note_id},
+                    _format_delete_note_preview(note_id, note["user_id"], note),
+                )
             if not store.delete_client_note(note_id):
                 log_step(logger, "tool.delete_client_note", "error",
                          level=logging.WARNING, reason="note_not_found", note_id=note_id)
-                return f"❌ Note '{note_id}' not found."
+                return ToolOutcome("error", f"❌ Note '{note_id}' not found.")
             log_step(logger, "tool.delete_client_note", "ok",
                      note_id=note_id, client=note["user_id"])
-            return f"✅ Note (ID: {note_id}) deleted for client '{note['user_id']}'."
+            return ToolOutcome(
+                "ok",
+                f"✅ Note (ID: {note_id}) deleted for client '{note['user_id']}'.",
+            )
 
         if name == "delete_client":
             client_ref = arguments["client_id"]
@@ -619,27 +700,37 @@ def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> st
             if resolved_id is None:
                 log_step(logger, "tool.delete_client", "error",
                          level=logging.WARNING, reason="client_not_found", ref=client_ref)
-                return f"❌ Client '{client_ref}' not found."
+                return ToolOutcome("error", f"❌ Client '{client_ref}' not found.")
             user = store.get_user(resolved_id)
             assert user is not None
             note_count = len(store.get_client_notes(resolved_id))
             if not confirmed:
                 log_step(logger, "tool.delete_client", "preview", client=resolved_id)
-                return _format_delete_client_preview(user, note_count)
+                return _preview(
+                    "delete_client",
+                    {"client_id": resolved_id},
+                    _format_delete_client_preview(user, note_count),
+                )
             if not store.delete_user(resolved_id):
                 log_step(logger, "tool.delete_client", "error",
                          level=logging.WARNING, reason="client_not_found", ref=client_ref)
-                return f"❌ Client '{client_ref}' not found."
+                return ToolOutcome("error", f"❌ Client '{client_ref}' not found.")
             log_step(logger, "tool.delete_client", "ok",
                      client=resolved_id, notes_deleted=note_count)
-            return (
+            return ToolOutcome(
+                "ok",
                 f"✅ Client '{user.get('name') or resolved_id}' "
-                f"(ID: {resolved_id}) and {note_count} note(s) deleted."
+                f"(ID: {resolved_id}) and {note_count} note(s) deleted.",
             )
 
         log_step(logger, "tool.unknown", "error", level=logging.WARNING, name=name)
-        return f"❌ Unknown tool: {name}"
+        return ToolOutcome("error", f"❌ Unknown tool: {name}")
 
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %r failed with unexpected exception", name)
-        return f"❌ Tool '{name}' failed: {exc}"
+        return ToolOutcome("error", f"❌ Tool '{name}' failed: {exc}")
+
+
+def execute_tool(name: str, arguments: dict[str, Any], store: MemoryStore) -> str:
+    """Execute a tool call and return the result text (legacy string API)."""
+    return execute_tool_outcome(name, arguments, store).text

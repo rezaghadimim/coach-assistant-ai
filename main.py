@@ -5,9 +5,10 @@ import logging
 from contextlib import asynccontextmanager, suppress
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.api.auth import require_api_key
 from app.api.briefing import router as briefing_router
 from app.api.chat import router as chat_router
 from app.api.collections import router as collections_router
@@ -100,13 +101,15 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-app.include_router(chat_router, prefix="/api", tags=["chat"])
-app.include_router(ingest_router, prefix="/api", tags=["ingest"])
-app.include_router(collections_router, prefix="/api", tags=["collections"])
-app.include_router(briefing_router, prefix="/api", tags=["briefing"])
-app.include_router(users_router, prefix="/api", tags=["users"])
-app.include_router(tools_router, prefix="/api", tags=["tools"])
-app.include_router(openai_compat_router, tags=["openai-compat"])
+_auth = [Depends(require_api_key)]
+
+app.include_router(chat_router, prefix="/api", tags=["chat"], dependencies=_auth)
+app.include_router(ingest_router, prefix="/api", tags=["ingest"], dependencies=_auth)
+app.include_router(collections_router, prefix="/api", tags=["collections"], dependencies=_auth)
+app.include_router(briefing_router, prefix="/api", tags=["briefing"], dependencies=_auth)
+app.include_router(users_router, prefix="/api", tags=["users"], dependencies=_auth)
+app.include_router(tools_router, prefix="/api", tags=["tools"], dependencies=_auth)
+app.include_router(openai_compat_router, tags=["openai-compat"], dependencies=_auth)
 
 
 @app.get("/health/live")

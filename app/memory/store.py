@@ -336,8 +336,14 @@ class MemoryStore:
         *,
         title: Optional[str] = None,
         note_type: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> bool:
-        """Update an existing note. Returns True if the note was found."""
+        """Update an existing note. Returns True if the note was found.
+
+        When ``user_id`` is given, only a note owned by that client is
+        updated — callers holding a caller-supplied client id (the HTTP API)
+        must pass it so a note id cannot be mutated across clients.
+        """
         parts = ["content = ?", "updated_at = CURRENT_TIMESTAMP"]
         params: list[Any] = [content]
         if title is not None:
@@ -347,9 +353,13 @@ class MemoryStore:
             parts.append("note_type = ?")
             params.append(note_type)
         params.append(note_id)
+        where = "id = ?"
+        if user_id is not None:
+            where += " AND user_id = ?"
+            params.append(user_id)
         with self._connect() as conn:
             cursor = conn.execute(
-                f"UPDATE client_notes SET {', '.join(parts)} WHERE id = ?",
+                f"UPDATE client_notes SET {', '.join(parts)} WHERE {where}",
                 params,
             )
             return cursor.rowcount > 0
@@ -435,12 +445,19 @@ class MemoryStore:
             "updated_at": row["updated_at"],
         }
 
-    def delete_client_note(self, note_id: int) -> bool:
-        """Delete a note by id. Returns True if the note existed."""
+    def delete_client_note(self, note_id: int, *, user_id: Optional[str] = None) -> bool:
+        """Delete a note by id. Returns True if the note existed.
+
+        When ``user_id`` is given, only a note owned by that client is deleted
+        (see ``update_client_note``).
+        """
+        query = "DELETE FROM client_notes WHERE id = ?"
+        params: list[Any] = [note_id]
+        if user_id is not None:
+            query += " AND user_id = ?"
+            params.append(user_id)
         with self._connect() as conn:
-            cursor = conn.execute(
-                "DELETE FROM client_notes WHERE id = ?", (note_id,)
-            )
+            cursor = conn.execute(query, params)
             return cursor.rowcount > 0
 
     def delete_user(self, user_id: str) -> bool:
