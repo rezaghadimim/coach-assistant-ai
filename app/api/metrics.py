@@ -61,6 +61,7 @@ def render_metrics(availability: dict[str, bool]) -> str:
     tool_router, rerank) to a boolean, mirroring ``/health``'s per-layer
     checks.
     """
+    from app.core.config import settings
     from app.core.routing_observability import get_stats
 
     stats = get_stats()
@@ -70,6 +71,7 @@ def render_metrics(availability: dict[str, bool]) -> str:
 
     lines.append("# HELP app_info Static application info.")
     lines.append("# TYPE app_info gauge")
+    lines.append(f'app_info{{version="{settings.app_version}"}} 1')
 
     lines.append(
         "# HELP tool_router_deferrals_total Total tool-router classification calls deferred to the LLM."
