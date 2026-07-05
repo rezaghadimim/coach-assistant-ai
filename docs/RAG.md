@@ -137,6 +137,7 @@ Or via API:
 
 ```bash
 curl -X POST http://localhost:8000/api/ingest \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"chunk_size": 300, "chunk_overlap": 50}'
 ```

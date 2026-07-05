@@ -59,11 +59,18 @@ pip install -r requirements.txt
 ./scripts/setup_knowledge_private_repo.sh
 python3 scripts/ingest.py
 
-# 3. Run API
+# 3. Configure auth (production) or enable debug mode (local dev)
+#    All /api and /v1 endpoints require an API key and FAIL CLOSED without one.
+#    Either set API_KEY=<secret> in .env and send it as `X-API-Key: <secret>`
+#    (or `Authorization: Bearer <secret>`), or set DEBUG=true for local dev.
+#    See docs/OPERATIONS.md.
+
+# 4. Run API
 python3 main.py
 
-# 4. Run tests
-python3 -m pytest tests/
+# 5. Run tests (CI-safe, no Ollama needed)
+RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false \
+  python3 -m pytest tests/
 
 # 5. (Optional) Evaluate tool routing accuracy
 PYTHONPATH=. python3 scripts/eval_tool_routing.py --backend token --show-errors
@@ -100,8 +107,13 @@ tool disambiguation. Add examples here when you observe misrouting, then call
 # Run the full stack (API + Open WebUI) with Docker Compose
 docker compose up --build
 # Open WebUI → http://localhost:3000
-# API docs    → http://localhost:8000/docs
+# API docs    → http://localhost:8000/docs  (only when DEBUG=true; disabled in production)
 ```
+
+The image runs uvicorn as a non-root user with a single worker (by design —
+SQLite + in-process caches; scale with replicas), installs from the fully
+pinned `requirements.lock`, and ships a container `HEALTHCHECK` against
+`/health/live`. Details and rationale: [Operations guide](./docs/OPERATIONS.md).
 
 See [Open WebUI Integration](./docs/OPENWEBUI.md) for details.
 
@@ -122,8 +134,13 @@ model options, cost reference, and troubleshooting.
 
 ## API Endpoints
 
+All endpoints below except `/health*` and `/metrics` require the API key
+header (`X-API-Key` or `Authorization: Bearer`) unless `DEBUG=true`.
+
 ### Native API
 - `GET /health`
+- `GET /health/live` — cheap liveness probe (container healthcheck)
+- `GET /metrics` — Prometheus text (router deferrals, layer availability, latency)
 - `POST /api/chat`
 - `POST /api/ingest`
 - `GET /api/collections` — list per-person knowledge collections
@@ -151,6 +168,7 @@ model options, cost reference, and troubleshooting.
 ## Documentation
 
 - [Architecture](./docs/ARCHITECTURE.md)
+- [Operations & Production Deployment](./docs/OPERATIONS.md) — auth, Docker hardening, reliability, CI gates
 - [Implementation Plan](./docs/IMPLEMENTATION.md)
 - [Tool Routing](./docs/TOOL_ROUTING.md)
 - [RAG Pipeline](./docs/RAG.md)

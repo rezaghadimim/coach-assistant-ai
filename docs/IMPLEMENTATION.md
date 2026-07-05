@@ -113,10 +113,10 @@ See [`RAG.md`](RAG.md) for full configuration reference and [ADR-0008](adr/0008-
 export OPENROUTER_API_KEY=sk-or-v1-...
 
 # Add collection files under data/knowledge/collections/{slug}/...
-curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -d '{}'
+curl -X POST http://localhost:8000/api/ingest -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" -d '{}'
 
 # Optional media pipeline (requires ffmpeg, yt-dlp, pip install faster-whisper)
-curl -X POST http://localhost:8000/api/collections/process-jobs
+curl -X POST http://localhost:8000/api/collections/process-jobs -H "X-API-Key: $API_KEY"
 ```
 
 See [`RAG.md`](RAG.md) and [ADR-0011](adr/0011-collection-video-knowledge.md).
@@ -277,6 +277,7 @@ The current stack (lexicon → token → embedding → rerank → LLM fallback) 
   `POST /api/tools/classify` to inspect scores without restarting.
   ```bash
   curl -X POST http://localhost:8000/api/tools/classify \
+  -H "X-API-Key: $API_KEY" \
     -H "Content-Type: application/json" \
     -d '{"message": "your failing message here"}'
   ```

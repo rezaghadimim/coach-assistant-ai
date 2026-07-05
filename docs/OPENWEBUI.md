@@ -55,7 +55,7 @@ python3 scripts/ingest.py
 docker compose up --build
 
 # Open WebUI is now available at http://localhost:3000
-# Coach Assistant API docs at http://localhost:8000/docs
+# Coach Assistant API docs at http://localhost:8000/docs (DEBUG=true only; disabled in production)
 ```
 
 `docs/knowledge/starter/` holds bundled bootstrap docs (committed in this repo).
@@ -85,12 +85,22 @@ connection settings always come from environment variables, not stale UI saves.
 The default model is always the local one. Open WebUI remembers your last
 selection per chat, but new chats start on `coach-assistant-ai`.
 
+## Authentication
+
+`/v1/*` routes require the API key like every other router (see
+[OPERATIONS.md](OPERATIONS.md)): send `X-API-Key: <key>` or
+`Authorization: Bearer <key>`. Open WebUI passes its configured
+`OPENAI_API_KEY` value as a Bearer token, so it must match the backend's
+`API_KEY`. With `API_KEY` unset the backend fails closed — set `DEBUG=true`
+for a local, auth-free stack.
+
 ## Manual / curl Test
 
 ```bash
 # Non-streaming
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
   -H "X-User-Id: alice" \
   -d '{
     "model": "coach-assistant-ai",
@@ -100,6 +110,7 @@ curl http://localhost:8000/v1/chat/completions \
 # Streaming
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
   -H "X-User-Id: alice" \
   -d '{
     "model": "coach-assistant-ai",

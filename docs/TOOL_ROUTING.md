@@ -171,6 +171,7 @@ Set `TOOL_ROUTER_USE_E5_PREFIX=false` when using a model that does not expect th
 
 ```bash
 curl -X POST http://localhost:8000/api/tools/classify \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"message": "Ali is 23 years old"}'
 ```
@@ -198,7 +199,7 @@ Response:
 ### Rebuild the index
 
 ```bash
-curl -X POST http://localhost:8000/api/tools/reindex
+curl -X POST http://localhost:8000/api/tools/reindex -H "X-API-Key: $API_KEY"
 ```
 
 Call this after editing `routing.jsonl` without restarting the server.

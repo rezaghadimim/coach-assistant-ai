@@ -124,9 +124,19 @@ The local Ollama provider is always the default.
 - Benchmarks: `scripts/benchmark_response_formatter.py` (template vs LLM pass) and `scripts/benchmark_formatter_hints.py` (per-tool deterministic fast path: hit-rate, latency saved, PII)
 - See [ADR-0010](adr/0010-llm-response-formatter.md)
 
+### 13) Security & Operations Layer (2026-07 production-readiness hardening)
+
+- **API-key auth** (`app/api/auth.py`): every `/api` and `/v1` router requires `X-API-Key` or `Authorization: Bearer`; fails closed when `API_KEY` is unset unless `DEBUG=true`; `/health*` and `/metrics` stay open
+- **Interactive docs** (`/docs`, `/redoc`, `/openapi.json`) disabled unless `DEBUG=true`
+- **Prompt fencing** (`app/api/chat.py`): notes/summaries sanitized and wrapped in `<client_data>` / `<previous_session_summary>` fences with an untrusted-data preamble
+- **Ingest validation** (`app/knowledge/jobs.py`, `app/api/collections.py`): https + YouTube host allowlist, `--` before yt-dlp URLs, `MEDIA_ROOT` containment, `source_id` pattern + path-containment checks
+- **Reliability**: pooled per-base-URL `httpx.AsyncClient` with bounded retries (`app/core/llm_providers/http.py`), per-request deadline (`REQUEST_TIMEOUT_S` → 504), background off-request-path session summarization, SQLite WAL + busy_timeout, `PRAGMA user_version` migrations
+- **Metrics** (`app/api/metrics.py`): Prometheus text endpoint — router deferral counters, per-layer availability, request-duration summary
+- Full rationale and deployment guidance: [OPERATIONS.md](OPERATIONS.md)
+
 ## Data Flow
 
-1. Client sends `POST /api/chat {user_id, message}`
+1. Client sends `POST /api/chat {user_id, message}` (authenticated via `X-API-Key`)
 2. Backend gets/creates active session for `user_id`
 3. Backend runs **two-phase RAG** when enabled: phase 1 (situation) across framework + collection indices; phase 2 (expert solutions) across collections with diversity across people
 4. Backend composes system prompt with:
@@ -152,9 +162,11 @@ The local Ollama provider is always the default.
 ```text
 app/
 ├── api/
+│   ├── auth.py            ← API-key dependency (fail-closed)
 │   ├── chat.py
 │   ├── collections.py     ← per-person video knowledge API
 │   ├── ingest.py
+│   ├── metrics.py         ← Prometheus text endpoint
 │   ├── openai_compat.py
 │   ├── tools.py           ← tool routing API (classify + reindex)
 │   └── users.py
@@ -174,10 +186,12 @@ app/
 │   ├── tool_router.py     ← tool classification (token + embedding + rerank)
 │   ├── tools.py
 │   ├── client_intents.py
-│   ├── confirmations.py
+│   ├── confirmations.py   ← structured pending-write registry + confirm replay
 │   ├── intent_kb.py
+│   ├── tool_json.py       ← tolerant tool-call JSON parsing (shared)
 │   └── llm_providers/
 │       ├── types.py
+│       ├── http.py        ← pooled AsyncClient per base URL + retry
 │       ├── ollama.py
 │       └── openrouter.py
 ├── rag/

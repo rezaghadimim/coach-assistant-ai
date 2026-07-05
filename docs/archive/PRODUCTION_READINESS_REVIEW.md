@@ -1,3 +1,8 @@
+> **ARCHIVED 2026-07-05** — point-in-time audit (2026-07-04) that motivated the
+> production-readiness hardening; findings were addressed via the
+> [checklist](PRODUCTION_READINESS_CHECKLIST.md). Lasting guidance lives in
+> [docs/OPERATIONS.md](../OPERATIONS.md).
+
 # Production-Grade Engineering Review — Coach Assistant AI
 
 > **Type:** Point-in-time engineering audit (read-only; no code was changed).

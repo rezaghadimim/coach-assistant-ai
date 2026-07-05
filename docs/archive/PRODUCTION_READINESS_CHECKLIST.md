@@ -1,3 +1,7 @@
+> **ARCHIVED 2026-07-05** — historical implementation record; all 30 tasks completed.
+> Lasting decisions and operational guidance were extracted to
+> [docs/OPERATIONS.md](../OPERATIONS.md) and [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
+
 # Production Readiness — Execution Checklist
 
 > Derived from [PRODUCTION_READINESS_REVIEW.md](./PRODUCTION_READINESS_REVIEW.md).
@@ -288,7 +292,7 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 
 ### - [x] CQ-02 — Consolidate the deterministic intent layer *(Requires codebase verification)*
 - **Area:** Code / Architecture · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) / Claude (Sonnet 5) · **PR/commit:** working tree 2026-07-05 (uncommitted)
-- **Audit:** [CQ-02_INTENT_LAYER_AUDIT.md](./CQ-02_INTENT_LAYER_AUDIT.md) — baselines captured (token routing 100% standard / 98.59% hard). Key finding: regex detectors and the router are **complementary, not duplicative** — the router selects the tool but delegates *argument extraction* back to the regexes, so blanket removal would break the deterministic write path. Execution (§7 of the audit): built the `--path full` eval harness; **Category D** (centralize JSON-tolerant tool-call parsing into `app/core/tool_json.py`) applied as a behavior-neutral refactor, verified against the full suite (582 tests) and both eval paths (router-only and full-path) at parity; **Category A** (retire the regex tool-*selection* role) was investigated with two controlled experiments and **rejected** — it breaks `tests/test_client_intents.py::test_direct_query_returns_profile` because the router misses a possessive-apostrophe phrasing (`"Get me Ali's detail"`) that the regex catches, proving the selector role is not fully redundant. No change made there; documented as "verified, keep as-is."
+- **Audit:** [CQ-02_INTENT_LAYER_AUDIT.md](../CQ-02_INTENT_LAYER_AUDIT.md) — baselines captured (token routing 100% standard / 98.59% hard). Key finding: regex detectors and the router are **complementary, not duplicative** — the router selects the tool but delegates *argument extraction* back to the regexes, so blanket removal would break the deterministic write path. Execution (§7 of the audit): built the `--path full` eval harness; **Category D** (centralize JSON-tolerant tool-call parsing into `app/core/tool_json.py`) applied as a behavior-neutral refactor, verified against the full suite (582 tests) and both eval paths (router-only and full-path) at parity; **Category A** (retire the regex tool-*selection* role) was investigated with two controlled experiments and **rejected** — it breaks `tests/test_client_intents.py::test_direct_query_returns_profile` because the router misses a possessive-apostrophe phrasing (`"Get me Ali's detail"`) that the regex catches, proving the selector role is not fully redundant. No change made there; documented as "verified, keep as-is."
 - **Problem:** ~80 regexes and duplicated intent logic across `client_intents.py`, `scope.py`, `llm.py`, `confirmations.py` overlap with LLM tool-calling.
 - **Location:** `app/core/client_intents.py` (775 lines) and peers.
 - **Action:** **Verify first** which fast-path detectors materially improve accuracy (use the existing eval scripts). Retire detectors the router/LLM already handle at equal accuracy; centralize the rest behind one documented module.
