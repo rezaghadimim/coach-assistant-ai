@@ -21,6 +21,7 @@ from app.core.config import settings
 
 if TYPE_CHECKING:
     from app.core.llm_providers.ollama import OllamaProvider
+    from app.core.llm_providers.openai_compat import OpenAIProvider
     from app.core.llm_providers.openrouter import OpenRouterProvider
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,17 @@ _PROBE_TIMEOUT_SECONDS = 5.0
 _probe_cache: tuple[bool, float] = (False, 0.0)
 
 
-def _get_ollama_provider() -> "OllamaProvider":
+def get_local_provider() -> Union["OllamaProvider", "OpenAIProvider"]:
+    """Return the local/default chat provider.
+
+    Uses the OpenAI-compatible provider when ``openai_model`` is configured
+    (e.g. a self-hosted vLLM/TGI server), else falls back to Ollama.
+    """
+    if settings.openai_model:
+        from app.core.llm_providers.openai_compat import OpenAIProvider
+
+        return OpenAIProvider()
+
     from app.core.llm_providers.ollama import OllamaProvider
 
     return OllamaProvider()
@@ -71,18 +82,19 @@ def _get_ollama_provider() -> "OllamaProvider":
 
 def resolve_provider(
     model_id: Optional[str],
-) -> Union["OllamaProvider", "OpenRouterProvider"]:
+) -> Union["OllamaProvider", "OpenAIProvider", "OpenRouterProvider"]:
     """Return the provider for the given virtual model ID.
 
-    Unknown or None model IDs fall back to the local Ollama provider.
-    The cloud provider is returned only when the API key is configured;
-    no live probe is done here (that is done by list_available_models).
+    Unknown or None model IDs fall back to the local provider (see
+    ``get_local_provider``). The cloud provider is returned only when the
+    API key is configured; no live probe is done here (that is done by
+    list_available_models).
     """
     if is_cloud_model_id(model_id) and settings.openrouter_api_key:
         from app.core.llm_providers.openrouter import OpenRouterProvider
 
         return OpenRouterProvider(model=openrouter_models()[model_id])
-    return _get_ollama_provider()
+    return get_local_provider()
 
 
 async def probe_openrouter() -> bool:
@@ -135,13 +147,14 @@ async def list_available_models() -> list[dict]:
     """
     created_ts = int(time.time())
 
+    local_model_name = settings.openai_model or settings.ollama_model
     models = [
         {
             "id": LOCAL_MODEL_ID,
             "object": "model",
             "created": created_ts,
             "owned_by": "coach-assistant-ai",
-            "name": f"Coach Assistant AI (Local · {settings.ollama_model})",
+            "name": f"Coach Assistant AI (Local · {local_model_name})",
         }
     ]
 

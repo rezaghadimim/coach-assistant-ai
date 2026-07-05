@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException
 # Reuse the same MemoryStore instance as the chat module.
 from app.api.chat import store as _store
 from app.core.config import settings
-from app.core.llm_providers.ollama import OllamaProvider
+from app.core.model_registry import get_local_provider
 from app.core.prompts import BRIEFING_PROMPT
 from app.memory.store import MemoryStore
 from app.models.schemas import BriefingRequest, CoachBriefing
@@ -71,7 +71,7 @@ async def generate_briefing(request: BriefingRequest) -> CoachBriefing:
     ]
 
     try:
-        provider = OllamaProvider()
+        provider = get_local_provider()
         result = await provider.complete(llm_messages)
         raw = result.content.strip()
 

@@ -444,10 +444,10 @@ async def _generate_with_tools(
     skip_direct_reply: bool = False,
 ) -> str:
     """Agentic tool-calling loop: execute tools until the LLM gives a final reply."""
-    from app.core.llm_providers.ollama import OllamaProvider
+    from app.core.model_registry import get_local_provider
 
     if provider is None:
-        provider = OllamaProvider()
+        provider = get_local_provider()
 
     from app.core.client_intents import (
         NOTE_WRITE_MISFIRE_GUIDANCE,

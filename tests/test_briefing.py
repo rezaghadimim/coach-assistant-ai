@@ -37,11 +37,11 @@ class TestBriefingEndpoint(unittest.TestCase):
         return AsyncMock(return_value=fake_result)
 
     def test_briefing_returns_valid_schema(self) -> None:
+        instance = MagicMock()
+        instance.complete = self._mock_llm(json.dumps(VALID_BRIEFING))
         with patch(
-            "app.api.briefing.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = self._mock_llm(json.dumps(VALID_BRIEFING))
+            "app.api.briefing.get_local_provider", return_value=instance,
+        ):
             resp = self.client.post(
                 "/api/briefing",
                 json={"user_id": "coach-1", "question": "My client is stuck with procrastination."},
@@ -57,11 +57,11 @@ class TestBriefingEndpoint(unittest.TestCase):
 
     def test_briefing_strips_markdown_code_fences(self) -> None:
         wrapped = f"```json\n{json.dumps(VALID_BRIEFING)}\n```"
+        instance = MagicMock()
+        instance.complete = self._mock_llm(wrapped)
         with patch(
-            "app.api.briefing.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = self._mock_llm(wrapped)
+            "app.api.briefing.get_local_provider", return_value=instance,
+        ):
             resp = self.client.post(
                 "/api/briefing",
                 json={"user_id": "coach-1", "question": "Client is anxious about a presentation."},
@@ -71,11 +71,11 @@ class TestBriefingEndpoint(unittest.TestCase):
         self.assertEqual(resp.json()["recommended_framework"], "CBT-informed")
 
     def test_briefing_returns_502_on_invalid_json(self) -> None:
+        instance = MagicMock()
+        instance.complete = self._mock_llm("This is not JSON at all.")
         with patch(
-            "app.api.briefing.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = self._mock_llm("This is not JSON at all.")
+            "app.api.briefing.get_local_provider", return_value=instance,
+        ):
             resp = self.client.post(
                 "/api/briefing",
                 json={"user_id": "coach-1", "question": "Something."},
@@ -84,11 +84,11 @@ class TestBriefingEndpoint(unittest.TestCase):
         self.assertEqual(resp.status_code, 502)
 
     def test_briefing_returns_502_on_llm_error(self) -> None:
+        instance = MagicMock()
+        instance.complete = AsyncMock(side_effect=ConnectionError("Ollama down"))
         with patch(
-            "app.api.briefing.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = AsyncMock(side_effect=ConnectionError("Ollama down"))
+            "app.api.briefing.get_local_provider", return_value=instance,
+        ):
             resp = self.client.post(
                 "/api/briefing",
                 json={"user_id": "coach-1", "question": "Something."},
@@ -112,9 +112,11 @@ class TestBriefingEndpoint(unittest.TestCase):
 
     def test_briefing_with_client_id_includes_notes_context(self) -> None:
         """When client_id is given, client notes are loaded for context."""
+        instance = MagicMock()
+        instance.complete = self._mock_llm(json.dumps(VALID_BRIEFING))
         with (
             patch("app.api.briefing._store") as mock_store,
-            patch("app.api.briefing.OllamaProvider") as MockProvider,
+            patch("app.api.briefing.get_local_provider", return_value=instance),
         ):
             mock_store.get_client_notes.return_value = [
                 {
@@ -124,8 +126,6 @@ class TestBriefingEndpoint(unittest.TestCase):
                     "updated_at": "2026-01-01",
                 }
             ]
-            instance = MockProvider.return_value
-            instance.complete = self._mock_llm(json.dumps(VALID_BRIEFING))
             resp = self.client.post(
                 "/api/briefing",
                 json={

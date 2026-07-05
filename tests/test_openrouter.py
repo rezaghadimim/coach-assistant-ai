@@ -196,21 +196,38 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
         from app.core.model_registry import resolve_provider
         from app.core.llm_providers.ollama import OllamaProvider
 
-        provider = resolve_provider("coach-assistant-ai")
+        with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openai_model = ""
+            mock_settings.openrouter_api_key = ""
+            provider = resolve_provider("coach-assistant-ai")
         self.assertIsInstance(provider, OllamaProvider)
 
     async def test_resolve_provider_none_returns_ollama(self) -> None:
         from app.core.model_registry import resolve_provider
         from app.core.llm_providers.ollama import OllamaProvider
 
-        provider = resolve_provider(None)
+        with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openai_model = ""
+            mock_settings.openrouter_api_key = ""
+            provider = resolve_provider(None)
         self.assertIsInstance(provider, OllamaProvider)
+
+    async def test_resolve_provider_local_returns_openai_when_configured(self) -> None:
+        from app.core.model_registry import resolve_provider
+        from app.core.llm_providers.openai_compat import OpenAIProvider
+
+        with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openai_model = "Qwen3.5-397B-A17B-G1"
+            mock_settings.openrouter_api_key = ""
+            provider = resolve_provider(None)
+        self.assertIsInstance(provider, OpenAIProvider)
 
     async def test_resolve_provider_cloud_with_key_returns_openrouter(self) -> None:
         from app.core.model_registry import resolve_provider
         from app.core.llm_providers.openrouter import OpenRouterProvider
 
         with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openai_model = ""
             mock_settings.openrouter_api_key = "sk-or-test"
             mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             provider = resolve_provider("coach-assistant-ai-cloud-gpt-oss-20b")
@@ -224,6 +241,7 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
         from app.core.llm_providers.ollama import OllamaProvider
 
         with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openai_model = ""
             mock_settings.openrouter_api_key = ""
             provider = resolve_provider("coach-assistant-ai-cloud")
 

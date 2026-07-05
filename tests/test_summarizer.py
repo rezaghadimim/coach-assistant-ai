@@ -21,11 +21,11 @@ class TestSummarizeSession(unittest.TestCase):
         fake_result = MagicMock()
         fake_result.content = "## Summary\n- Topics: career change\n- Action: update CV"
 
+        instance = MagicMock()
+        instance.complete = AsyncMock(return_value=fake_result)
         with patch(
-            "app.memory.summarizer.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = AsyncMock(return_value=fake_result)
+            "app.memory.summarizer.get_local_provider", return_value=instance,
+        ):
             messages = [
                 {"role": "user", "content": "I want to change careers"},
                 {"role": "assistant", "content": "What would success look like?"},
@@ -38,11 +38,11 @@ class TestSummarizeSession(unittest.TestCase):
     def test_heuristic_fallback_on_llm_error(self) -> None:
         from app.memory.summarizer import summarize_session
 
+        instance = MagicMock()
+        instance.complete = AsyncMock(side_effect=ConnectionError("Ollama down"))
         with patch(
-            "app.memory.summarizer.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = AsyncMock(side_effect=ConnectionError("Ollama down"))
+            "app.memory.summarizer.get_local_provider", return_value=instance,
+        ):
             messages = [
                 {"role": "user", "content": "Feeling overwhelmed with work"},
                 {"role": "assistant", "content": "Let's explore what's driving that."},
@@ -59,11 +59,11 @@ class TestSummarizeSession(unittest.TestCase):
         fake_result = MagicMock()
         fake_result.content = "   "  # blank
 
+        instance = MagicMock()
+        instance.complete = AsyncMock(return_value=fake_result)
         with patch(
-            "app.memory.summarizer.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = AsyncMock(return_value=fake_result)
+            "app.memory.summarizer.get_local_provider", return_value=instance,
+        ):
             messages = [
                 {"role": "user", "content": "I set a new goal"},
                 {"role": "assistant", "content": "Great, let's make it SMART."},
@@ -115,11 +115,11 @@ class TestSessionManagerAsync(unittest.TestCase):
         fake_result = MagicMock()
         fake_result.content = "## Summary\n- Topics: career"
 
+        instance = MagicMock()
+        instance.complete = AsyncMock(return_value=fake_result)
         with patch(
-            "app.memory.summarizer.OllamaProvider",
-        ) as MockProvider:
-            instance = MockProvider.return_value
-            instance.complete = AsyncMock(return_value=fake_result)
+            "app.memory.summarizer.get_local_provider", return_value=instance,
+        ):
             sm = SessionManager(store)
             self._run(sm.maybe_update_summary("sess-1", threshold=20))
 

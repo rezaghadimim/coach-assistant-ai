@@ -44,13 +44,19 @@ class Settings(BaseSettings):
     # The 5-minute default forces a full model reload after short idle periods.
     ollama_keep_alive: str = "30m"
 
-    # OpenAI (optional — direct embeddings when rag_*_embed_provider=openai).
+    # OpenAI (optional — direct embeddings when rag_*_embed_provider=openai,
+    # and/or chat completions when openai_model is set).
     # Override openai_base_url to point at a self-hosted OpenAI-compatible
-    # embeddings server (e.g. TEI's /v1/embeddings) on its own machine/port
-    # instead of api.openai.com — OPENAI_API_KEY is only required for the
-    # real OpenAI host.
+    # server (e.g. TEI's /v1/embeddings, or a vLLM /v1/chat/completions
+    # server) on its own machine/port instead of api.openai.com —
+    # OPENAI_API_KEY is only required for the real OpenAI host.
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
+    # Chat model name. When set, resolve_provider() uses OpenAIProvider
+    # (OpenAI-compatible /v1/chat/completions) as the local/default LLM
+    # instead of OllamaProvider. Leave empty to keep using Ollama.
+    openai_model: str = ""
+    openai_timeout: float = 120.0
 
     # OpenRouter (optional cloud provider — leave api_key empty to disable)
     openrouter_api_key: str = ""

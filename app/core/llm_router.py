@@ -166,8 +166,8 @@ async def classify_tool_llm(
     from app.core.tool_router import ToolMatch
 
     if provider is None:
-        from app.core.llm_providers.ollama import OllamaProvider
-        provider = OllamaProvider()
+        from app.core.model_registry import get_local_provider
+        provider = get_local_provider()
 
     messages = [{"role": "user", "content": message}]
     full_messages = [{"role": "system", "content": _SYSTEM_PROMPT}] + messages

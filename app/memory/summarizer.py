@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from app.core.llm_providers.ollama import OllamaProvider
+from app.core.model_registry import get_local_provider
 from app.core.observability import log_step
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ async def summarize_session(messages: list[dict[str, str]]) -> str:
     ]
 
     try:
-        provider = OllamaProvider()
+        provider = get_local_provider()
         result = await provider.complete(llm_messages)
         summary = result.content.strip()
         if summary:
