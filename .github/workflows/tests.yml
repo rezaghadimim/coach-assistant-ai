@@ -34,6 +34,13 @@ jobs:
         # conftest.py's debug-mode setup is a pytest fixture convention — it is
         # never loaded by `unittest discover`, so pytest (which understands
         # unittest.TestCase tests natively) is the correct runner here.
+        # Env pins match the CI-safe invocation in docs/OPERATIONS.md: token
+        # backends avoid auto-probe nondeterminism (no Ollama in CI) and the
+        # disabled formatter avoids reranker model downloads.
+        env:
+          RAG_BACKEND: token
+          TOOL_ROUTER_BACKEND: token
+          RESPONSE_FORMATTER_ENABLED: "false"
         run: |
           coverage run -m pytest tests/ -v
           coverage report --fail-under=75
