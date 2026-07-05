@@ -237,6 +237,37 @@ class TestEmbeddingCache(unittest.TestCase):
             self.assertEqual(set(cache.keys()), {cache_key})
             self.assertEqual(cache[cache_key], [0.9, 0.1, 0.0])
 
+    def test_per_corpus_caches_do_not_clobber_each_other(self) -> None:
+        """Indexing framework then collection (both reset=True) with one configured
+        cache path, then re-indexing framework, must hit the cache — no re-embed."""
+        from dataclasses import replace
+
+        framework_chunk = _make_chunk("fw1", "GROW coaching model")
+        collection_chunk = replace(
+            _make_chunk("col1", "expert transcript about goals"),
+            corpus="collection",
+            collection_id="col-a",
+        )
+
+        def fake_passages(texts):
+            return [[0.1, 0.2, 0.3] for _ in texts]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = str(Path(tmp) / "cache.json")
+            with _mock_embed_provider(passages_fn=fake_passages):
+                index_chunks([framework_chunk], reset=True, embed=True,
+                             cache_path=cache_path, corpus="framework")
+                index_chunks([collection_chunk], reset=True, embed=True,
+                             cache_path=cache_path, corpus="collection")
+
+            # Re-index framework (restart scenario): its cache must be intact.
+            provider = MagicMock()
+            with patch("app.rag.retriever.get_embed_provider", return_value=provider):
+                clear_index()
+                index_chunks([framework_chunk], reset=True, embed=True,
+                             cache_path=cache_path, corpus="framework")
+                provider.embed_passages.assert_not_called()
+
 
 class TestIngestAndIndexDirectory(unittest.TestCase):
     """ingest_and_index_directory passes embed/cache args through."""

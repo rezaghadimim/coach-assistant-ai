@@ -142,11 +142,16 @@ def index_chunks(
 
     profile = embed_profile_for_corpus(resolved_corpus)
 
+    # Each corpus gets its own cache file: a reset=True save rewrites the file
+    # from the current corpus only, so sharing one path across corpora would
+    # clobber the other corpus's vectors on every restart.
+    corpus_cache_path = _corpus_cache_path(cache_path, resolved_corpus) if cache_path else None
+
     cache: dict[str, list[float]] = {}
-    if embed and cache_path:
+    if embed and corpus_cache_path:
         # Pass the profile so a stale cache (different embed model/dim) is
         # discarded rather than mixing vectors from different embedding spaces.
-        cache = _load_cache(cache_path, profile)
+        cache = _load_cache(corpus_cache_path, profile)
 
     provider = get_embed_provider(profile) if embed else None
     newly_embedded: dict[str, list[float]] = {}
@@ -195,17 +200,17 @@ def index_chunks(
     if embed:
         has_any = any(item.embedding for item in target)
         _set_embedding_ready(resolved_corpus, has_any)
-        if cache_path:
+        if corpus_cache_path:
             if reset:
                 cache = {
                     _cache_key(item.chunk): item.embedding
                     for item in target
                     if item.embedding
                 }
-                _save_cache(cache_path, cache, profile)
+                _save_cache(corpus_cache_path, cache, profile)
             elif newly_embedded:
                 cache.update(newly_embedded)
-                _save_cache(cache_path, cache, profile)
+                _save_cache(corpus_cache_path, cache, profile)
 
     return added
 
@@ -793,6 +798,19 @@ def _to_retrieved_chunk(indexed: _IndexedChunk, score: float) -> RetrievedChunk:
         chunk_role=chunk.chunk_role,
         corpus=chunk.corpus,
     )
+
+
+def _corpus_cache_path(cache_path: str, corpus: CorpusKind) -> str:
+    """Per-corpus cache file derived from the configured path.
+
+    The framework corpus keeps the configured path unchanged (backward
+    compatible with existing caches); the collection corpus writes to a
+    ``<stem>.collection<ext>`` sibling so the two never overwrite each other.
+    """
+    if corpus == "framework":
+        return cache_path
+    path = Path(cache_path)
+    return str(path.with_name(f"{path.stem}.{corpus}{path.suffix}"))
 
 
 def _cache_key(chunk: DocumentChunk) -> str:
