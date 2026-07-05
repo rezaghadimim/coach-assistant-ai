@@ -67,6 +67,29 @@ class MetricsEndpointTests(unittest.TestCase):
         second = _count(self._get_metrics().text)
         self.assertGreater(second, first)
 
+    def test_embed_probe_not_rerun_within_ttl(self) -> None:
+        """Repeated /metrics scrapes within the TTL must not re-probe the embed model."""
+        import main as main_module
+
+        main_module._embed_probe_cache = (False, 0.0)
+        old_enabled = settings.tool_router_enabled
+        settings.tool_router_enabled = True
+        try:
+            with (
+                patch("main._probe_ollama_server", new=AsyncMock(return_value=True)),
+                patch(
+                    "app.core.model_registry.probe_openrouter",
+                    new=AsyncMock(return_value=False),
+                ),
+                patch("app.core.embeddings.probe_embed_model", return_value=True) as probe,
+            ):
+                self.assertEqual(self.client.get("/metrics").status_code, 200)
+                self.assertEqual(self.client.get("/metrics").status_code, 200)
+                self.assertEqual(probe.call_count, 1)
+        finally:
+            settings.tool_router_enabled = old_enabled
+            main_module._embed_probe_cache = (False, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
