@@ -122,11 +122,11 @@ class MemoryStore:
     def _init_schema(self) -> None:
         """Apply any pending migrations, tracked via ``PRAGMA user_version``.
 
-        Migrations run inside the same connection/transaction used
-        historically by this method: each migration is idempotent and
-        forward-only, and ``user_version`` is bumped right after each one
-        completes so a mid-list failure leaves the db at a consistent,
-        resumable version rather than silently re-running earlier steps.
+        Migrations are idempotent and forward-only. All pending migrations
+        (and their ``user_version`` bumps) commit together in one transaction
+        when the ``with`` block exits: a mid-list failure rolls the whole run
+        back to the starting version, and the next open re-runs the full
+        pending list from there.
         """
         with self._connect() as conn:
             for version in range(_current_user_version(conn), len(MIGRATIONS)):
