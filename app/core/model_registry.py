@@ -27,6 +27,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 LOCAL_MODEL_ID = "coach-assistant-ai"
+# Explicit Ollama selection. Exposed as its own virtual model only when
+# openai_model is also set — otherwise LOCAL_MODEL_ID already means Ollama,
+# and a second entry for the same backend would just clutter the picker.
+LOCAL_OLLAMA_MODEL_ID = "coach-assistant-ai-ollama"
 CLOUD_MODEL_ID = "coach-assistant-ai-cloud"
 
 
@@ -55,6 +59,11 @@ def openrouter_models() -> dict[str, str]:
 def is_cloud_model_id(model_id: Optional[str]) -> bool:
     """Return True when ``model_id`` routes to OpenRouter."""
     return model_id is not None and model_id in openrouter_models()
+
+
+def is_ollama_model_id(model_id: Optional[str]) -> bool:
+    """Return True when ``model_id`` explicitly requests the Ollama backend."""
+    return model_id == LOCAL_OLLAMA_MODEL_ID
 
 
 _PROBE_TTL_SECONDS = 60
@@ -88,12 +97,18 @@ def resolve_provider(
     Unknown or None model IDs fall back to the local provider (see
     ``get_local_provider``). The cloud provider is returned only when the
     API key is configured; no live probe is done here (that is done by
-    list_available_models).
+    list_available_models). ``LOCAL_OLLAMA_MODEL_ID`` always resolves to
+    Ollama explicitly, even when ``openai_model`` is set and would otherwise
+    make ``get_local_provider`` pick the OpenAI-compatible backend.
     """
     if is_cloud_model_id(model_id) and settings.openrouter_api_key:
         from app.core.llm_providers.openrouter import OpenRouterProvider
 
         return OpenRouterProvider(model=openrouter_models()[model_id])
+    if is_ollama_model_id(model_id):
+        from app.core.llm_providers.ollama import OllamaProvider
+
+        return OllamaProvider()
     return get_local_provider()
 
 
@@ -157,6 +172,21 @@ async def list_available_models() -> list[dict]:
             "name": f"Coach Assistant AI (Local · {local_model_name})",
         }
     ]
+
+    # get_local_provider() picks OpenAI-compat over Ollama whenever
+    # openai_model is set, which would otherwise make Ollama unreachable
+    # through LOCAL_MODEL_ID even though it's still configured and running.
+    # Surface it as its own entry so both stay selectable.
+    if settings.openai_model:
+        models.append(
+            {
+                "id": LOCAL_OLLAMA_MODEL_ID,
+                "object": "model",
+                "created": created_ts,
+                "owned_by": "coach-assistant-ai",
+                "name": f"Coach Assistant AI (Local · Ollama {settings.ollama_model})",
+            }
+        )
 
     cloud_available = await probe_openrouter()
     if cloud_available:

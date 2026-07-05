@@ -57,6 +57,16 @@ class Settings(BaseSettings):
     # instead of OllamaProvider. Leave empty to keep using Ollama.
     openai_model: str = ""
     openai_timeout: float = 120.0
+    # Standard OpenAI sampling params, sent on every request to this backend.
+    # Deliberately the OpenAI-native fields (not Ollama's multiplicative
+    # repeat_penalty, and not a server-specific extra like repetition_penalty)
+    # so this works unmodified against real api.openai.com *and* self-hosted
+    # OpenAI-compatible servers (vLLM/TGI/llama.cpp) — real OpenAI rejects
+    # unrecognised extra body fields with a 400. Non-zero default because a
+    # self-hosted model with no repetition control can degenerate into an
+    # infinite repeated-token loop on long free-form completions.
+    openai_frequency_penalty: float = 0.4
+    openai_presence_penalty: float = 0.0
 
     # OpenRouter (optional cloud provider — leave api_key empty to disable)
     openrouter_api_key: str = ""
@@ -290,13 +300,18 @@ class Settings(BaseSettings):
             legacy = data.get("openrouter_model") or data.get("OPENROUTER_MODEL")
             if legacy:
                 data["openrouter_models"] = legacy
+        rerank_provider = data.get("rag_rerank_provider") or data.get("RAG_RERANK_PROVIDER") or "local"
         rerank_model = (
             data.get("rag_rerank_model")
             or data.get("RAG_RERANK_MODEL")
             or data.get("ollama_rerank_model")
             or data.get("OLLAMA_RERANK_MODEL")
         )
-        if isinstance(rerank_model, str):
+        # Only the local fastembed path is limited to models it can load — remote
+        # providers (tei/openai) send the model ID as-is to a server that already
+        # has a specific model loaded, so remapping it here would silently break
+        # the wire request against a mismatched model name.
+        if rerank_provider == "local" and isinstance(rerank_model, str):
             normalized = rerank_model.strip()
             # Ollama-only reranker IDs are not loadable via fastembed; map to the default.
             if normalized.startswith("dengcao/") or normalized.endswith("bge-reranker-v2-m3"):

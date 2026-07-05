@@ -43,6 +43,8 @@ class OpenAIProvider:
             "stream": stream,
             "temperature": temperature if temperature is not None else settings.temperature,
             "max_tokens": num_predict if num_predict is not None else settings.max_tokens,
+            "frequency_penalty": settings.openai_frequency_penalty,
+            "presence_penalty": settings.openai_presence_penalty,
         }
         if tools:
             payload["tools"] = tools

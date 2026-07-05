@@ -64,6 +64,7 @@ class ModelListTests(unittest.TestCase):
         """Without an API key the cloud model must not appear."""
         with patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = ""
+            mock_settings.openai_model = ""
             mock_settings.ollama_model = "llama3.1:8b"
             mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             response = self.client.get("/v1/models")
@@ -73,6 +74,22 @@ class ModelListTests(unittest.TestCase):
         ids = [m["id"] for m in body["data"]]
         self.assertIn("coach-assistant-ai", ids)
         self.assertNotIn("coach-assistant-ai-cloud", ids)
+        self.assertNotIn("coach-assistant-ai-ollama", ids)
+
+    def test_list_models_openai_configured_also_lists_ollama(self) -> None:
+        """When openai_model is set, Ollama must stay selectable as a distinct entry."""
+        with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openrouter_api_key = ""
+            mock_settings.openai_model = "Qwen3.5-397B-A17B-G1"
+            mock_settings.ollama_model = "llama3.1:8b"
+            mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
+            response = self.client.get("/v1/models")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        ids = [m["id"] for m in body["data"]]
+        self.assertIn("coach-assistant-ai", ids)
+        self.assertIn("coach-assistant-ai-ollama", ids)
 
     def test_list_models_with_valid_key_and_probe_returns_both(self) -> None:
         """With a working API key all cloud models must be listed."""
@@ -81,6 +98,7 @@ class ModelListTests(unittest.TestCase):
             new=AsyncMock(return_value=True),
         ), patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = "sk-or-test"
+            mock_settings.openai_model = ""
             mock_settings.ollama_model = "llama3.1:8b"
             mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             response = self.client.get("/v1/models")
@@ -99,6 +117,7 @@ class ModelListTests(unittest.TestCase):
             new=AsyncMock(return_value=False),
         ), patch("app.core.model_registry.settings") as mock_settings:
             mock_settings.openrouter_api_key = "sk-or-bad"
+            mock_settings.openai_model = ""
             mock_settings.ollama_model = "llama3.1:8b"
             mock_settings.openrouter_models = DEFAULT_OPENROUTER_MODELS
             response = self.client.get("/v1/models")
@@ -222,6 +241,17 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
             provider = resolve_provider(None)
         self.assertIsInstance(provider, OpenAIProvider)
 
+    async def test_resolve_provider_explicit_ollama_id_bypasses_openai(self) -> None:
+        """coach-assistant-ai-ollama must return Ollama even when openai_model is set."""
+        from app.core.model_registry import resolve_provider
+        from app.core.llm_providers.ollama import OllamaProvider
+
+        with patch("app.core.model_registry.settings") as mock_settings:
+            mock_settings.openai_model = "Qwen3.5-397B-A17B-G1"
+            mock_settings.openrouter_api_key = ""
+            provider = resolve_provider("coach-assistant-ai-ollama")
+        self.assertIsInstance(provider, OllamaProvider)
+
     async def test_resolve_provider_cloud_with_key_returns_openrouter(self) -> None:
         from app.core.model_registry import resolve_provider
         from app.core.llm_providers.openrouter import OpenRouterProvider
@@ -294,6 +324,25 @@ class ModelRegistryUnitTests(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # OpenRouter provider message format
 # ---------------------------------------------------------------------------
+
+class OpenAICompatPayloadTests(unittest.TestCase):
+    def test_payload_includes_repetition_controls(self) -> None:
+        """Regression test: a self-hosted model with no repetition penalty can
+        degenerate into an infinite repeated-token loop on long completions.
+        frequency_penalty/presence_penalty are the OpenAI-native fields — safe
+        against both real OpenAI and self-hosted OpenAI-compatible servers."""
+        from app.core.config import settings
+        from app.core.llm_providers.openai_compat import OpenAIProvider
+
+        with patch.object(settings, "openai_frequency_penalty", 0.4), patch.object(
+            settings, "openai_presence_penalty", 0.0
+        ):
+            provider = OpenAIProvider(model="test-model")
+            payload = provider._build_payload([{"role": "user", "content": "hi"}])
+
+        self.assertEqual(payload["frequency_penalty"], 0.4)
+        self.assertEqual(payload["presence_penalty"], 0.0)
+
 
 class OpenRouterMessageFormatTests(unittest.TestCase):
     def test_tool_result_message_uses_tool_call_id(self) -> None:
@@ -373,8 +422,9 @@ class LLMUnavailableMessageTests(unittest.TestCase):
 
     def test_streaming_local_failure_returns_ollama_message(self) -> None:
         import httpx
+        from app.core.config import settings
 
-        with patch(
+        with patch.object(settings, "openai_model", ""), patch(
             "app.api.openai_compat.generate_response",
             new=AsyncMock(side_effect=httpx.ConnectError("connection refused")),
         ):
@@ -382,6 +432,58 @@ class LLMUnavailableMessageTests(unittest.TestCase):
                 "/v1/chat/completions",
                 json={
                     "model": "coach-assistant-ai",
+                    "messages": [{"role": "user", "content": "Help me coach a client."}],
+                    "stream": True,
+                    "user": "test-user",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = self._streamed_content(response.text)
+        self.assertIn("Ollama", content)
+        self.assertNotIn("OpenRouter", content)
+
+    def test_streaming_local_openai_compat_failure_returns_openai_message(self) -> None:
+        """When openai_model is configured, LOCAL_MODEL_ID means the OpenAI-compat
+        backend — the failure message must name that server, not blame Ollama for
+        a request it never received."""
+        import httpx
+        from app.core.config import settings
+
+        with patch.object(settings, "openai_model", "Qwen3.5-397B-A17B-G1"), patch(
+            "app.api.openai_compat.generate_response",
+            new=AsyncMock(side_effect=httpx.ConnectError("connection refused")),
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai",
+                    "messages": [{"role": "user", "content": "Help me coach a client."}],
+                    "stream": True,
+                    "user": "test-user",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = self._streamed_content(response.text)
+        self.assertNotIn("Ollama", content)
+        self.assertNotIn("OpenRouter", content)
+        self.assertIn("local language model server", content)
+
+    def test_streaming_explicit_ollama_id_failure_returns_ollama_message(self) -> None:
+        """coach-assistant-ai-ollama must always mean Ollama, even when openai_model
+        is set and would otherwise make LOCAL_MODEL_ID resolve to OpenAI-compat."""
+        import httpx
+        from app.core.config import settings
+
+        with patch.object(settings, "openai_model", "Qwen3.5-397B-A17B-G1"), patch(
+            "app.api.openai_compat.generate_response",
+            new=AsyncMock(side_effect=httpx.ConnectError("connection refused")),
+        ):
+            response = self.client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "coach-assistant-ai-ollama",
                     "messages": [{"role": "user", "content": "Help me coach a client."}],
                     "stream": True,
                     "user": "test-user",

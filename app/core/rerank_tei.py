@@ -16,19 +16,24 @@ def rerank(
     *,
     base_url: str,
     timeout: float,
+    api_key: str = "",
 ) -> list[float]:
     """Return TEI relevance scores aligned with *documents* input order.
 
     Scores are sigmoid-normalized (0, 1) by TEI itself (``raw_scores=False``),
-    matching the scale produced by the local fastembed path.
+    matching the scale produced by the local fastembed path. ``api_key``, when
+    set, is sent as a Bearer token — some gateways front their TEI deployment
+    behind auth even though vanilla TEI itself does not require one.
     """
     if not documents:
         return []
 
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
     response = httpx.post(
         f"{base_url.rstrip('/')}/rerank",
         json={"query": query, "texts": documents, "raw_scores": False, "truncate": True},
         timeout=timeout,
+        headers=headers,
     )
     response.raise_for_status()
     results = response.json()

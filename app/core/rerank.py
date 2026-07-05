@@ -206,6 +206,22 @@ def rerank_documents(
                 passages,
                 base_url=settings.rag_rerank_base_url,
                 timeout=settings.rag_rerank_timeout,
+                api_key=settings.openai_api_key,
+            )
+        except Exception:
+            _probe_ok = False
+            raise
+    elif settings.rag_rerank_provider == "openai":
+        from app.core.rerank_openai_compat import rerank as openai_rerank
+
+        try:
+            scores = openai_rerank(
+                query,
+                passages,
+                base_url=settings.rag_rerank_base_url,
+                model=model or settings.rag_rerank_model,
+                timeout=settings.rag_rerank_timeout,
+                api_key=settings.openai_api_key,
             )
         except Exception:
             _probe_ok = False
@@ -247,12 +263,12 @@ def probe_rerank_model(*, model: str | None = None) -> bool:
     if _probe_ok is True:
         return True
 
-    if settings.rag_rerank_provider == "tei":
+    if settings.rag_rerank_provider in ("tei", "openai"):
         if not settings.rag_rerank_base_url:
             if _probe_ok is None:
                 logger.info(
-                    "rag rerank: RAG_RERANK_PROVIDER=tei but RAG_RERANK_BASE_URL "
-                    "is unset — reranking disabled"
+                    "rag rerank: RAG_RERANK_PROVIDER=%s but RAG_RERANK_BASE_URL "
+                    "is unset — reranking disabled", settings.rag_rerank_provider
                 )
             _probe_ok = False
             return False

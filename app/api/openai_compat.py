@@ -47,7 +47,9 @@ from app.core.config import settings
 from app.core.llm import generate_response, try_direct_reply_with_meta
 from app.core.model_registry import (
     LOCAL_MODEL_ID,
+    LOCAL_OLLAMA_MODEL_ID,
     is_cloud_model_id,
+    is_ollama_model_id,
     list_available_models,
     probe_openrouter,
 )
@@ -57,10 +59,14 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _MODEL_ID = LOCAL_MODEL_ID
-_LOCAL_LLM_UNAVAILABLE_MESSAGE = (
+_LOCAL_OLLAMA_UNAVAILABLE_MESSAGE = (
     "I'm temporarily unable to reach the language model. "
     "If you're running via Docker, ensure Ollama is running on your host and "
     "that OLLAMA_BASE_URL points to host.docker.internal (not localhost)."
+)
+_LOCAL_OPENAI_UNAVAILABLE_MESSAGE = (
+    "I'm temporarily unable to reach the local language model server. "
+    "Check that it's running and that OPENAI_BASE_URL points to it."
 )
 _CLOUD_LLM_UNAVAILABLE_MESSAGE = (
     "I'm temporarily unable to reach the cloud language model via OpenRouter. "
@@ -69,8 +75,19 @@ _CLOUD_LLM_UNAVAILABLE_MESSAGE = (
 )
 
 
-def _llm_error_hint(exc: Exception, *, cloud: bool) -> Optional[str]:
+def _backend_kind(model_id: str) -> str:
+    """Return which backend ``model_id`` resolves to: 'cloud', 'ollama', or 'openai'."""
+    if is_cloud_model_id(model_id):
+        return "cloud"
+    if is_ollama_model_id(model_id) or not settings.openai_model:
+        return "ollama"
+    return "openai"
+
+
+def _llm_error_hint(exc: Exception, *, backend: str) -> Optional[str]:
     """Return a short, user-facing hint derived from the provider error."""
+    cloud = backend == "cloud"
+    backend_name = {"cloud": "OpenRouter", "ollama": "Ollama", "openai": "the local model server"}[backend]
     if isinstance(exc, httpx.TimeoutException):
         if cloud:
             return (
@@ -79,7 +96,7 @@ def _llm_error_hint(exc: Exception, *, cloud: bool) -> Optional[str]:
             )
         return "request timed out"
     if isinstance(exc, httpx.ConnectError):
-        return "could not connect to OpenRouter" if cloud else "could not connect to Ollama"
+        return f"could not connect to {backend_name}"
     if isinstance(exc, httpx.HTTPStatusError):
         if cloud:
             try:
@@ -90,17 +107,21 @@ def _llm_error_hint(exc: Exception, *, cloud: bool) -> Optional[str]:
             except (json.JSONDecodeError, ValueError, AttributeError):
                 pass
             return f"OpenRouter returned HTTP {exc.response.status_code}"
-        return f"Ollama returned HTTP {exc.response.status_code}"
+        return f"{backend_name} returned HTTP {exc.response.status_code}"
     return None
 
 
 def _llm_unavailable_message(model_id: str, exc: Optional[Exception] = None) -> str:
     """Return a provider-appropriate message when the LLM request fails."""
-    cloud = is_cloud_model_id(model_id)
-    base = _CLOUD_LLM_UNAVAILABLE_MESSAGE if cloud else _LOCAL_LLM_UNAVAILABLE_MESSAGE
+    backend = _backend_kind(model_id)
+    base = {
+        "cloud": _CLOUD_LLM_UNAVAILABLE_MESSAGE,
+        "ollama": _LOCAL_OLLAMA_UNAVAILABLE_MESSAGE,
+        "openai": _LOCAL_OPENAI_UNAVAILABLE_MESSAGE,
+    }[backend]
     if exc is None:
         return base
-    hint = _llm_error_hint(exc, cloud=cloud)
+    hint = _llm_error_hint(exc, backend=backend)
     return f"{base} ({hint})" if hint else base
 
 
@@ -180,7 +201,11 @@ class _ChatCompletionRequest(BaseModel):
 
     def effective_model_id(self) -> str:
         """Normalise the requested model ID, defaulting unknown IDs to local."""
-        if self.model == LOCAL_MODEL_ID or is_cloud_model_id(self.model):
+        if (
+            self.model == LOCAL_MODEL_ID
+            or self.model == LOCAL_OLLAMA_MODEL_ID
+            or is_cloud_model_id(self.model)
+        ):
             return self.model
         return LOCAL_MODEL_ID
 
