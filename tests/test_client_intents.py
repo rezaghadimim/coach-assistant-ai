@@ -12,13 +12,13 @@ from app.core.client_intents import (
     detect_profile_update,
     is_coaching_advice_request,
     is_simple_greeting,
-    looks_like_malformed_tool_call,
     parse_text_tool_call,
     profile_update_from_add_note,
     try_direct_client_action,
     try_direct_client_query,
 )
 from app.core.llm import _sanitize_assistant_reply, try_direct_reply
+from app.core.tool_json import looks_like_malformed_tool_call
 from app.core.tools import execute_tool
 
 

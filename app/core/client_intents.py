@@ -13,10 +13,7 @@ from app.core.confirmations import (
     parse_pending_write,
 )
 from app.core.observability import log_step
-from app.core.tool_json import (
-    looks_like_malformed_tool_call,
-    parse_text_tool_call,
-)
+from app.core.tool_json import parse_text_tool_call
 from app.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
