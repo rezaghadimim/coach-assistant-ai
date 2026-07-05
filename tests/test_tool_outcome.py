@@ -160,6 +160,59 @@ class StructuredPendingWriteTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertIsNotNone(self.store.get_user("ali"))
 
+    def test_cancel_then_yes_does_not_replay(self) -> None:
+        """An explicit cancel neutralizes the preview; a later bare 'yes' must not write."""
+        preview = execute_tool_outcome(
+            "add_client_note",
+            {"client_id": "ali", "content": "Declined goal", "note_type": "goal"},
+            self.store,
+        )
+        history = [
+            {"role": "user", "content": "save a goal note for Ali"},
+            {"role": "assistant", "content": preview.text},
+        ]
+        cancel = try_direct_client_action_with_meta("no", self.store, history)
+        self.assertIsNotNone(cancel)
+        self.assertEqual(cancel.status, "ok")
+
+        history += [
+            {"role": "user", "content": "no"},
+            {"role": "assistant", "content": cancel.reply},
+        ]
+        try_direct_client_action_with_meta("yes", self.store, history)
+        self.assertEqual(self.store.get_client_notes("ali"), [])
+
+    def test_yes_after_unrelated_exchange_does_not_replay(self) -> None:
+        """A stale preview buried behind a later assistant reply must not replay."""
+        preview = execute_tool_outcome(
+            "add_client_note",
+            {"client_id": "ali", "content": "Stale goal", "note_type": "goal"},
+            self.store,
+        )
+        history = [
+            {"role": "assistant", "content": preview.text},
+            {"role": "user", "content": "what is Ali's occupation?"},
+            {"role": "assistant", "content": "Ali's occupation is not set."},
+        ]
+        try_direct_client_action_with_meta("yes", self.store, history)
+        self.assertEqual(self.store.get_client_notes("ali"), [])
+
+    def test_immediate_yes_still_writes(self) -> None:
+        """The normal preview→yes flow is unaffected."""
+        preview = execute_tool_outcome(
+            "add_client_note",
+            {"client_id": "ali", "content": "Fresh goal", "note_type": "goal"},
+            self.store,
+        )
+        history = [
+            {"role": "user", "content": "save a goal note for Ali"},
+            {"role": "assistant", "content": preview.text},
+        ]
+        result = try_direct_client_action_with_meta("yes", self.store, history)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(len(self.store.get_client_notes("ali")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

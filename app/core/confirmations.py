@@ -44,6 +44,30 @@ def _lookup_pending_write(content: str) -> Optional[tuple[str, dict[str, Any]]]:
             return _pending_writes[preview_text]
     return None
 
+
+def _most_recent_assistant_content(messages: list[dict]) -> Optional[str]:
+    """The most recent assistant message's text content, if any."""
+    for message in reversed(messages):
+        if message.get("role") != "assistant":
+            continue
+        content = message.get("content", "")
+        if isinstance(content, str):
+            return content
+    return None
+
+
+def cancel_pending_write(messages: list[dict]) -> None:
+    """Deregister the preview behind the latest assistant message.
+
+    Called on an explicit user cancellation so a later bare "yes" cannot
+    replay the declined write from the registry.
+    """
+    content = _most_recent_assistant_content(messages)
+    if content is None:
+        return
+    for preview_text in [p for p in _pending_writes if p in content]:
+        _pending_writes.pop(preview_text, None)
+
 _CONFIRM = re.compile(
     r"^(?:"
     r"yes(?:[,.!]?\s*(?:save|please|go\s+ahead|confirm(?:ed)?|do\s+it))?|"
@@ -123,98 +147,103 @@ def is_user_cancellation(message: str) -> bool:
 
 
 def parse_pending_write(messages: list[dict]) -> Optional[tuple[str, dict[str, Any]]]:
-    """Read tool name and arguments from the most recent write preview.
+    """Read tool name and arguments from a live write preview.
 
-    The structured registry is authoritative; the text-parsing branches below
-    only serve previews whose registration was lost (process restart).
+    Only the most recent assistant message is considered: once any later
+    assistant reply lands (a cancellation acknowledgement, an unrelated
+    answer), the preview is stale and a bare "yes" must not replay it.
+
+    The structured registry is authoritative; the text-parsing fallback
+    only serves previews whose registration was lost (process restart).
     """
-    for message in reversed(messages):
-        if message.get("role") != "assistant":
-            continue
-        content = message.get("content", "")
-        if not isinstance(content, str):
-            continue
+    content = _most_recent_assistant_content(messages)
+    if content is None:
+        return None
 
-        registered = _lookup_pending_write(content)
-        if registered is not None:
-            return registered
+    registered = _lookup_pending_write(content)
+    if registered is not None:
+        return registered
 
-        if "pending confirmation" not in content:
-            continue
+    if "pending confirmation" not in content:
+        return None
+    return _parse_preview_text(content)
 
-        if "Delete client" in content:
-            client_id_match = _PENDING_CLIENT_ID.search(content)
-            if client_id_match:
-                return (
-                    "delete_client",
-                    {"client_id": client_id_match.group(1).strip()},
-                )
-            continue
 
-        if "Delete note" in content:
-            note_id_match = _PENDING_NOTE_ID.search(content)
-            if note_id_match:
-                return ("delete_client_note", {"note_id": int(note_id_match.group(1))})
-            continue
+def _parse_preview_text(content: str) -> Optional[tuple[str, dict[str, Any]]]:
+    """Legacy text parsing of a rendered preview (registry-loss fallback)."""
+    if "Delete client" in content:
+        client_id_match = _PENDING_CLIENT_ID.search(content)
+        if client_id_match:
+            return (
+                "delete_client",
+                {"client_id": client_id_match.group(1).strip()},
+            )
+        return None
 
-        if "Update note" in content:
-            note_id_match = _PENDING_NOTE_ID.search(content)
-            content_match = _PENDING_NOTE_CONTENT.search(content)
-            if not note_id_match or not content_match:
+    if "Delete note" in content:
+        note_id_match = _PENDING_NOTE_ID.search(content)
+        if note_id_match:
+            return ("delete_client_note", {"note_id": int(note_id_match.group(1))})
+        return None
+
+    if "Update note" in content:
+        note_id_match = _PENDING_NOTE_ID.search(content)
+        content_match = _PENDING_NOTE_CONTENT.search(content)
+        if not note_id_match or not content_match:
+            return None
+        note_type_match = _PENDING_NOTE_TYPE.search(content)
+        title_match = _PENDING_NOTE_TITLE.search(content)
+        args: dict[str, Any] = {
+            "note_id": int(note_id_match.group(1)),
+            "content": content_match.group(1).strip(),
+        }
+        if note_type_match:
+            args["note_type"] = note_type_match.group(1).strip()
+        if title_match:
+            args["title"] = title_match.group(1).strip()
+        return ("update_client_note", args)
+
+    if "Add note" in content:
+        client_match = _PENDING_NOTE_CLIENT.search(content)
+        content_match = _PENDING_NOTE_CONTENT.search(content)
+        if not client_match or not content_match:
+            return None
+        note_type_match = _PENDING_NOTE_TYPE.search(content)
+        title_match = _PENDING_NOTE_TITLE.search(content)
+        note_args: dict[str, Any] = {
+            "client_id": client_match.group(1).strip(),
+            "content": content_match.group(1).strip(),
+            "note_type": (
+                note_type_match.group(1).strip() if note_type_match else "general"
+            ),
+        }
+        if title_match:
+            note_args["title"] = title_match.group(1).strip()
+        return ("add_client_note", note_args)
+
+    if "Create client" in content or "Update client" in content:
+        client_id_match = _PENDING_CLIENT_ID.search(content)
+        name_match = _PENDING_CLIENT_NAME.search(content)
+        if not client_id_match or not name_match:
+            return None
+        client_id = client_id_match.group(1).strip()
+        name = name_match.group(1).strip()
+        if name == "(not set)":
+            name = client_id
+        client_args: dict[str, Any] = {"client_id": client_id, "name": name}
+        for field_match in _PENDING_PROFILE_FIELD.finditer(content):
+            label = field_match.group(1).strip().lower()
+            value = field_match.group(2).strip()
+            if value == "(not set)":
                 continue
-            note_type_match = _PENDING_NOTE_TYPE.search(content)
-            title_match = _PENDING_NOTE_TITLE.search(content)
-            args: dict[str, Any] = {
-                "note_id": int(note_id_match.group(1)),
-                "content": content_match.group(1).strip(),
-            }
-            if note_type_match:
-                args["note_type"] = note_type_match.group(1).strip()
-            if title_match:
-                args["title"] = title_match.group(1).strip()
-            return ("update_client_note", args)
-
-        if "Add note" in content:
-            client_match = _PENDING_NOTE_CLIENT.search(content)
-            content_match = _PENDING_NOTE_CONTENT.search(content)
-            if not client_match or not content_match:
-                continue
-            note_type_match = _PENDING_NOTE_TYPE.search(content)
-            title_match = _PENDING_NOTE_TITLE.search(content)
-            note_args: dict[str, Any] = {
-                "client_id": client_match.group(1).strip(),
-                "content": content_match.group(1).strip(),
-                "note_type": (
-                    note_type_match.group(1).strip() if note_type_match else "general"
-                ),
-            }
-            if title_match:
-                note_args["title"] = title_match.group(1).strip()
-            return ("add_client_note", note_args)
-
-        if "Create client" in content or "Update client" in content:
-            client_id_match = _PENDING_CLIENT_ID.search(content)
-            name_match = _PENDING_CLIENT_NAME.search(content)
-            if not client_id_match or not name_match:
-                continue
-            client_id = client_id_match.group(1).strip()
-            name = name_match.group(1).strip()
-            if name == "(not set)":
-                name = client_id
-            client_args: dict[str, Any] = {"client_id": client_id, "name": name}
-            for field_match in _PENDING_PROFILE_FIELD.finditer(content):
-                label = field_match.group(1).strip().lower()
-                value = field_match.group(2).strip()
-                if value == "(not set)":
-                    continue
-                key = _PROFILE_FIELD_KEYS.get(label)
-                if key:
-                    if key == "age":
-                        try:
-                            client_args[key] = int(value)
-                        except ValueError:
-                            client_args[key] = value
-                    else:
+            key = _PROFILE_FIELD_KEYS.get(label)
+            if key:
+                if key == "age":
+                    try:
+                        client_args[key] = int(value)
+                    except ValueError:
                         client_args[key] = value
-            return ("create_client", client_args)
+                else:
+                    client_args[key] = value
+        return ("create_client", client_args)
     return None

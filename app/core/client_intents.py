@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.core.confirmations import (
+    cancel_pending_write,
     is_user_cancellation,
     is_user_confirmation,
     parse_pending_write,
@@ -647,6 +648,8 @@ def try_direct_client_action_with_meta(
     pending = parse_pending_write(history)
     if pending:
         if is_user_cancellation(message):
+            # Deregister so a later bare "yes" cannot replay the declined write.
+            cancel_pending_write(history)
             log_step(logger, "confirmation", "cancel")
             return ClientActionResult(_CANCEL_REPLY, status="ok")
         if is_user_confirmation(message):
