@@ -69,7 +69,10 @@ services:
       ENABLE_OLLAMA_API: "false"
       # Tell Open WebUI where our OpenAI-compatible endpoint lives.
       OPENAI_API_BASE_URL: "http://coach-api:8000/v1"
-      OPENAI_API_KEY: "not-needed"
+      # Must match the Coach API's auth: set API_KEY in .env for an authenticated
+      # stack (the same value is sent as the bearer token here), or set DEBUG=true
+      # in .env for a keyless local stack. /v1/* fails closed when API_KEY is set.
+      OPENAI_API_KEY: "${API_KEY:-not-needed}"
       # Coach branding for the UI
       WEBUI_NAME: "Coach Assistant AI"
       WEBUI_LOGO_URL: "http://localhost:8000/static/logo.svg"
