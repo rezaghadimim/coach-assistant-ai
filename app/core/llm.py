@@ -453,13 +453,12 @@ async def _generate_with_tools(
         NOTE_WRITE_MISFIRE_GUIDANCE,
         detect_client_mention,
         is_coaching_advice_request,
-        looks_like_malformed_tool_call,
-        parse_text_tool_call,
         profile_update_from_add_note,
         try_direct_client_action_with_meta,
     )
     from app.core.llm_providers.types import ToolCall
     from app.core.scope import is_openwebui_task
+    from app.core.tool_json import looks_like_malformed_tool_call, parse_text_tool_call
     from app.core.tools import execute_tool_outcome, sanitize_write_confirmation
 
     last_user = _last_user_message(messages)

@@ -27,10 +27,10 @@
 | B. Production / deploy | OPS-01 … OPS-04 | 4 / 4 |
 | C. Reliability | REL-01 … REL-06 | 6 / 6 |
 | D. AI reliability | AI-01 … AI-03 | 3 / 3 |
-| E. Code quality | CQ-01 … CQ-02 | 1 / 2 |
+| E. Code quality | CQ-01 … CQ-02 | 2 / 2 |
 | F. Testing / DevOps hardening | TEST-01 … TEST-04 | 4 / 4 |
 | G. Improvements | IMP-01 … IMP-03 | 3 / 3 |
-| **Total** | **30** | **29 / 30** |
+| **Total** | **30** | **30 / 30** |
 
 > Update the "Done" column as you check items off.
 
@@ -286,9 +286,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Introduce a typed result for tool execution: add a small dataclass/enum (e.g. `ToolOutcome` with `status` in {preview, ok, error} plus `text`) and have `execute_tool` in `app/core/tools.py` return it. Replace the emoji-prefix control-flow checks (`reply.startswith(("⏳","✅","❌"))`) in `app/core/llm.py`, `app/core/response_formatter.py`, and `app/api/openai_compat.py` with checks on the typed field. Keep the emoji only in user-facing display strings. Ensure `grep -rn 'startswith("⏳'` (and ✅/❌) finds no control-flow uses. Run the unittest suite and report.
 
-### - [ ] CQ-02 — Consolidate the deterministic intent layer *(Requires codebase verification)*
-- **Area:** Code / Architecture · **Severity:** Medium · **Status:** in-progress (audit delivered; consolidation pending decision) · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
-- **Audit:** [CQ-02_INTENT_LAYER_AUDIT.md](./CQ-02_INTENT_LAYER_AUDIT.md) — baselines captured (token routing 100% standard / 98.59% hard). Key finding: regex detectors and the router are **complementary, not duplicative** — the router selects the tool but delegates *argument extraction* back to the regexes, so blanket removal would break the deterministic write path. Safe wins are narrower than the review implied: (A) collapse duplicate tool-*selection* regexes into the router, (D) centralize JSON-parsing helpers. Both gated on a new full-path eval harness. **No code changed** per the report-first mandate; awaiting go-ahead.
+### - [x] CQ-02 — Consolidate the deterministic intent layer *(Requires codebase verification)*
+- **Area:** Code / Architecture · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) / Claude (Sonnet 5) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Audit:** [CQ-02_INTENT_LAYER_AUDIT.md](./CQ-02_INTENT_LAYER_AUDIT.md) — baselines captured (token routing 100% standard / 98.59% hard). Key finding: regex detectors and the router are **complementary, not duplicative** — the router selects the tool but delegates *argument extraction* back to the regexes, so blanket removal would break the deterministic write path. Execution (§7 of the audit): built the `--path full` eval harness; **Category D** (centralize JSON-tolerant tool-call parsing into `app/core/tool_json.py`) applied as a behavior-neutral refactor, verified against the full suite (582 tests) and both eval paths (router-only and full-path) at parity; **Category A** (retire the regex tool-*selection* role) was investigated with two controlled experiments and **rejected** — it breaks `tests/test_client_intents.py::test_direct_query_returns_profile` because the router misses a possessive-apostrophe phrasing (`"Get me Ali's detail"`) that the regex catches, proving the selector role is not fully redundant. No change made there; documented as "verified, keep as-is."
 - **Problem:** ~80 regexes and duplicated intent logic across `client_intents.py`, `scope.py`, `llm.py`, `confirmations.py` overlap with LLM tool-calling.
 - **Location:** `app/core/client_intents.py` (775 lines) and peers.
 - **Action:** **Verify first** which fast-path detectors materially improve accuracy (use the existing eval scripts). Retire detectors the router/LLM already handle at equal accuracy; centralize the rest behind one documented module.
@@ -419,3 +419,4 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 | 2026-07-05 | IMP-01 | done — cache identity header (`{version,model,dim}`) was present but unwired; threaded `profile` into `_load_cache`/`_save_cache` in `index_chunks` so a model/dim swap rebuilds; test `test_index_rebuilds_cache_on_model_mismatch` | Claude (Opus 4.8) |
 | 2026-07-05 | IMP-02 | done — `user_version`-keyed forward-only `MIGRATIONS` runner in `MemoryStore._init_schema`; ad-hoc `ALTER TABLE` retired | Claude (Opus 4.8) |
 | 2026-07-05 | IMP-03 | done — `app/api/metrics.py` Prometheus endpoint wired into `main.py` (duration middleware + `_layer_availability` + unauthenticated `/metrics`); tests in `tests/test_metrics.py` | Claude (Opus 4.8) |
+| 2026-07-05 | CQ-02 | done — added `--path full` mode to `scripts/eval_tool_routing.py` (whole deterministic fast path against a throwaway `MemoryStore`); Category D shipped (`app/core/tool_json.py` centralizes tolerant tool-call JSON parsing, imported by `client_intents.py` and `llm.py`); Category A investigated and rejected with evidence (breaks a passing test — router misses phrasing the regex catches); full suite (582 tests) + both eval paths verified at parity; details in `docs/CQ-02_INTENT_LAYER_AUDIT.md` §7 | Claude (Sonnet 5) |
