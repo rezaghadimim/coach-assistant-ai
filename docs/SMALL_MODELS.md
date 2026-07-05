@@ -11,7 +11,7 @@ does what, how to go smaller safely, and how to validate a swap.
 | Role | Current default | Size | Where configured |
 |------|-----------------|------|------------------|
 | Chat / tool-calling LLM | `llama3.1:8b` (Ollama) | ~4.9 GB | `OLLAMA_MODEL` |
-| Embeddings (RAG + tool router) | `karuniaperjuangan/multilingual-e5-small` | ~120 MB, 384-dim | `OLLAMA_EMBED_MODEL`, `RAG_EMBED_MODEL` |
+| Embeddings (RAG + tool router) | `karuniaperjuangan/multilingual-e5-small` | ~120 MB, 384-dim | `RAG_EMBED_MODEL` (address: `RAG_EMBED_BASE_URL`, provider: `RAG_EMBED_PROVIDER`) |
 | Cross-encoder reranker | `BAAI/bge-reranker-base` (fastembed/ONNX, in-process) | ~1 GB | `RAG_RERANK_MODEL`, `TOOL_ROUTER_RERANK_MODEL` |
 
 **Embeddings and reranker are already at the practical minimum.** E5-small is
@@ -161,3 +161,8 @@ These are the load-bearing design decisions; future changes should preserve them
   multilingual quality; note `config.py` currently normalizes that name back to
   `bge-reranker-base` for the Ollama-legacy case — adjust the validator) and an
   8B+ chat model.
+- **A second machine appears:** LLM (`OLLAMA_BASE_URL`), embeddings
+  (`RAG_EMBED_PROVIDER` / `RAG_EMBED_BASE_URL`), and reranker
+  (`RAG_RERANK_PROVIDER=tei` / `RAG_RERANK_BASE_URL`) can each point at a
+  different host — no code changes needed. See [`RAG.md`](RAG.md) for the
+  full config reference.

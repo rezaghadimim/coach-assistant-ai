@@ -61,7 +61,7 @@ class OpenRouterEmbedProvider:
 
         vectors: list[list[float]] = []
         with httpx.Client(
-            base_url=settings.openrouter_base_url,
+            base_url=settings.rag_embed_base_url or settings.openrouter_base_url,
             timeout=settings.openrouter_timeout,
         ) as client:
             for start in range(0, len(texts), _BATCH_SIZE):

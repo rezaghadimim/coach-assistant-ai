@@ -101,7 +101,7 @@ class ToolRouterDegradationTests(unittest.TestCase):
                 mock_settings.tool_router_threshold = 0.5
                 mock_settings.tool_router_margin = 0.05
                 mock_settings.tool_router_use_e5_prefix = True
-                mock_settings.ollama_embed_model = "test"
+                mock_settings.rag_embed_model = "test"
                 reset_index()
                 count = build_index()
         self.assertEqual(count, 0)
@@ -123,7 +123,7 @@ class ToolRouterDegradationTests(unittest.TestCase):
                 mock_settings.tool_router_threshold = 0.3
                 mock_settings.tool_router_margin = 0.05
                 mock_settings.tool_router_use_e5_prefix = True
-                mock_settings.ollama_embed_model = "test"
+                mock_settings.rag_embed_model = "test"
                 reset_index()
                 count = build_index()
                 match = classify_tool("list all clients", threshold=0.3, margin=0.05)

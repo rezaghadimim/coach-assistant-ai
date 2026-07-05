@@ -27,7 +27,7 @@ class OllamaEmbedProvider:
 
         self.profile = EmbedProfile(
             provider="ollama",
-            model=model or settings.ollama_embed_model,
+            model=model or settings.rag_embed_model,
             dimensions=dimensions,
             use_e5_prefix=(
                 use_e5_prefix
@@ -73,7 +73,7 @@ class OllamaEmbedProvider:
         ]
         try:
             with httpx.Client(
-                base_url=settings.ollama_base_url,
+                base_url=settings.rag_embed_base_url or settings.ollama_base_url,
                 timeout=settings.ollama_timeout,
             ) as client:
                 response = client.post(
@@ -106,7 +106,7 @@ class OllamaEmbedProvider:
 
         results: list[list[float]] = []
         with httpx.Client(
-            base_url=settings.ollama_base_url,
+            base_url=settings.rag_embed_base_url or settings.ollama_base_url,
             timeout=settings.ollama_timeout,
         ) as client:
             for text in texts:

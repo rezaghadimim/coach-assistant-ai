@@ -82,7 +82,7 @@ def ingest_collection_chunks_from_disk(
             from app.core.embed_providers.types import EmbedProfile
 
             resolved_model = (
-                settings.ollama_embed_model if embed_provider == "ollama" else embed_model
+                settings.rag_embed_model if embed_provider == "ollama" else embed_model
             )
             profile = EmbedProfile(
                 provider=embed_provider,  # type: ignore[arg-type]

@@ -239,7 +239,6 @@ class ProbeEmbedModelTests(unittest.TestCase):
                 s.rag_embed_provider = "ollama"
                 s.rag_embed_model = "test"
                 s.tool_router_use_e5_prefix = True
-                s.ollama_embed_model = "test"
                 s.ollama_base_url = "http://localhost:11434"
                 s.ollama_timeout = 30.0
                 result = probe_embed_model()

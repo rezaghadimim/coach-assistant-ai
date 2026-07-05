@@ -134,7 +134,7 @@ The cross-encoder model (`BAAI/bge-reranker-base`) downloads automatically on fi
 ```env
 TOOL_ROUTER_ENABLED=true
 TOOL_ROUTER_BACKEND=auto
-OLLAMA_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
+RAG_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
 TOOL_KNOWLEDGE_DIR=docs/tool-knowledge
 # Tuned to 0.65 against 307-example corpus: 95.77% hard-set accuracy, precision 1.00.
 TOOL_ROUTER_THRESHOLD=0.65

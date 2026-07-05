@@ -82,7 +82,7 @@ class ToolsClassifyEndpointTests(unittest.TestCase):
             mock_settings.tool_router_margin = 0.0
             mock_settings.tool_knowledge_dir = "docs/tool-knowledge"
             mock_settings.tool_router_use_e5_prefix = True
-            mock_settings.ollama_embed_model = "test"
+            mock_settings.rag_embed_model = "test"
             response = self.client.post(
                 "/api/tools/classify",
                 json={"message": "Ali is 23 years old"},

@@ -44,8 +44,13 @@ class Settings(BaseSettings):
     # The 5-minute default forces a full model reload after short idle periods.
     ollama_keep_alive: str = "30m"
 
-    # OpenAI (optional — direct embeddings when rag_*_embed_provider=openai)
+    # OpenAI (optional — direct embeddings when rag_*_embed_provider=openai).
+    # Override openai_base_url to point at a self-hosted OpenAI-compatible
+    # embeddings server (e.g. TEI's /v1/embeddings) on its own machine/port
+    # instead of api.openai.com — OPENAI_API_KEY is only required for the
+    # real OpenAI host.
     openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
 
     # OpenRouter (optional cloud provider — leave api_key empty to disable)
     openrouter_api_key: str = ""
@@ -54,6 +59,27 @@ class Settings(BaseSettings):
     openrouter_timeout: float = 120.0
     openrouter_http_referer: str = ""
     openrouter_app_name: str = "Coach Assistant AI"
+
+    # Embedding provider (used for RAG + tool router semantic search).
+    # RAG_EMBED_PROVIDER selects the client/protocol: ollama | openrouter | openai.
+    # RAG_EMBED_BASE_URL is an optional address override so embeddings can run
+    # on their own machine (e.g. a second server) independently of the LLM and
+    # reranker. Leave unset (default) to reuse each provider's own address:
+    #   ollama     -> ollama_base_url
+    #   openai     -> openai_base_url
+    #   openrouter -> openrouter_base_url
+    rag_embed_provider: str = "ollama"
+    rag_embed_base_url: str = ""
+    rag_embed_model: str = Field(
+        default="karuniaperjuangan/multilingual-e5-small",
+        validation_alias=AliasChoices(
+            "rag_embed_model",
+            "RAG_EMBED_MODEL",
+            # Legacy alias — same model for RAG + tool router when provider=ollama.
+            "ollama_embed_model",
+            "OLLAMA_EMBED_MODEL",
+        ),
+    )
 
     # Generation parameters
     # Per-task temperatures: keep low for deterministic tasks, higher only for free-form advice.
@@ -131,15 +157,17 @@ class Settings(BaseSettings):
     # Passages scored per ONNX inference batch (correctness-neutral; tune for speed).
     rag_rerank_batch_size: int = 32
     rag_rerank_max_passage_chars: int = 2000
+    # Reranker execution: "local" (default) runs fastembed/ONNX in-process.
+    # "tei" calls a remote Hugging Face Text-Embeddings-Inference server's
+    # POST /rerank instead — use this to offload reranking (and its ONNX
+    # model download) to a second machine. TEI serves one fixed model per
+    # deployment, so rag_rerank_model is not sent in the request when using it.
+    rag_rerank_provider: str = "local"
+    rag_rerank_base_url: str = ""
+    rag_rerank_timeout: float = 30.0
     # Where fastembed caches the downloaded reranker model. Kept under data/ so it
     # survives restarts (and lands in the mounted Docker volume) instead of /tmp.
     rag_rerank_cache_dir: str = "data/rerank_cache"
-    # Embedding providers: ollama | openrouter | openai
-    rag_embed_provider: str = "ollama"
-    rag_embed_model: str = Field(
-        default="karuniaperjuangan/multilingual-e5-small",
-        validation_alias=AliasChoices("rag_embed_model", "RAG_EMBED_MODEL"),
-    )
     rag_collection_embed_provider: Optional[str] = None
     rag_collection_embed_model: Optional[str] = Field(
         default=None,
@@ -170,7 +198,6 @@ class Settings(BaseSettings):
     # backend: "embedding" | "token" | "auto"
     # "auto" uses embedding when the Ollama embed model probe passes, else falls back to token.
     tool_router_backend: str = "auto"
-    ollama_embed_model: str = "karuniaperjuangan/multilingual-e5-small"
     tool_knowledge_dir: str = "docs/tool-knowledge"
     # Tuned against the routing corpus + three eval sets (standard/hard/short).
     # 0.65 was optimal for full-sentence queries but starved short/elliptical ones:

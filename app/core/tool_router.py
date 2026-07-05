@@ -462,7 +462,7 @@ def _build_index_locked() -> int:
             if _embed_available:
                 logger.info(
                     "tool router: embed model '%s' available — building embedding index",
-                    settings.ollama_embed_model,
+                    settings.rag_embed_model,
                 )
             else:
                 logger.info(

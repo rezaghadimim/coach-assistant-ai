@@ -142,7 +142,7 @@ def check_ollama(ctx: Context) -> tuple[str, str]:
     names = {model.get("name", "").split(":latest")[0] for model in tags}
     missing = []
     chat_model = settings.ollama_model
-    embed_model = settings.ollama_embed_model
+    embed_model = settings.rag_embed_model
     ctx.chat_model_ok = any(chat_model in name or name in chat_model for name in names)
     ctx.embed_model_ok = any(embed_model in name or name in embed_model for name in names)
     if not ctx.chat_model_ok:

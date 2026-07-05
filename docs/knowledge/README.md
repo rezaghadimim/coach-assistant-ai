@@ -119,10 +119,12 @@ RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
 RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
 RAG_COLLECTIONS_DIR=data/knowledge/collections
 
-# Framework + collections use the same local Ollama embed model (OLLAMA_EMBED_MODEL).
+# Framework + collections use the same embed provider/model by default.
+# RAG_EMBED_BASE_URL is an optional address override (e.g. a second server);
+# leave empty to use the provider's own address (OLLAMA_BASE_URL / OPENAI_BASE_URL / OPENROUTER_BASE_URL).
 RAG_EMBED_PROVIDER=ollama
+RAG_EMBED_BASE_URL=
 RAG_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
-OLLAMA_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
 # Optional cloud embed for collections only:
 # RAG_COLLECTION_EMBED_PROVIDER=openrouter
 # RAG_COLLECTION_EMBED_MODEL=openai/text-embedding-3-small

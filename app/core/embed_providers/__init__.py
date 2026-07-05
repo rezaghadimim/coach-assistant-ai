@@ -31,9 +31,6 @@ def embed_profile_for_corpus(corpus: CorpusKind) -> EmbedProfile:
         provider = settings.rag_embed_provider
         model = settings.rag_embed_model
 
-    if provider == "ollama":
-        model = settings.ollama_embed_model
-
     return EmbedProfile(
         provider=provider,  # type: ignore[arg-type]
         model=model,

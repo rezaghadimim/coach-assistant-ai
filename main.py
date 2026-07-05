@@ -191,7 +191,7 @@ async def health_check():
 
     embed_available = probe_embed_model() if settings.tool_router_enabled else False
     embed_info = {
-        "model": settings.ollama_embed_model,
+        "model": settings.rag_embed_model,
         "available": embed_available,
         "backend": settings.tool_router_backend,
         "enabled": settings.tool_router_enabled,

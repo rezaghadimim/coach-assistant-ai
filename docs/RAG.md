@@ -155,13 +155,25 @@ path, which also handles context-length retries. Chunks already present in
 
 ## Reranker setup
 
-Stage-2 reranking runs **locally in the API process** via [fastembed](https://github.com/qdrant/fastembed) (ONNX + onnxruntime). No Ollama, no PyTorch.
+Stage-2 reranking runs **locally in the API process** by default, via [fastembed](https://github.com/qdrant/fastembed) (ONNX + onnxruntime). No Ollama, no PyTorch.
 
 Default model: `BAAI/bge-reranker-base` (~1 GB). It is downloaded automatically on first use and cached under `RAG_RERANK_CACHE_DIR` (default `data/rerank_cache`).
 
-Ollama cannot serve cross-encoder reranker models (they crash llama.cpp with `GGML_ASSERT(n_outputs_max …)`; see [ollama/ollama#3368](https://github.com/ollama/ollama/issues/3368)), so reranking is not done through Ollama.
+Ollama cannot serve cross-encoder reranker models (they crash llama.cpp with `GGML_ASSERT(n_outputs_max …)`; see [ollama/ollama#3368](https://github.com/ollama/ollama/issues/3368)), so the local path never goes through Ollama.
 
-When fastembed is missing or the model fails to load, the pipeline falls back to stage-1 ordering — no configuration change required. Fallback semantics (fixed 2026-07):
+### Running the reranker on a second server
+
+Set `RAG_RERANK_PROVIDER=tei` and `RAG_RERANK_BASE_URL` to call a remote [Hugging Face Text-Embeddings-Inference (TEI)](https://github.com/huggingface/text-embeddings-inference) server's `POST /rerank` instead of loading the ONNX model in-process:
+
+```bash
+RAG_RERANK_PROVIDER=tei
+RAG_RERANK_BASE_URL=http://second-server:8080
+RAG_RERANK_TIMEOUT=30
+```
+
+TEI serves one fixed model per deployment (set at TEI startup, e.g. `--model-id BAAI/bge-reranker-base`), so `RAG_RERANK_MODEL` is informational only in this mode — it is not sent in the request. This is independent of `OLLAMA_BASE_URL` (LLM) and `RAG_EMBED_BASE_URL` (embeddings); each can point at a different host.
+
+When fastembed is missing, the local model fails to load, or the TEI server is unreachable, the pipeline falls back to stage-1 ordering — no configuration change required. Fallback semantics (fixed 2026-07):
 
 - Fallback results keep their **stage-1 similarity scores** and are filtered against `RAG_MIN_SCORE`, never against `RAG_RERANK_MIN_SCORE` (that floor only applies to real cross-encoder scores). RRF fusion is used for *ordering only* — fused rank scores (~0.03) are never compared against either floor.
 - A failed **model load** is cached: subsequent queries skip the reranker immediately instead of re-attempting the download. A later successful probe (e.g. the `/health` warmup) re-enables it; a restart also clears the flag.
@@ -175,10 +187,13 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 | `RAG_HYBRID_RRF_ENABLED` | `true` | Merge embedding + token stage-1 lists via RRF before rerank |
 | `RAG_RETRIEVE_K` | `30` | Stage-1 candidate pool size |
 | `RAG_RERANK_ENABLED` | `true` | Enable/disable reranking |
-| `RAG_RERANK_MODEL` | `BAAI/bge-reranker-base` | fastembed cross-encoder model name |
-| `RAG_RERANK_BATCH_SIZE` | `32` | Passages scored per ONNX batch |
+| `RAG_RERANK_PROVIDER` | `local` | `local` (in-process fastembed/ONNX) \| `tei` (remote TEI server) |
+| `RAG_RERANK_BASE_URL` | *(empty)* | TEI server address, e.g. `http://second-server:8080` (required when provider=tei) |
+| `RAG_RERANK_TIMEOUT` | `30.0` | HTTP timeout in seconds for the `tei` provider |
+| `RAG_RERANK_MODEL` | `BAAI/bge-reranker-base` | fastembed cross-encoder model name (informational only when provider=tei) |
+| `RAG_RERANK_BATCH_SIZE` | `32` | Passages scored per ONNX batch (local provider only) |
 | `RAG_RERANK_MAX_PASSAGE_CHARS` | `2000` | Passage truncation before scoring |
-| `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default) |
+| `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default, local provider only) |
 | `RAG_KNOWLEDGE_STARTER_DIR` | `docs/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
 | `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Private knowledge (git submodule → `coach-knowledge`) merged on ingest |
 | `RAG_TOP_K` | `2` | Final chunks for legacy `retrieve()` (framework only) |
@@ -187,15 +202,29 @@ When fastembed is missing or the model fails to load, the pipeline falls back to
 | `RAG_EXPERT_TOP_K` | `6` | Phase-2 expert solution chunks |
 | `RAG_MIN_COLLECTIONS` | `2` | Minimum distinct experts in phase 2 |
 | `RAG_MAX_CHUNKS_PER_COLLECTION` | `2` | Cap per expert in phase 2 |
-| `RAG_EMBED_PROVIDER` | `ollama` | Framework + query default: `ollama` \| `openrouter` \| `openai` |
+| `RAG_EMBED_PROVIDER` | `ollama` | Framework + query default client/protocol: `ollama` \| `openrouter` \| `openai` |
+| `RAG_EMBED_BASE_URL` | *(empty)* | Address override for embeddings, independent of the LLM/reranker. Empty = use the provider's own address (`OLLAMA_BASE_URL` / `OPENAI_BASE_URL` / `OPENROUTER_BASE_URL`) |
 | `RAG_EMBED_MODEL` | `karuniaperjuangan/multilingual-e5-small` | Model for framework corpus |
 | `RAG_COLLECTION_EMBED_PROVIDER` | `openrouter` | Collection ingest: `openrouter` \| `openai` \| `ollama` |
 | `RAG_COLLECTION_EMBED_MODEL` | `openai/text-embedding-3-small` | Model for collection corpus (batch at ingest) |
 | `RAG_COLLECTIONS_DIR` | `data/knowledge/collections` | Filesystem root for per-person collections |
-| `OPENAI_API_KEY` | *(empty)* | Required when `RAG_*_EMBED_PROVIDER=openai` |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL for **embeddings** (stage 1) |
+| `OPENAI_API_KEY` | *(empty)* | Required when `RAG_EMBED_PROVIDER=openai` and pointed at the real `api.openai.com` host |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Default address for the `openai` embed provider when `RAG_EMBED_BASE_URL` is unset — override to hit a self-hosted OpenAI-compatible server (e.g. TEI's `/v1/embeddings`) |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | LLM address, and the `ollama` embed provider's default address when `RAG_EMBED_BASE_URL` is unset |
 
-`OLLAMA_RERANK_MODEL` is still accepted as a legacy alias for `RAG_RERANK_MODEL`.
+`OLLAMA_RERANK_MODEL` is still accepted as a legacy alias for `RAG_RERANK_MODEL`. `OLLAMA_EMBED_MODEL` is still accepted as a legacy alias for `RAG_EMBED_MODEL`.
+
+### Running embeddings on a second server
+
+`RAG_EMBED_PROVIDER` picks the client (which HTTP API shape to speak); `RAG_EMBED_BASE_URL` picks the address. They're independent, so embeddings can run on their own machine without touching the LLM or reranker config:
+
+```bash
+# TEI's OpenAI-compatible /v1/embeddings endpoint on a second server
+RAG_EMBED_PROVIDER=openai
+RAG_EMBED_BASE_URL=http://second-server:8081/v1
+```
+
+No `OPENAI_API_KEY` is required against a non-default (self-hosted) `RAG_EMBED_BASE_URL` / `OPENAI_BASE_URL` — the key is only enforced against the real `api.openai.com` host.
 
 Reranker availability is reported in the `/health` endpoint under the `rerank` key.
 While the background warmup is in progress, `/health` returns `"status": "warming"` for

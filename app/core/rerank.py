@@ -190,28 +190,42 @@ def rerank_documents(
     if not documents:
         return []
 
-    model_name = model or settings.rag_rerank_model
     max_chars = (
         max_passage_chars
         if max_passage_chars is not None
         else settings.rag_rerank_max_passage_chars
     )
-    batch = batch_size if batch_size is not None else settings.rag_rerank_batch_size
-    batch = max(1, batch)
-
     passages = [_truncate(doc, max_chars) for doc in documents]
 
-    try:
-        encoder = _get_encoder(model_name)
-    except Exception:
-        # Model load failure (missing dependency, broken download) is sticky:
-        # cache it so per-query callers skip the reranker cheaply instead of
-        # re-attempting the load/download on every request.  A later successful
-        # probe (e.g. via /health) resets the flag.
-        _probe_ok = False
-        raise
-    logits = [float(score) for score in encoder.rerank(query, passages, batch_size=batch)]
-    scores = [_sigmoid(logit) for logit in logits]
+    if settings.rag_rerank_provider == "tei":
+        from app.core.rerank_tei import rerank as tei_rerank
+
+        try:
+            scores = tei_rerank(
+                query,
+                passages,
+                base_url=settings.rag_rerank_base_url,
+                timeout=settings.rag_rerank_timeout,
+            )
+        except Exception:
+            _probe_ok = False
+            raise
+    else:
+        model_name = model or settings.rag_rerank_model
+        batch = batch_size if batch_size is not None else settings.rag_rerank_batch_size
+        batch = max(1, batch)
+
+        try:
+            encoder = _get_encoder(model_name)
+        except Exception:
+            # Model load failure (missing dependency, broken download) is sticky:
+            # cache it so per-query callers skip the reranker cheaply instead of
+            # re-attempting the load/download on every request.  A later successful
+            # probe (e.g. via /health) resets the flag.
+            _probe_ok = False
+            raise
+        logits = [float(score) for score in encoder.rerank(query, passages, batch_size=batch)]
+        scores = [_sigmoid(logit) for logit in logits]
 
     if len(scores) != len(documents):
         raise ValueError(
@@ -232,7 +246,17 @@ def probe_rerank_model(*, model: str | None = None) -> bool:
 
     if _probe_ok is True:
         return True
-    if not fastembed_installed():
+
+    if settings.rag_rerank_provider == "tei":
+        if not settings.rag_rerank_base_url:
+            if _probe_ok is None:
+                logger.info(
+                    "rag rerank: RAG_RERANK_PROVIDER=tei but RAG_RERANK_BASE_URL "
+                    "is unset — reranking disabled"
+                )
+            _probe_ok = False
+            return False
+    elif not fastembed_installed():
         if _probe_ok is None:
             logger.info("rag rerank: fastembed not installed — reranking disabled")
         _probe_ok = False

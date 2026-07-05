@@ -101,7 +101,7 @@ def probe_embed_model(*, model: str | None = None, corpus: CorpusKind = "framewo
             "embed.probe",
             "fail",
             level=logging.DEBUG,
-            model=model or settings.ollama_embed_model,
+            model=model or settings.rag_embed_model,
             exc=type(exc).__name__,
         )
         return False

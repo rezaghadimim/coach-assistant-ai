@@ -101,6 +101,48 @@ class TestRerankDocuments(_ResettableReranker):
         self.assertIs(rerank_mod.rerank_probe_cached(), True)
 
 
+class TestRerankDocumentsTeiProvider(_ResettableReranker):
+    def test_delegates_to_tei_client_when_configured(self) -> None:
+        from app.core.config import settings
+
+        with patch.object(settings, "rag_rerank_provider", "tei"), \
+             patch.object(settings, "rag_rerank_base_url", "http://tei:8080"), \
+             patch("app.core.rerank_tei.rerank", return_value=[0.1, 0.9]) as mock_tei, \
+             patch.object(rerank_mod, "_get_encoder") as mock_local:
+            scores = rerank_documents("query", ["a", "b"])
+
+        self.assertEqual(scores, [0.1, 0.9])
+        mock_tei.assert_called_once()
+        mock_local.assert_not_called()
+
+    def test_tei_failure_marks_probe_false_and_raises(self) -> None:
+        from app.core.config import settings
+
+        with patch.object(settings, "rag_rerank_provider", "tei"), \
+             patch.object(settings, "rag_rerank_base_url", "http://tei:8080"), \
+             patch("app.core.rerank_tei.rerank", side_effect=RuntimeError("down")):
+            with self.assertRaises(RuntimeError):
+                rerank_documents("query", ["a"])
+        self.assertIs(rerank_mod.rerank_probe_cached(), False)
+
+
+class TestProbeRerankModelTeiProvider(_ResettableReranker):
+    def test_probe_false_when_base_url_unset(self) -> None:
+        from app.core.config import settings
+
+        with patch.object(settings, "rag_rerank_provider", "tei"), \
+             patch.object(settings, "rag_rerank_base_url", ""):
+            self.assertFalse(probe_rerank_model())
+
+    def test_probe_true_when_tei_scores_successfully(self) -> None:
+        from app.core.config import settings
+
+        with patch.object(settings, "rag_rerank_provider", "tei"), \
+             patch.object(settings, "rag_rerank_base_url", "http://tei:8080"), \
+             patch("app.core.rerank_tei.rerank", return_value=[1.0]):
+            self.assertTrue(probe_rerank_model())
+
+
 class TestProbeRerankModel(_ResettableReranker):
     def test_probe_true_when_model_scores(self) -> None:
         fake = _FakeEncoder([1.0])

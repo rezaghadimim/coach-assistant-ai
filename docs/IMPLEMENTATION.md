@@ -155,7 +155,7 @@ See [ADR-0010](adr/0010-llm-response-formatter.md) for the rationale and design 
 
 **Done:**
 - [x] Tool knowledge corpus: `docs/tool-knowledge/` (9 per-tool markdown docs + `examples/routing.jsonl`, now 307 examples)
-- [x] Configuration: `TOOL_ROUTER_BACKEND`, `OLLAMA_EMBED_MODEL`, `TOOL_ROUTER_THRESHOLD`, etc.
+- [x] Configuration: `TOOL_ROUTER_BACKEND`, `RAG_EMBED_MODEL`, `TOOL_ROUTER_THRESHOLD`, etc.
 - [x] Embedding client: `app/core/embeddings.py` — Ollama `/api/embeddings` with E5 prefix support
 - [x] Domain synonym lexicon: `app/core/lexicon.py` — `normalize_for_routing()` additive query expansion (`visitor→client`, `table→list clients`, `dump→show/list`, etc.); applied in token backend, embedding, and `top_n_tools`; never touches RAG
 - [x] Tool router v2: `app/core/tool_router.py` — three backends (token, embedding, two-stage rerank), `ToolMatch.rerank_score` field, graceful degradation chain
