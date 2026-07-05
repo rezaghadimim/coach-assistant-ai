@@ -335,3 +335,75 @@ class OutOfVocabWithLexiconTests(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual(match.tool, "list_client_notes")
+
+
+class ToolRouterConcurrentReindexTests(unittest.TestCase):
+    """A forced reindex must never expose a half-built index to readers."""
+
+    def setUp(self) -> None:
+        import logging
+
+        from app.core.config import settings
+        from app.core.tool_router import reset_index
+
+        self._settings_patch = patch.multiple(
+            settings,
+            tool_router_backend="token",
+            tool_router_rerank_enabled=False,
+        )
+        self._settings_patch.start()
+        reset_index()
+        # Silence per-rebuild info logs — the writer thread rebuilds in a loop.
+        self._router_logger = logging.getLogger("app.core.tool_router")
+        self._old_level = self._router_logger.level
+        self._router_logger.setLevel(logging.WARNING)
+
+    def tearDown(self) -> None:
+        from app.core.tool_router import reset_index
+
+        reset_index()
+        self._settings_patch.stop()
+        self._router_logger.setLevel(self._old_level)
+
+    def test_classify_during_forced_reindex_never_sees_empty_index(self) -> None:
+        import threading
+
+        import app.core.tool_router as tr
+
+        tr.build_index()
+
+        # Pick an utterance that classifies confidently with a stable index.
+        message = None
+        expected_tool = None
+        for ex in tr._token_backend._examples:
+            match = tr.classify_tool(ex.utterance)
+            if match is not None:
+                message, expected_tool = ex.utterance, match.tool
+                break
+        self.assertIsNotNone(message, "no confidently-routed utterance found")
+
+        stop = threading.Event()
+        failures: list[str] = []
+
+        def rebuild() -> None:
+            while not stop.is_set():
+                tr.build_index(force=True)
+
+        def read() -> None:
+            for _ in range(200):
+                match = tr.classify_tool(message)
+                if match is None or match.tool != expected_tool:
+                    failures.append(f"unexpected result during reindex: {match!r}")
+                    return
+
+        writer = threading.Thread(target=rebuild)
+        readers = [threading.Thread(target=read) for _ in range(4)]
+        writer.start()
+        for t in readers:
+            t.start()
+        for t in readers:
+            t.join()
+        stop.set()
+        writer.join()
+
+        self.assertEqual(failures, [])

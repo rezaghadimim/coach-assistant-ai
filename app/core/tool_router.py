@@ -438,20 +438,29 @@ def build_index(*, force: bool = False) -> int:
 
 
 def _build_index_locked() -> int:
-    """Build the index. Caller must hold ``_build_lock``."""
-    global _index_built, _embed_available, _rerank_available
+    """Build the index. Caller must hold ``_build_lock``.
 
-    _token_backend.clear()
-    _embed_backend.clear()
+    Builds into fresh backend objects and swaps the module globals only after
+    both are fully populated, so lock-free readers (classify_tool is on the
+    hot path) always observe either the old or the new complete index — never
+    a half-built one during a forced reindex.
+    """
+    global _token_backend, _embed_backend, _index_built
+    global _embed_available, _rerank_available
+
+    token_backend = _TokenBackend()
+    embed_backend = _EmbeddingBackend()
 
     examples = _load_examples()
     if not examples:
+        _token_backend = token_backend
+        _embed_backend = embed_backend
         _index_built = True
         return 0
 
     # Always build the token index (free, no network).
     for ex in examples:
-        _token_backend.add(ex)
+        token_backend.add(ex)
 
     # Build embedding index when backend is "embedding" or "auto".
     backend_setting = settings.tool_router_backend.lower()
@@ -476,9 +485,9 @@ def _build_index_locked() -> int:
                 vectors = embed_texts(utterances, input_type="passage")
                 for ex, vec in zip(examples, vectors):
                     ex.vector = vec
-                    _embed_backend.add(ex)
+                    embed_backend.add(ex)
                 logger.info(
-                    "tool router: embedding index built (%d examples)", len(_embed_backend)
+                    "tool router: embedding index built (%d examples)", len(embed_backend)
                 )
             except Exception as exc:
                 logger.warning("tool router: embedding index build failed: %s", exc)
@@ -501,9 +510,12 @@ def _build_index_locked() -> int:
                         "tool router: cross-encoder unavailable — rerank stage disabled"
                     )
 
+    # Atomic swap: readers see the old index right up to this point.
+    _token_backend = token_backend
+    _embed_backend = embed_backend
     _index_built = True
-    logger.info("tool router: token index built (%d examples)", len(_token_backend))
-    return len(_token_backend)
+    logger.info("tool router: token index built (%d examples)", len(token_backend))
+    return len(token_backend)
 
 
 def effective_backend() -> str:
@@ -546,9 +558,10 @@ def _resolve_requested_backend(configured: str) -> str:
 
 def reset_index() -> None:
     """Clear all indexes (used by tests)."""
+    global _token_backend, _embed_backend
     global _index_built, _embed_available, _rerank_available
-    _token_backend.clear()
-    _embed_backend.clear()
+    _token_backend = _TokenBackend()
+    _embed_backend = _EmbeddingBackend()
     _index_built = False
     _embed_available = None
     _rerank_available = None
