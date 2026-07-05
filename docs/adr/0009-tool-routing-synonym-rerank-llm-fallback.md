@@ -140,6 +140,12 @@ The routing corpus was also expanded from ~131 to **307 examples** adding negati
 
 Precision remains 1.00 (zero wrong-tool fires) at the lower threshold.
 
+> **Update (2026-07):** `TOOL_ROUTER_THRESHOLD` was subsequently retuned again from
+> `0.65` → **`0.45`** (`app/core/config.py`) to recover short-query accuracy
+> (40% → 68% on the hard set) without regressing precision. The routing corpus has
+> also grown past the 307 figure above — `docs/tool-knowledge/examples/routing.jsonl`
+> currently holds ~363 examples and continues to grow from production near-misses.
+
 ## Future Direction
 
 - Run `scripts/benchmark_tool_routing.py` after deployment to establish an accuracy baseline on the hard set; use it to tune `TOOL_ROUTER_RERANK_THRESHOLD`.

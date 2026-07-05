@@ -105,7 +105,7 @@ return formatted       return deterministic reply
 |-----|---------|---------|
 | `RESPONSE_FORMATTER_ENABLED` | `true` | LLM formatting pass for fast-path data replies |
 | `TEMPERATURE_GROUNDED` | `0.0` | Temperature used for the formatter LLM call |
-| `MAX_TOKENS_CLASSIFY` | `64` | Token budget for the formatter call |
+| `MAX_TOKENS_FORMATTER` | `256` | Token budget for the formatter call (tables need more room than the router's `MAX_TOKENS_CLASSIFY=64`) |
 
 Disable with `RESPONSE_FORMATTER_ENABLED=false` to skip the extra LLM call and return the deterministic template only.  The formatter call always runs at `TEMPERATURE_GROUNDED=0.0` for deterministic output — the global `TEMPERATURE` setting does not apply to it.
 

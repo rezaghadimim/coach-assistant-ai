@@ -26,6 +26,12 @@ Phase 2 requires a Retrieval-Augmented Generation (RAG) layer so the coaching as
 
 Implement an **in-memory, token-frequency (TF) cosine-similarity index** (`app/rag/retriever.py`). Documents are chunked, tokenised, and stored as sparse term-frequency vectors in a Python dict. At query time the query vector is compared to all stored vectors using cosine similarity and the top-k chunks are returned.
 
+> **Note (current state):** The MVP description below reflects the original TF-only
+> design. As of the updates above, TF cosine is now the **fallback** backend behind
+> Ollama E5 embeddings + a cross-encoder reranker (ADR-0008), and embeddings are
+> cached on disk per corpus, so the "index is lost on restart" consequence no longer
+> applies to the embedding path. The `retrieve()` interface is unchanged.
+
 ## Consequences
 
 **Positive:**
