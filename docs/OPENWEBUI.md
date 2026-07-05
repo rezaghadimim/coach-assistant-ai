@@ -130,10 +130,26 @@ Open WebUI's hidden **task** requests (follow-up suggestions, chat title, and
 tag generation) are detected and always allowed through:
 
 - They bypass the scope guardrail and client-lookup shortcuts.
+- They run as a **single plain completion with no tools** (`_generate_with_tools`
+  returns early for tasks). This is deliberate: given the client CRUD tool
+  definitions, the local 8B model would "helpfully" call DB tools based on chat
+  history — issuing spurious reads and even re-emitting a `create_client` preview
+  for a client the coach just confirmed. Meta-tasks only need the transcript Open
+  WebUI already embeds in the prompt, so tools are withheld.
 - Their JSON reply (e.g. `{ "follow_ups": [...] }`) is returned unmodified so
   Open WebUI's parser can render the suggestions.
 - Because the coaching system prompt and chat context are still injected, the
   generated follow-ups and starters stay coaching-focused.
+
+### Background load with local Ollama (dev tip)
+
+Open WebUI fires **three** meta-tasks per interaction (follow-up suggestions,
+chat title, tags), each a separate `/v1/chat/completions` request. With local
+Ollama on an 8B model these run 15–30 s apiece and can keep the machine busy
+well after the coach's last message. Withholding tools (above) removes the
+biggest cost, but for a snappier local dev loop consider disabling
+**follow-up suggestions**, **title generation**, and **tag generation** in
+Open WebUI's *Admin Settings → Interface*.
 
 ## Architecture
 

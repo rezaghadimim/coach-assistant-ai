@@ -153,6 +153,59 @@ class ClientIntentTests(unittest.TestCase):
             {"client_id": "sara", "name": "Sara"},
         )
 
+    def test_detect_create_client_add_as_new_client(self) -> None:
+        # Bug 2 regression: "new" between "a" and "client" must still parse.
+        self.assertEqual(
+            detect_create_client("Add Sara as a new client"),
+            {"client_id": "sara", "name": "Sara"},
+        )
+
+    def test_direct_create_new_client_returns_preview(self) -> None:
+        # Bug 2 regression: fast path returns a create preview without the LLM.
+        result = try_direct_client_action("Add Sara as a new client", store)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("pending confirmation", result)
+        self.assertIn("Client ID: sara", result)
+
+    def test_profile_lookup_overrides_story_misroute(self) -> None:
+        # Bug 1 regression: the reranker may confidently route "Show me Ali's
+        # profile" to list_client_notes(note_type=story). The fast path must
+        # override that to get_client and surface the profile card, not empty
+        # story notes.
+        from unittest import mock
+
+        from app.core import client_intents
+        from app.core.tool_router import ToolMatch
+
+        execute_tool(
+            "create_client",
+            {
+                "client_id": "ali",
+                "name": "Ali",
+                "email": "ali@example.com",
+                "confirmed": True,
+            },
+            store,
+        )
+        misroute = ToolMatch(
+            tool="list_client_notes",
+            score=0.99,
+            hint="note_type:story",
+            backend="rerank",
+        )
+        with mock.patch(
+            "app.core.tool_router.classify_tool", return_value=misroute
+        ):
+            result = client_intents.try_direct_client_action_with_meta(
+                "Show me Ali's profile", store
+            )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.tool, "get_client")
+        self.assertIn("ali@example.com", result.reply)
+        self.assertNotIn("story", result.reply.lower())
+
     def test_detect_confirm(self) -> None:
         self.assertTrue(detect_confirm("yes"))
         self.assertTrue(detect_confirm("confirm"))

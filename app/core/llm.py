@@ -467,6 +467,19 @@ async def _generate_with_tools(
     # and the raw JSON reply is returned unsanitized so the UI can parse it.
     is_task = bool(last_user) and is_openwebui_task(last_user)
 
+    if is_task:
+        # Meta-tasks only need the chat transcript Open WebUI already embeds in
+        # the prompt. Running the tool loop lets the 8B model "helpfully" call
+        # client DB tools from stale history (spurious reads, and stale
+        # create_client previews after a confirmation). A single plain
+        # completion — no tools — returns the raw JSON/text the UI expects.
+        full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
+        result = await provider.complete(
+            full_messages, temperature=settings.temperature_tool
+        )
+        log_step(logger, "llm", "final", reason="task_complete", iteration=0)
+        return result.content
+
     if last_user and not is_task:
         direct_meta = (
             None if skip_direct_reply
@@ -536,11 +549,6 @@ async def _generate_with_tools(
 
         if not result.has_tool_calls:
             raw_content = result.content
-            if is_task:
-                log_step(logger, "llm", "final", reason="task_complete",
-                         iteration=iteration + 1)
-                return raw_content
-
             text_tool = parse_text_tool_call(raw_content)
             if text_tool:
                 tool_name, params = text_tool

@@ -49,9 +49,11 @@ class _ScriptedProvider:
         self._script = script
         self.calls = 0
         self.executed_tools: list[str] = []
+        self.tools_seen: list[object] = []
 
     async def complete(self, messages, *, tools=None, temperature=None, **kwargs):
         self.calls += 1
+        self.tools_seen.append(tools)
         idx = min(self.calls - 1, len(self._script) - 1)
         return self._script[idx]
 
@@ -114,6 +116,42 @@ class ToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("get_client", provider.executed_tools)
         self.assertIn("coaching plan", reply)
         self.assertEqual(provider.calls, 3)
+
+    async def test_openwebui_task_skips_tool_loop(self) -> None:
+        # Bug 3 regression: Open WebUI meta-tasks (follow-ups, title, tags) must
+        # run as a single plain completion with NO tools, even when the chat
+        # history mentions a client. Otherwise the model calls DB tools from
+        # stale context (spurious reads + stale create_client previews).
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            provider = _ScriptedProvider(
+                [_text_result('{"follow_ups": ["What is next for Ali?"]}')]
+            )
+            messages = [
+                {"role": "user", "content": "Tell me about Ali"},
+                {"role": "assistant", "content": "Ali is making progress."},
+                {
+                    "role": "user",
+                    "content": (
+                        "### Task:\nSuggest 3-5 relevant follow-up questions "
+                        "based on the chat history."
+                    ),
+                },
+            ]
+            reply = await _generate_with_tools(
+                messages,
+                "system",
+                TOOL_DEFINITIONS,
+                store,
+                provider=provider,
+            )
+
+        # Raw JSON returned unsanitized for the UI to parse.
+        self.assertIn("follow_ups", reply)
+        # Single completion, no tool execution, tools withheld from the provider.
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(provider.executed_tools, [])
+        self.assertEqual(provider.tools_seen, [None])
 
 
 if __name__ == "__main__":

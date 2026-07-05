@@ -28,7 +28,13 @@ import time
 import uuid
 from typing import AsyncGenerator, Optional
 
-from app.core.observability import bind_message, log_step, preview, reset_message
+from app.core.observability import (
+    bind_message,
+    log_step,
+    preview,
+    rebind_message,
+    reset_message,
+)
 
 import httpx
 from fastapi import APIRouter, Header
@@ -247,29 +253,46 @@ async def _stream_and_persist(
     *,
     direct_reply: Optional[str] = None,
     ideas_markdown: str = "",
+    msg_id: str = "-",
+    user_id: str = "-",
+    t0: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
-    """Tool-calling + optional streaming response, then persist the full reply."""
-    if direct_reply is not None:
-        async for chunk in _stream_text_reply(
-            direct_reply, session_id, completion_id, created
-        ):
-            yield chunk
-        return
+    """Tool-calling + optional streaming response, then persist the full reply.
 
-    # Tool-calling is always resolved first (non-streaming) so the agentic loop
-    # can execute multiple tool calls before producing a final answer.
-    full_reply = await _generate_reply_or_unavailable(
-        history=history,
-        system_prompt=system_prompt,
-        model_id=model_id,
-    )
-    if ideas_markdown:
-        full_reply = f"{full_reply}\n\n{ideas_markdown}"
+    The request coroutine has already returned (and reset its log context) by
+    the time this generator runs, so it re-binds the original ``msg_id``/``user``
+    to keep the LLM log lines correlated, and resets in a ``finally`` block.
+    """
+    rebind_message(msg_id, user_id)
+    try:
+        if direct_reply is not None:
+            async for chunk in _stream_text_reply(
+                direct_reply, session_id, completion_id, created
+            ):
+                yield chunk
+        else:
+            # Tool-calling is always resolved first (non-streaming) so the
+            # agentic loop can execute multiple tool calls before producing a
+            # final answer.
+            full_reply = await _generate_reply_or_unavailable(
+                history=history,
+                system_prompt=system_prompt,
+                model_id=model_id,
+            )
+            if ideas_markdown:
+                full_reply = f"{full_reply}\n\n{ideas_markdown}"
 
-    async for chunk in _stream_text_reply(
-        full_reply, session_id, completion_id, created
-    ):
-        yield chunk
+            async for chunk in _stream_text_reply(
+                full_reply, session_id, completion_id, created
+            ):
+                yield chunk
+
+        if t0 is not None:
+            ms = int((time.monotonic() - t0) * 1000)
+            log_step(logger, "message", "stream_complete",
+                     endpoint="/v1/chat/completions", stream=True, ms=ms)
+    finally:
+        reset_message()
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +351,7 @@ async def chat_completions(
     user_id = _resolve_user_id(request.user, x_user_id, x_openwebui_user_id)
     coach_name = (x_openwebui_user_name or "").strip() or None
 
-    bind_message(user_id)
+    msg_id = bind_message(user_id)
     t0 = time.monotonic()
 
     # Extract the latest user message for RAG retrieval and persistence.
@@ -372,9 +395,11 @@ async def chat_completions(
             ideas_markdown = format_expert_ideas_markdown(ideas)
         path = "direct" if direct_reply is not None else "llm"
         ms = int((time.monotonic() - t0) * 1000)
-        log_step(logger, "message", "done", endpoint="/v1/chat/completions",
+        # Time-to-first-byte only; the generator logs "stream_complete" with the
+        # true end-to-end duration once generation finishes. Correlation context
+        # is intentionally NOT reset here — the generator re-binds and resets it.
+        log_step(logger, "message", "stream_start", endpoint="/v1/chat/completions",
                  path=path, stream=True, ms=ms)
-        reset_message()
         return StreamingResponse(
             _stream_and_persist(
                 history,
@@ -385,6 +410,9 @@ async def chat_completions(
                 model_id=model_id,
                 direct_reply=direct_reply,
                 ideas_markdown=ideas_markdown,
+                msg_id=msg_id,
+                user_id=user_id,
+                t0=t0,
             ),
             media_type="text/event-stream",
         )

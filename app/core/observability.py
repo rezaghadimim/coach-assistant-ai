@@ -49,6 +49,17 @@ def bind_message(user_id: str) -> str:
     return msg_id
 
 
+def rebind_message(msg_id: str, user_id: str) -> None:
+    """Re-attach an existing correlation id + user to the current context.
+
+    Used by streaming handlers: the request coroutine returns (and its context
+    is reset) before the response generator runs, so the generator re-binds the
+    original ``msg_id`` at its start to keep log lines correlated.
+    """
+    _msg_id.set(msg_id or "-")
+    _user.set(user_id or "-")
+
+
 def reset_message() -> None:
     """Reset the per-message context to defaults ("-")."""
     _msg_id.set("-")

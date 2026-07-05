@@ -76,7 +76,7 @@ _LIST_CLIENTS = re.compile(
     re.IGNORECASE,
 )
 _ADD_AS_CLIENT = re.compile(
-    r"(?:add|register)\s+(.+?)\s+as\s+(?:a\s+|another\s+)?(?:client|patient)"
+    r"(?:add|register)\s+(.+?)\s+as\s+(?:a\s+(?:new\s+)?|another\s+)?(?:client|patient)"
     r"(?:\s+profile)?\s*$",
     re.IGNORECASE,
 )
@@ -414,6 +414,20 @@ def detect_client_mention(message: str, store: MemoryStore) -> Optional[str]:
     return None
 
 
+# A "profile" lookup that the reranker can confuse with the story/background
+# note cluster (intent_kb: "show me the client's background story"). When the
+# coach asks for a *profile* and does not mention story/background/notes, the
+# intent is the profile card (get_client), never story notes.
+_PROFILE_WORD = re.compile(r"\bprofile\b", re.IGNORECASE)
+_NOTE_SIGNAL = re.compile(r"\b(?:story|stories|background|notes?)\b", re.IGNORECASE)
+
+
+def _looks_like_profile_lookup(message: str) -> bool:
+    """True when the message asks for a profile card, not notes/story content."""
+    text = message.strip()
+    return bool(_PROFILE_WORD.search(text)) and not _NOTE_SIGNAL.search(text)
+
+
 _UPDATE_NOTE_ID = re.compile(
     r"(?:update|edit|change|revise|fix)\s+note\s+(\d+)",
     re.IGNORECASE,
@@ -487,6 +501,22 @@ def _tool_router_action(message: str, store: MemoryStore) -> ClientActionResult 
         return None
 
     if tool == "list_client_notes":
+        # The reranker confuses "profile" with the story/background note cluster.
+        # A profile lookup ("Show me Ali's profile") must return the profile card,
+        # not empty story notes, so override to get_client before executing.
+        if _looks_like_profile_lookup(message):
+            client_ref = detect_client_lookup(message) or detect_client_mention(
+                message, store
+            )
+            if client_ref:
+                log_step(logger, "tool_router.action", "override",
+                         from_tool=tool, to_tool="get_client",
+                         reason="profile_lookup")
+                return _from_outcome(
+                    execute_tool_outcome("get_client", {"client_id": client_ref}, store),
+                    tool="get_client",
+                    hint="profile",
+                )
         client_id = detect_client_mention(message, store)
         if client_id is None:
             return None

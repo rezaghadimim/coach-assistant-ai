@@ -117,6 +117,7 @@
 {"utterance": "What is Ali's age?", "tool": "get_client", "hint": "profile:age"}
 {"utterance": "What is Sara's occupation?", "tool": "get_client", "hint": "profile:occupation"}
 {"utterance": "Get Ali's profile details", "tool": "get_client", "hint": "profile"}
+{"utterance": "Show me Ali's profile", "tool": "get_client", "hint": "profile"}
 {"utterance": "Fetch Ali's contact details", "tool": "get_client", "hint": "profile"}
 {"utterance": "What is Ali's phone?", "tool": "get_client", "hint": "profile:phone"}
 {"utterance": "Look up Sara's email address", "tool": "get_client", "hint": "profile:email"}
