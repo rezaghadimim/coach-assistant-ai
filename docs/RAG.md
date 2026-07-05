@@ -233,7 +233,7 @@ container is not restarted mid-download.
 ## Testing
 
 ```bash
-python3 -m unittest discover -s tests -p "test_*.py"
+python3 -m pytest tests/
 ```
 
 - `tests/test_rerank.py` — unit tests with a mocked encoder (fast, offline)

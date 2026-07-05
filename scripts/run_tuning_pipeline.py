@@ -119,7 +119,6 @@ def _step_train(args: argparse.Namespace) -> int:
 
 def _step_eval(args: argparse.Namespace) -> int:
     models_str = args.models or "baseline"
-    dry_flag = ["--dry-run"] if args.dry_run else []
 
     # eval_coaching_style.py does not support --dry-run; just print the command.
     if args.dry_run:
@@ -292,7 +291,7 @@ def main() -> int:
     if args.models is None:
         args.models = f"baseline,{ollama_model_name(args.profile)}"
 
-    print(f"=== Coach Assistant AI — LoRA Tuning Pipeline ===")
+    print("=== Coach Assistant AI — LoRA Tuning Pipeline ===")
     print(f"  Profile  : {args.profile}")
     print(f"  Steps    : {', '.join(steps)}")
     print(f"  Dry run  : {args.dry_run}")

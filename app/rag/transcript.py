@@ -148,7 +148,6 @@ def build_transcript_chunks(
     start_sec = segments[0].start_sec
     end_sec = segments[0].end_sec
     chunk_index = 0
-    step = max(chunk_size - chunk_overlap, 1)
 
     def flush() -> None:
         nonlocal chunk_index, buffer_text, buffer_tokens, start_sec, end_sec

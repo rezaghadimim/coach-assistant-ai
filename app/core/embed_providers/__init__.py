@@ -23,7 +23,6 @@ def _dimensions_for_model(model: str) -> int:
 
 def embed_profile_for_corpus(corpus: CorpusKind) -> EmbedProfile:
     """Resolve the embed profile for framework vs collection corpora."""
-    from app.core.config import settings
 
     if corpus == "collection":
         provider = settings.rag_collection_embed_provider or settings.rag_embed_provider

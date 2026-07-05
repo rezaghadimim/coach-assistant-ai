@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.api.chat import reset_runtime_state
-from app.core.scope import is_off_topic, scope_guard
+from app.core.scope import scope_guard
 
 
 class TestScopeGuardSafety(unittest.TestCase):

@@ -17,7 +17,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -62,7 +61,7 @@ def _run_eval(
 ) -> EvalMetrics:
     """Run retrieval eval in a subprocess with isolated env."""
     script = ROOT / "scripts" / "eval_rag_grounding.py"
-        merged_env = {**os.environ, **env, "RAG_KNOWLEDGE_STARTER_DIR": str(knowledge_dir)}
+    merged_env = {**os.environ, **env, "RAG_KNOWLEDGE_STARTER_DIR": str(knowledge_dir)}
     proc = subprocess.run(
         [sys.executable, str(script), "--eval-file", str(eval_file), "--backend", "token"],
         cwd=ROOT,

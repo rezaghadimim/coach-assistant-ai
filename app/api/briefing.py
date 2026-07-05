@@ -12,6 +12,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+# Reuse the same MemoryStore instance as the chat module.
+from app.api.chat import store as _store
 from app.core.config import settings
 from app.core.llm_providers.ollama import OllamaProvider
 from app.core.prompts import BRIEFING_PROMPT
@@ -22,9 +24,6 @@ from app.rag.retriever import format_coach_retrieval_context, retrieve_coach_con
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Reuse the same MemoryStore instance as the chat module.
-from app.api.chat import store as _store
 
 
 def _build_briefing_context(request: BriefingRequest, store: MemoryStore) -> str:

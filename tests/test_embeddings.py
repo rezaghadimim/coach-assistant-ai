@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -96,6 +95,7 @@ class EmbedTextsTests(unittest.TestCase):
         self.assertEqual(captured_prompts[0], "query: user message")
 
     def test_no_prefix_when_disabled(self) -> None:
+        from app.core.config import settings as real_settings
         from app.core.embeddings import embed_texts
         captured_prompts: list[str] = []
 
@@ -114,13 +114,19 @@ class EmbedTextsTests(unittest.TestCase):
 
         mock_client.post = capture_post
 
+        # Patch attributes on the real settings singleton — app.core.embed_providers
+        # already holds its own `from app.core.config import settings` reference,
+        # so swapping `app.core.config.settings` wholesale (as elsewhere in this
+        # file) would not be seen there.
         with patch(_OLLAMA_HTTPX, return_value=mock_client):
-            with patch(_OLLAMA_SETTINGS) as s:
-                s.rag_embed_provider = "ollama"
-                s.rag_embed_model = "test-model"
-                s.tool_router_use_e5_prefix = False
-                s.ollama_base_url = "http://localhost:11434"
-                s.ollama_timeout = 30.0
+            with patch.multiple(
+                real_settings,
+                rag_embed_provider="ollama",
+                rag_embed_model="test-model",
+                tool_router_use_e5_prefix=False,
+                ollama_base_url="http://localhost:11434",
+                ollama_timeout=30.0,
+            ):
                 embed_texts(["hello"], input_type="query")
 
         self.assertEqual(captured_prompts[0], "hello")
@@ -128,15 +134,15 @@ class EmbedTextsTests(unittest.TestCase):
 
 class TruncateForEmbedTests(unittest.TestCase):
     def test_short_text_unchanged(self) -> None:
-        from app.core.embeddings import _truncate_for_embed
+        from app.core.embed_providers.ollama import _truncate_words
         text = "one two three"
-        self.assertEqual(_truncate_for_embed(text, max_words=10), text)
+        self.assertEqual(_truncate_words(text, max_words=10), text)
 
     def test_long_text_truncated(self) -> None:
-        from app.core.embeddings import _truncate_for_embed
+        from app.core.embed_providers.ollama import _truncate_words
         words = [f"w{i}" for i in range(20)]
         text = " ".join(words)
-        self.assertEqual(_truncate_for_embed(text, max_words=5), " ".join(words[:5]))
+        self.assertEqual(_truncate_words(text, max_words=5), " ".join(words[:5]))
 
     def test_embed_texts_truncates_before_prefix(self) -> None:
         from app.core.embeddings import embed_texts

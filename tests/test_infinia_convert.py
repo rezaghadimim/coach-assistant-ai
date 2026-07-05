@@ -9,7 +9,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.training.infinia_convert import (
-    ConvertStats,
     adapt_completion_template,
     convert_dataset,
     row_to_record,
@@ -124,7 +123,7 @@ class TestConvertDataset(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
             raw_path = self._write_raw(tmp_dir, rows)
-            stats = convert_dataset(raw_path, tmp_dir, seed=42, adapt_backend="template")
+            convert_dataset(raw_path, tmp_dir, seed=42, adapt_backend="template")
 
             adapted_path = tmp_dir / "infinia_adapted.jsonl"
             holdout_path = tmp_dir / "infinia_holdout.jsonl"

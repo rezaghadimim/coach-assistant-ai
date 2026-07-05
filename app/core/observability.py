@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import sys
 import uuid
-from contextvars import ContextVar, Token
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 

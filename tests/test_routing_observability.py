@@ -66,7 +66,6 @@ class ToolRouterDeferralHookTests(unittest.TestCase):
         reset_index()
 
     def test_classify_tool_records_deferral(self) -> None:
-        from unittest.mock import patch
 
         from app.core.tool_router import build_index, classify_tool
 
@@ -92,7 +91,7 @@ class HealthToolRouterStatsTests(unittest.IsolatedAsyncioTestCase):
         reset_stats()
 
     async def test_health_includes_tool_router_block(self) -> None:
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
 
         record_deferral(
             "show all visitors",

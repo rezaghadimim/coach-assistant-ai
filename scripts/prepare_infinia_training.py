@@ -103,7 +103,7 @@ def main() -> None:
         seed=args.seed,
     )
 
-    print(f"\nConversion complete:")
+    print("\nConversion complete:")
     print(f"  Total rows    : {stats.total}")
     print(f"  Train         : {stats.train}  → {data_dir}/infinia_train.jsonl")
     print(f"  Val           : {stats.val}   → {data_dir}/infinia_val.jsonl")

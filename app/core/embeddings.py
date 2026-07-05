@@ -108,4 +108,3 @@ def probe_embed_model(*, model: str | None = None, corpus: CorpusKind = "framewo
 
 
 # Backward-compatible re-export for tests and callers.
-from app.core.embed_providers.ollama import _truncate_words as _truncate_for_embed  # noqa: E402

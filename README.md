@@ -63,7 +63,7 @@ python3 scripts/ingest.py
 python3 main.py
 
 # 4. Run tests
-python3 -m unittest discover -s tests -p "test_*.py"
+python3 -m pytest tests/
 
 # 5. (Optional) Evaluate tool routing accuracy
 PYTHONPATH=. python3 scripts/eval_tool_routing.py --backend token --show-errors

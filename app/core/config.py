@@ -239,8 +239,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     # When True, message/reply text snippets are included in step logs.
-    # Set to False to suppress content previews (e.g. for privacy).
-    log_step_payloads: bool = True
+    # Defaults to False to keep client PII out of logs; set LOG_STEP_PAYLOADS=true
+    # for local debugging only (traces the pipeline step-by-step per message).
+    log_step_payloads: bool = False
     # Optional path for ERROR-level logs (e.g. /app/logs/errors.log in Docker Compose).
     # Leave empty to log to stdout only.
     log_error_file: str = ""

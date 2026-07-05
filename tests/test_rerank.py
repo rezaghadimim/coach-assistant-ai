@@ -217,7 +217,6 @@ class TestConfigCachePath(unittest.TestCase):
         )
 
     def test_relative_env_override_is_resolved_to_absolute(self) -> None:
-        from pydantic_settings import BaseSettings
 
         import app.core.config as config_mod
 

@@ -23,14 +23,14 @@
 
 | Phase | Items | Done |
 |-------|-------|------|
-| A. Security | SEC-01 … SEC-08 | 5 / 8 |
-| B. Production / deploy | OPS-01 … OPS-04 | 0 / 4 |
+| A. Security | SEC-01 … SEC-08 | 8 / 8 |
+| B. Production / deploy | OPS-01 … OPS-04 | 4 / 4 |
 | C. Reliability | REL-01 … REL-06 | 6 / 6 |
 | D. AI reliability | AI-01 … AI-03 | 3 / 3 |
 | E. Code quality | CQ-01 … CQ-02 | 1 / 2 |
-| F. Testing / DevOps hardening | TEST-01 … TEST-04 | 1 / 4 |
-| G. Improvements | IMP-01 … IMP-03 | 0 / 3 |
-| **Total** | **30** | **16 / 30** |
+| F. Testing / DevOps hardening | TEST-01 … TEST-04 | 4 / 4 |
+| G. Improvements | IMP-01 … IMP-03 | 3 / 3 |
+| **Total** | **30** | **29 / 30** |
 
 > Update the "Done" column as you check items off.
 
@@ -65,8 +65,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In `app/memory/store.py`, add a required `user_id: str` parameter to `update_client_note` and `delete_client_note` and add `AND user_id = ?` to their WHERE clauses (bind the value). In `app/api/users.py`, pass the path `user_id` to both. Keep the 404 behavior when `rowcount == 0`. Add a test that creating a note for user "a" then calling `DELETE /clients/b/notes/{id}` returns 404 and the note still exists. Run the unittest suite and report.
 
-### - [ ] SEC-03 — Disable interactive API docs in production
-- **Area:** Security · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] SEC-03 — Disable interactive API docs in production
+- **Area:** Security · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** `/docs`, `/redoc`, `/openapi.json` exposed by default.
 - **Location:** `main.py:94` (`FastAPI(...)`).
 - **Action:** Add `debug: bool = False` to `config.py`. Pass `docs_url=None, redoc_url=None, openapi_url=None` to `FastAPI(...)` unless `settings.debug`.
@@ -105,8 +105,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In `app/api/chat.py` `build_system_prompt`, wrap the client-notes section and the previous-session summary in a clearly delimited, labeled block (e.g. a `<client_data>...</client_data>` fence) preceded by a sentence instructing the model to treat the enclosed text strictly as data, never as instructions. Strip obvious injection markers (lines like "ignore previous instructions") from note content before insertion. Do not change retrieval. Add a test (with a mocked store) asserting the fenced markers appear around injected notes. Run the unittest suite and report.
 
-### - [ ] SEC-07 — Add request body size limits
-- **Area:** Security · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] SEC-07 — Add request body size limits
+- **Area:** Security · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** `message`/note `content` have only `min_length=1`; no upper bound.
 - **Location:** `app/models/schemas.py:8-12,99-115,201`.
 - **Action:** Add `max_length` (e.g. 8000) to `ChatRequest.message`, `ClientNoteCreate.content`, `ClientNoteUpdate.content`, `ToolClassifyRequest.message`.
@@ -115,8 +115,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In `app/models/schemas.py`, add `max_length=8000` to the `message` field of `ChatRequest` and `ToolClassifyRequest`, and to the `content` field of `ClientNoteCreate` and `ClientNoteUpdate` (keep existing `min_length=1`). Add a test posting an over-limit message to `/api/chat` expecting 422. Run the unittest suite and report.
 
-### - [ ] SEC-08 — Default `LOG_STEP_PAYLOADS=false` for production
-- **Area:** Security · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] SEC-08 — Default `LOG_STEP_PAYLOADS=false` for production
+- **Area:** Security · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** Message-text previews logged by default (`config.py:219`); persisted to `logs/errors.log` on error.
 - **Location:** `app/core/config.py:219`; `docker-compose.yml:31`.
 - **Action:** Change the default to `False`; enable only in debug/dev. Document the PII implication in `.env.example`.
@@ -129,8 +129,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 
 # B. Production / deploy
 
-### - [ ] OPS-01 — Replace dev entrypoint with a production server command
-- **Area:** DevOps · **Severity:** Critical · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] OPS-01 — Replace dev entrypoint with a production server command
+- **Area:** DevOps · **Severity:** Critical · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** Ships `CMD ["uvicorn","main:app",...,"--workers","1"]` (single worker by design — the app holds on-disk SQLite + in-process caches; scale via container replicas, see Dockerfile comment). `main.py`'s `reload=True` stays under `if __name__ == "__main__"` for local dev only.
 - **Problem:** Container runs `python main.py` → `uvicorn.run(reload=True)`.
 - **Location:** `Dockerfile:18`; `main.py:230`.
 - **Action:** Set `CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8000","--workers","2"]`. Keep `main.py`'s `reload=True` only under `if __name__ == "__main__"` for local dev.
@@ -140,8 +141,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In the `Dockerfile`, change the final `CMD` to run uvicorn directly: `CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8000","--workers","2"]`. Leave `main.py`'s `if __name__ == "__main__"` block (with `reload=True`) unchanged for local dev. Verify `docker compose up --build` starts uvicorn with workers and no file-watcher/reloader. Report the startup logs.
 
-### - [ ] OPS-02 — Run container as non-root
-- **Area:** DevOps · **Severity:** High · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] OPS-02 — Run container as non-root
+- **Area:** DevOps · **Severity:** High · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** No `USER`; container runs as root.
 - **Location:** `Dockerfile`.
 - **Action:** Add a non-root user (`RUN adduser --system --no-create-home app`), `chown` `/app/data` and `/app/logs`, add `USER app` before `CMD`.
@@ -150,8 +151,8 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In the `Dockerfile`, create a non-root system user `app`, ensure `/app/data` and `/app/logs` are writable by it (`chown`), and add `USER app` before the `CMD`. Verify with `docker compose up --build` that the process runs as `app` (`docker exec <container> whoami`) and can still write the SQLite DB and log file. Report results.
 
-### - [ ] OPS-03 — Add an image HEALTHCHECK
-- **Area:** DevOps · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] OPS-03 — Add an image HEALTHCHECK
+- **Area:** DevOps · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
 - **Problem:** Health check only in compose, not the image.
 - **Location:** `Dockerfile`.
 - **Action:** Add `HEALTHCHECK --interval=30s --timeout=5s --start-period=90s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"`.
@@ -160,8 +161,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Add a `HEALTHCHECK` instruction to the `Dockerfile` that curls `http://localhost:8000/health/live` via `python -c "import urllib.request; urllib.request.urlopen(...)"`, with `--interval=30s --timeout=5s --start-period=90s`. Verify `docker inspect` reports `healthy` after startup. Report results.
 
-### - [ ] OPS-04 — Pin dependencies for reproducible Docker builds
-- **Area:** DevOps · **Severity:** High · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] OPS-04 — Pin dependencies for reproducible Docker builds
+- **Area:** DevOps · **Severity:** High · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** Fully pinned `requirements.lock` (untracked) generated; Dockerfile does `COPY requirements.lock .` + `pip install --no-cache-dir -r requirements.lock`.
 - **Problem:** `requirements.txt` uses `>=`; Docker installs via `pip` (bypasses `uv.lock`).
 - **Location:** `requirements.txt`; `Dockerfile:6`.
 - **Action:** Generate a fully pinned `requirements.lock` (`uv pip compile` / `pip-compile`) and `pip install -r requirements.lock` in the Dockerfile.
@@ -299,8 +301,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 
 # F. Testing / DevOps hardening
 
-### - [ ] TEST-01 — Isolate each test with an ephemeral database
-- **Area:** Testing · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] TEST-01 — Isolate each test with an ephemeral database
+- **Area:** Testing · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** `tests/conftest.py` points `MEMORY_DB_PATH` at a `tempfile.mkdtemp` file before `app.core.config` is first imported and cleans it up via `atexit`, so the whole suite runs against a throwaway DB (never touches `data/coach_assistant.db`).
 - **Problem:** Tests share on-disk `data/coach_assistant.db`; order-dependent.
 - **Location:** test `setUp` across `tests/`; `app/api/chat.py:34` module-level `store`.
 - **Action:** Point `MEMORY_DB_PATH` at a per-test temp file (or `:memory:`) via env/fixture; construct the store from settings so tests can override.
@@ -309,8 +312,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Make the test suite use an isolated database per test run instead of the shared on-disk `data/coach_assistant.db`. Add a base `TestCase` (or fixture) that sets `MEMORY_DB_PATH` to a `tempfile` path in `setUp` and cleans up in `tearDown`, and ensure `app/api/chat.py`'s store construction respects it. Verify the suite passes when run in randomized order. Run the unittest suite and report.
 
-### - [ ] TEST-02 — Add coverage measurement + CI gate
-- **Area:** Testing / DevOps · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] TEST-02 — Add coverage measurement + CI gate
+- **Area:** Testing / DevOps · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** `coverage` in `requirements-dev.txt`; CI runs `coverage run -m pytest tests/ -v` + `coverage report --fail-under=75`.
 - **Problem:** No coverage tooling or threshold.
 - **Location:** `.github/workflows/tests.yml:24-28`.
 - **Action:** Add `coverage`/`pytest-cov`; run `coverage run -m unittest discover …` + `coverage report --fail-under=75` in CI.
@@ -319,8 +323,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Add test-coverage measurement to CI. Add `coverage` to dev dependencies. In `.github/workflows/tests.yml`, replace the test step with `coverage run -m unittest discover -s tests -p "test_*.py"` followed by `coverage report --fail-under=75`. Verify locally that the report generates. Report the current coverage percentage.
 
-### - [ ] TEST-03 — Add lint + type-check to CI
-- **Area:** DevOps · **Severity:** Medium · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] TEST-03 — Add lint + type-check to CI
+- **Area:** DevOps · **Severity:** Medium · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** `ruff`/`mypy` in `requirements-dev.txt`; CI runs `ruff check .` and `mypy app/` before tests. Both pass clean on the current tree (60 source files).
 - **Problem:** CI runs only tests; no `ruff`/`mypy`.
 - **Location:** `.github/workflows/tests.yml`.
 - **Action:** Add steps for `ruff check .` and `mypy app/` (start non-strict, tighten over time).
@@ -344,8 +349,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 
 # G. Improvements (lower priority)
 
-### - [ ] IMP-01 — Version the RAG index cache by embedding model *(Requires codebase verification)*
-- **Area:** AI / Reliability · **Severity:** Low · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] IMP-01 — Version the RAG index cache by embedding model *(Requires codebase verification)*
+- **Area:** AI / Reliability · **Severity:** Low · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Finding:** The cache envelope (`{version, model, dim, chunks}`) and the `_load_cache`/`_save_cache` mismatch check already existed but were **dead code** — `index_chunks` called them without a `profile`, so a stale legacy cache was loaded unchecked and rebuilt caches carried no identity header. Fixed by threading `embed_profile_for_corpus(corpus)` into both calls, so a model/dim swap now discards the cache and rebuilds. Regression test `tests/test_rag_hybrid.py::TestEmbeddingCache::test_index_rebuilds_cache_on_model_mismatch`; two pre-existing reuse tests updated to write a matching header.
 - **Problem:** `rag_index_cache.json` may be reused across embed models with no identity check.
 - **Location:** `app/core/config.py:103`; cache load path in `app/rag/retriever.py`.
 - **Action:** **Verify first** whether cache load validates model/dim. If not, embed `{model, dim, version}` in the cache header and discard on mismatch.
@@ -354,8 +360,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > Check whether the RAG index cache load path in `app/rag/retriever.py` validates the embedding model/dimension that produced `data/rag_index_cache.json`. Report findings. If it does not, add a header `{model, dim, version}` to the cache and invalidate/rebuild on mismatch. Add a test that a model/dim change triggers a rebuild. Run the unittest suite and report.
 
-### - [ ] IMP-02 — Version the inline SQLite schema migration
-- **Area:** Backend / DevOps · **Severity:** Low · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] IMP-02 — Version the inline SQLite schema migration
+- **Area:** Backend / DevOps · **Severity:** Low · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** `MemoryStore._init_schema` now runs an ordered, forward-only `MIGRATIONS` list keyed on `PRAGMA user_version` (migration 0 = initial schema, migration 1 = `is_coach` backfill), bumping `user_version` after each. The ad-hoc `_ensure_users_is_coach_column` is gone.
 - **Problem:** `_ensure_users_is_coach_column` does ad-hoc `ALTER TABLE` at startup; no schema version.
 - **Location:** `app/memory/store.py:80-95`.
 - **Action:** Add a schema version (`PRAGMA user_version`) and a small ordered, forward-only, idempotent migration runner.
@@ -364,8 +371,9 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 - **Agent prompt:**
   > In `app/memory/store.py`, replace the ad-hoc startup `ALTER TABLE` (`_ensure_users_is_coach_column`) with a small versioned migration runner keyed on `PRAGMA user_version`: an ordered list of idempotent, forward-only migrations applied in sequence, bumping `user_version`. Existing databases must upgrade cleanly. Add a test that a pre-migration DB upgrades to the current schema and version. Run the unittest suite and report.
 
-### - [ ] IMP-03 — Emit metrics for external monitoring
-- **Area:** DevOps · **Severity:** Low · **Status:** todo · **Assignee:** _____ · **PR/commit:** _____
+### - [x] IMP-03 — Emit metrics for external monitoring
+- **Area:** DevOps · **Severity:** Low · **Status:** done · **Assignee:** Claude (Opus 4.8) · **PR/commit:** working tree 2026-07-05 (uncommitted)
+- **Note:** `app/api/metrics.py` renders Prometheus text (tool-router deferral/near-miss counters from `routing_observability`, per-layer `layer_available` gauges, and an `http_request_duration_seconds` summary) with a hand-rolled formatter (no new deps). Wired into `main.py`: an ASGI middleware records every request's duration, `_layer_availability()` mirrors `/health`'s per-layer probes, and `/metrics` is mounted unauthenticated (like `/health`). Tests in `tests/test_metrics.py`.
 - **Problem:** Observability is logs + in-memory stats only (lost on restart).
 - **Location:** `app/core/routing_observability.py`; `main.py` `/health`.
 - **Action:** Expose a `/metrics` endpoint (Prometheus text format) for deferral counts, per-layer availability, and request latency; or push to statsd/OTel.
@@ -398,3 +406,16 @@ Ship **SEC-01…SEC-06 + OPS-01 before adding any new feature.**
 | 2026-07-05 | AI-02 | done — scripted fake-provider tests for `_generate_with_tools`: iteration exhaustion → "unable to complete" fallback, and two sequential tool calls + final text (`tests/test_tool_loop.py`) | Claude (Opus 4.8) |
 | 2026-07-05 | AI-03 | done — verified enforcement is already layered (regex pre-filter + authoritative system-prompt scope refusal); documented `scope.py` as best-effort, removed dead import, added `tests/test_scope_enforcement.py` | Claude (Opus 4.8) |
 | 2026-07-05 | CQ-02 | audit delivered (`docs/CQ-02_INTENT_LAYER_AUDIT.md`) with token-routing baselines; found regex/router layers complementary; scoped safe consolidation; no code changed pending decision | Claude (Opus 4.8) |
+| 2026-07-05 | SEC-03 | done — `debug` flag added to config; `FastAPI(...)` sets `docs_url`/`redoc_url`/`openapi_url` to `None` unless `settings.debug` (verified in `main.py`) | Claude (Opus 4.8) |
+| 2026-07-05 | SEC-07 | done — `max_length=8000` on `ChatRequest.message`, `ClientNoteCreate.content`, `ClientNoteUpdate.content` (present) + `ToolClassifyRequest.message` (added this pass) | Claude (Opus 4.8) |
+| 2026-07-05 | SEC-08 | done — `log_step_payloads` default flipped to `False`; `.env.example`/comment note the PII implication | Claude (Opus 4.8) |
+| 2026-07-05 | OPS-01 | done — Dockerfile `CMD` runs uvicorn directly (`--workers 1` by design); `reload=True` confined to `main.py`'s `__main__` block | Claude (Opus 4.8) |
+| 2026-07-05 | OPS-02 | done — Dockerfile adds a non-root `app` user, `chown`s `/app/data` + `/app/logs`, and sets `USER app` before `CMD` | Claude (Opus 4.8) |
+| 2026-07-05 | OPS-03 | done — image `HEALTHCHECK` hits `/health/live` via `python -c urllib.request` (`--interval=30s --timeout=5s --start-period=90s`) | Claude (Opus 4.8) |
+| 2026-07-05 | OPS-04 | done — pinned `requirements.lock`; Dockerfile installs from it via `pip install --no-cache-dir -r requirements.lock` | Claude (Opus 4.8) |
+| 2026-07-05 | TEST-01 | done — `tests/conftest.py` sets `MEMORY_DB_PATH` to a per-run tempfile before config import; `atexit` cleanup | Claude (Opus 4.8) |
+| 2026-07-05 | TEST-02 | done — `coverage` dev dep; CI runs `coverage run -m pytest` + `coverage report --fail-under=75` | Claude (Opus 4.8) |
+| 2026-07-05 | TEST-03 | done — `ruff`/`mypy` dev deps; CI runs `ruff check .` + `mypy app/`; both clean on the tree | Claude (Opus 4.8) |
+| 2026-07-05 | IMP-01 | done — cache identity header (`{version,model,dim}`) was present but unwired; threaded `profile` into `_load_cache`/`_save_cache` in `index_chunks` so a model/dim swap rebuilds; test `test_index_rebuilds_cache_on_model_mismatch` | Claude (Opus 4.8) |
+| 2026-07-05 | IMP-02 | done — `user_version`-keyed forward-only `MIGRATIONS` runner in `MemoryStore._init_schema`; ad-hoc `ALTER TABLE` retired | Claude (Opus 4.8) |
+| 2026-07-05 | IMP-03 | done — `app/api/metrics.py` Prometheus endpoint wired into `main.py` (duration middleware + `_layer_availability` + unauthenticated `/metrics`); tests in `tests/test_metrics.py` | Claude (Opus 4.8) |

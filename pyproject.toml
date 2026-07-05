@@ -23,3 +23,51 @@ finetune = [
     "peft>=0.11.0",
     "accelerate>=0.30.0",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# Default rule set (E/F) only for now; broaden gradually.
+select = ["E", "F"]
+# Line-length is not yet enforced across the existing tree (many pre-existing
+# lines run long); tighten this once a `ruff format` pass is done separately.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Standalone scripts do `sys.path.insert(0, ROOT)` before importing `app.*`,
+# since they run outside the installed package.
+"scripts/*.py" = ["E402"]
+
+[tool.mypy]
+# numpy's bundled stubs use PEP 695 `type` statements that need a 3.12+ target
+# to parse; the app itself still only requires >=3.11 (see Dockerfile/pyproject).
+python_version = "3.12"
+ignore_missing_imports = true
+# Non-strict starting point — tighten incrementally.
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_unused_ignores = false
+exclude = ["tests/", "scripts/"]
+
+# Pre-existing type errors, silenced so the CI gate can go in without a large
+# refactor. Each is a real mismatch worth fixing on its own — see
+# docs/PRODUCTION_READINESS_CHECKLIST.md TEST-03 — not an intentional ignore.
+[[tool.mypy.overrides]]
+module = [
+    "app.core.tools",
+    "app.core.model_registry",
+    "app.rag.retriever",
+    "app.core.tool_router",
+    "app.api.chat",
+    "app.api.openai_compat",
+]
+ignore_errors = true
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true

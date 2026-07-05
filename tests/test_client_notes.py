@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.api.chat import reset_runtime_state, store
+from app.api.chat import reset_runtime_state
 from main import app
 
 

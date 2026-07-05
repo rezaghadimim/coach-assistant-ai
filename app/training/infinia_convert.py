@@ -21,9 +21,8 @@ import json
 import random
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 # Resolved at import time so tests can override before importing this module.
 _PROMPTS_MODULE = None
@@ -166,7 +165,7 @@ def adapt_completion_ollama(
         )
         resp.raise_for_status()
         return resp.json()["response"].strip()
-    except Exception as exc:
+    except Exception:
         # Fall back to template adaptation so a single Ollama hiccup does not abort.
         return adapt_completion_template(completion, topic)
 
@@ -247,7 +246,6 @@ def convert_dataset(
     total = len(rows)
     n_val = max(1, round(total * val_ratio))
     n_holdout = max(1, round(total * (1 - train_ratio - val_ratio)))
-    n_train = total - n_val - n_holdout
 
     splits = (
         [("holdout", rows[:n_holdout])]

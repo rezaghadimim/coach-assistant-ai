@@ -9,6 +9,92 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+def _current_user_version(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+def _migration_0_initial_schema(conn: sqlite3.Connection) -> None:
+    """Create the base tables (users, sessions, messages, client_notes)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            name TEXT,
+            profile_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ended_at TEXT,
+            summary TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(user_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS client_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            session_id TEXT,
+            note_type TEXT NOT NULL DEFAULT 'general',
+            title TEXT,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(user_id),
+            FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+        )
+        """
+    )
+
+
+def _migration_1_add_is_coach_column(conn: sqlite3.Connection) -> None:
+    """Add is_coach flag and backfill coach rows from existing sessions."""
+    columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "is_coach" not in columns:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN is_coach INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute(
+            """
+            UPDATE users
+            SET is_coach = 1
+            WHERE user_id IN (SELECT DISTINCT user_id FROM sessions)
+            """
+        )
+
+
+# Ordered, forward-only, idempotent migrations. Each function's index in this
+# list is the schema version it upgrades *to* (i.e. migration i moves the db
+# from user_version == i to user_version == i + 1). Never reorder or remove
+# entries here — append new migrations to the end instead.
+MIGRATIONS = [
+    _migration_0_initial_schema,
+    _migration_1_add_is_coach_column,
+]
+
+
 class MemoryStore:
     """Persistence layer for user profiles and coaching sessions."""
 
@@ -21,84 +107,31 @@ class MemoryStore:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        # WAL lets readers run concurrently with a single writer (default
-        # rollback journal blocks both), and busy_timeout makes a contending
-        # writer wait up to 5s for the lock instead of failing immediately with
-        # "database is locked" under concurrent access.
-        conn.execute("PRAGMA journal_mode = WAL")
+        # busy_timeout must be set *before* the journal_mode switch: changing
+        # journal mode itself takes an exclusive lock, and with multiple
+        # uvicorn workers starting concurrently (each running _init_schema on
+        # import) two processes can race for that lock. Without busy_timeout
+        # already active on this connection, the loser fails immediately with
+        # "database is locked" instead of waiting for the winner to finish.
         conn.execute("PRAGMA busy_timeout = 5000")
+        # WAL lets readers run concurrently with a single writer (default
+        # rollback journal blocks both).
+        conn.execute("PRAGMA journal_mode = WAL")
         return conn
 
     def _init_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id TEXT PRIMARY KEY,
-                    name TEXT,
-                    profile_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sessions (
-                    session_id TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    ended_at TEXT,
-                    summary TEXT,
-                    FOREIGN KEY(user_id) REFERENCES users(user_id)
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(session_id) REFERENCES sessions(session_id)
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS client_notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    session_id TEXT,
-                    note_type TEXT NOT NULL DEFAULT 'general',
-                    title TEXT,
-                    content TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(user_id) REFERENCES users(user_id),
-                    FOREIGN KEY(session_id) REFERENCES sessions(session_id)
-                )
-                """
-            )
-            self._ensure_users_is_coach_column(conn)
+        """Apply any pending migrations, tracked via ``PRAGMA user_version``.
 
-    def _ensure_users_is_coach_column(self, conn: sqlite3.Connection) -> None:
-        """Add is_coach flag and backfill coach rows from existing sessions."""
-        columns = {
-            row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()
-        }
-        if "is_coach" not in columns:
-            conn.execute(
-                "ALTER TABLE users ADD COLUMN is_coach INTEGER NOT NULL DEFAULT 0"
-            )
-            conn.execute(
-                """
-                UPDATE users
-                SET is_coach = 1
-                WHERE user_id IN (SELECT DISTINCT user_id FROM sessions)
-                """
-            )
+        Migrations run inside the same connection/transaction used
+        historically by this method: each migration is idempotent and
+        forward-only, and ``user_version`` is bumped right after each one
+        completes so a mid-list failure leaves the db at a consistent,
+        resumable version rather than silently re-running earlier steps.
+        """
+        with self._connect() as conn:
+            for version in range(_current_user_version(conn), len(MIGRATIONS)):
+                MIGRATIONS[version](conn)
+                conn.execute(f"PRAGMA user_version = {version + 1}")
 
     def upsert_user(
         self,

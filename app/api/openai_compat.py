@@ -328,7 +328,7 @@ async def chat_completions(
     user_id = _resolve_user_id(request.user, x_user_id, x_openwebui_user_id)
     coach_name = (x_openwebui_user_name or "").strip() or None
 
-    msg_id = bind_message(user_id)
+    bind_message(user_id)
     t0 = time.monotonic()
 
     # Extract the latest user message for RAG retrieval and persistence.

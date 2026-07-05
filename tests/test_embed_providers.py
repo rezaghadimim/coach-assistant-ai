@@ -5,7 +5,6 @@ from unittest.mock import patch
 from app.core.embed_providers import embed_profile_for_corpus, get_embed_provider
 from app.core.embed_providers.openai import OpenAIEmbedProvider
 from app.core.embed_providers.ollama import OllamaEmbedProvider
-from app.core.embed_providers.openrouter import OpenRouterEmbedProvider
 
 
 def test_framework_profile_defaults_to_ollama() -> None:

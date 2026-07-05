@@ -22,7 +22,6 @@ import json
 import os
 import sys
 import time
-from collections import defaultdict
 from pathlib import Path
 
 
@@ -113,9 +112,6 @@ def _run_eval(
     correct = 0
     deferred = 0
     latencies: list[float] = []
-    # Stage-1 recall tracking: did the correct tool appear in top_k candidates?
-    stage1_hits = 0
-    stage1_total = 0
 
     for row in rows:
         utterance = row["utterance"]

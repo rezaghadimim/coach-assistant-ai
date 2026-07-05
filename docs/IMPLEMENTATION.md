@@ -367,6 +367,4 @@ See [`FINETUNE.md`](FINETUNE.md) for the full guide, export options, and decisio
 
 ```bash
 python3 -m pytest tests/
-# or
-python3 -m unittest discover -s tests -p "test_*.py"
 ```

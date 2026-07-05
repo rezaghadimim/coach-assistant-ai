@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional
 
 from app.core.config import settings
 from app.core.llm_providers.http import get_client, post_with_retry

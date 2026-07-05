@@ -1,11 +1,11 @@
 """Tests for hybrid RAG retrieval (embedding + token fallback) and disk cache."""
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from app.core.embed_providers import embed_profile_for_corpus
 from app.rag.retriever import (
     clear_index,
     index_chunks,
@@ -14,7 +14,6 @@ from app.rag.retriever import (
     _load_cache,
     _save_cache,
     _cache_key,
-    _embedding_index_ready,
 )
 from app.rag.ingest import DocumentChunk
 
@@ -178,9 +177,12 @@ class TestEmbeddingCache(unittest.TestCase):
         chunks = [_make_chunk("c1", "GROW coaching model")]
         cache_key = _cache_key(chunks[0])
 
+        profile = embed_profile_for_corpus(chunks[0].corpus)
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = str(Path(tmp) / "cache.json")
-            _save_cache(cache_path, {cache_key: [0.9, 0.1, 0.0]})
+            # Save with the matching identity header so the reuse path (IMP-01)
+            # accepts the cache instead of discarding it as stale.
+            _save_cache(cache_path, {cache_key: [0.9, 0.1, 0.0]}, profile)
 
             provider = MagicMock()
             provider.embed_passages.return_value = [[0.5, 0.5, 0.0]]
@@ -189,16 +191,40 @@ class TestEmbeddingCache(unittest.TestCase):
                 index_chunks(chunks, embed=True, cache_path=cache_path)
                 provider.embed_passages.assert_not_called()
 
+    def test_index_rebuilds_cache_on_model_mismatch(self) -> None:
+        """A cache written by a different embed model/dim is discarded (IMP-01)."""
+        from dataclasses import replace
+
+        chunks = [_make_chunk("c1", "GROW coaching model")]
+        cache_key = _cache_key(chunks[0])
+        current = embed_profile_for_corpus(chunks[0].corpus)
+        stale = replace(current, model="some/other-model", dimensions=999)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = str(Path(tmp) / "cache.json")
+            # Cache saved under a different model — must not be reused.
+            _save_cache(cache_path, {cache_key: [0.9, 0.1, 0.0]}, stale)
+
+            provider = MagicMock()
+            provider.embed_passages.return_value = [[0.5, 0.5, 0.0]]
+            with patch("app.rag.retriever.get_embed_provider", return_value=provider):
+                clear_index()
+                index_chunks(chunks, embed=True, cache_path=cache_path)
+                # Stale cache discarded → embeddings recomputed.
+                provider.embed_passages.assert_called_once()
+
     def test_index_reset_prunes_stale_cache_keys(self) -> None:
         """Full reindex rewrites the cache so keys from removed docs do not linger."""
         chunks = [_make_chunk("c1", "GROW coaching model")]
         cache_key = _cache_key(chunks[0])
 
+        profile = embed_profile_for_corpus(chunks[0].corpus)
         with tempfile.TemporaryDirectory() as tmp:
             cache_path = str(Path(tmp) / "cache.json")
             _save_cache(
                 cache_path,
                 {"orphan::deadbeef": [0.1, 0.2], cache_key: [0.9, 0.1, 0.0]},
+                profile,
             )
 
             provider = MagicMock()

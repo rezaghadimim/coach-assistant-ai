@@ -28,6 +28,11 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
 
 # Models (large files)
 /models/

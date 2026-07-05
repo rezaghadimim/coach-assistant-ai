@@ -136,7 +136,6 @@ def main() -> int:
         question: str = row["question"]
         must_abstain: bool = row.get("must_abstain", False)
         keywords: list[str] = row.get("keywords") or []
-        category: str = row.get("category", "")
 
         chunks_retrieved = retrieve(
             question,

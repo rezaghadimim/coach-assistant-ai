@@ -224,7 +224,7 @@ def embed_collection_chunks(
     import json
     from pathlib import Path
 
-    from app.core.embed_providers import embed_profile_for_corpus, get_embed_provider
+    from app.core.embed_providers import embed_profile_for_corpus
 
     if not chunks:
         return {}

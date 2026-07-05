@@ -19,6 +19,7 @@ from typing import Iterable, Literal
 
 from app.core.config import settings
 from app.core.embed_providers import embed_profile_for_corpus, get_embed_provider
+from app.core.embed_providers.types import EmbedProfile
 from app.core.observability import log_step
 from app.rag.ingest import DocumentChunk, ingest_documents_from_dir
 
@@ -139,11 +140,14 @@ def index_chunks(
         target.clear()
         _set_embedding_ready(resolved_corpus, False)
 
+    profile = embed_profile_for_corpus(resolved_corpus)
+
     cache: dict[str, list[float]] = {}
     if embed and cache_path:
-        cache = _load_cache(cache_path)
+        # Pass the profile so a stale cache (different embed model/dim) is
+        # discarded rather than mixing vectors from different embedding spaces.
+        cache = _load_cache(cache_path, profile)
 
-    profile = embed_profile_for_corpus(resolved_corpus)
     provider = get_embed_provider(profile) if embed else None
     newly_embedded: dict[str, list[float]] = {}
     added = 0
@@ -198,10 +202,10 @@ def index_chunks(
                     for item in target
                     if item.embedding
                 }
-                _save_cache(cache_path, cache)
+                _save_cache(cache_path, cache, profile)
             elif newly_embedded:
                 cache.update(newly_embedded)
-                _save_cache(cache_path, cache)
+                _save_cache(cache_path, cache, profile)
 
     return added
 
@@ -796,24 +800,78 @@ def _cache_key(chunk: DocumentChunk) -> str:
     return f"{chunk.embed_profile_id}::{chunk.chunk_id}::{text_hash}"
 
 
-def _load_cache(cache_path: str) -> dict[str, list[float]]:
+# Bumped if the on-disk cache envelope shape changes in an incompatible way.
+_CACHE_FORMAT_VERSION = 1
+
+
+def _load_cache(cache_path: str, profile: EmbedProfile | None = None) -> dict[str, list[float]]:
+    """Load the on-disk embedding cache, discarding it on a model/dim mismatch.
+
+    The cache file stores an identity header (``model`` + ``dim``) alongside
+    the vectors. If *profile* is given and does not match the header, the
+    cache is stale (e.g. the operator swapped ``rag_embed_model``) and must
+    not be reused, since the vectors would have the wrong dimensionality or
+    come from a different embedding space entirely.
+    """
     path = Path(cache_path)
     if not path.exists():
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return data
     except Exception as exc:
         logger.warning("rag: could not load embedding cache %s: %s", cache_path, exc)
-    return {}
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    # Legacy bare-dict cache (no identity header): treat as stale so it is
+    # rebuilt with a proper header rather than silently reused.
+    if "chunks" not in data:
+        if profile is not None:
+            log_step(
+                logger,
+                "rag.cache",
+                "stale",
+                reason="legacy_format_no_header",
+                cache_path=cache_path,
+            )
+            return {}
+        return data
+
+    chunks = data.get("chunks")
+    if not isinstance(chunks, dict):
+        return {}
+
+    if profile is not None:
+        stored_model = data.get("model")
+        stored_dim = data.get("dim")
+        if stored_model != profile.model or stored_dim != profile.dimensions:
+            log_step(
+                logger,
+                "rag.cache",
+                "stale",
+                reason="model_or_dim_mismatch",
+                cache_path=cache_path,
+                stored_model=stored_model,
+                current_model=profile.model,
+                stored_dim=stored_dim,
+                current_dim=profile.dimensions,
+            )
+            return {}
+
+    return chunks
 
 
-def _save_cache(cache_path: str, cache: dict[str, list[float]]) -> None:
+def _save_cache(cache_path: str, cache: dict[str, list[float]], profile: EmbedProfile | None = None) -> None:
     path = Path(cache_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict = {"version": _CACHE_FORMAT_VERSION, "chunks": cache}
+    if profile is not None:
+        payload["model"] = profile.model
+        payload["dim"] = profile.dimensions
     try:
-        path.write_text(json.dumps(cache), encoding="utf-8")
+        path.write_text(json.dumps(payload), encoding="utf-8")
     except Exception as exc:
         logger.warning("rag: could not write embedding cache %s: %s", cache_path, exc)
 

@@ -22,7 +22,6 @@ os.environ.setdefault("TOOL_ROUTER_RERANK_TOP_K", "5")
 
 def _build_fake_embed_backend(examples_by_tool: dict[str, list[str]]):
     """Return a populated _EmbeddingBackend with simple identity-like vectors."""
-    import math
 
     from app.core.tool_router import _EmbeddingBackend, _Example
 

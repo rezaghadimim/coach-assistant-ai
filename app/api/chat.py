@@ -1,7 +1,6 @@
 """Chat endpoint — POST /chat."""
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -154,7 +153,7 @@ def _idea_to_item(idea: ExpertIdea) -> ExpertIdeaItem:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """Handle a coaching chat message and persist user context."""
-    msg_id = bind_message(request.user_id)
+    bind_message(request.user_id)
     t0 = time.monotonic()
     path = "unknown"
 

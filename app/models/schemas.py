@@ -9,7 +9,7 @@ class ChatRequest(BaseModel):
     """Incoming chat request payload."""
 
     user_id: str = Field(..., min_length=1)
-    message: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=8000)
 
 
 class ExpertIdeaItem(BaseModel):
@@ -100,7 +100,7 @@ class ClientNoteCreate(BaseModel):
     """Payload for creating a note about a client."""
 
     user_id: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=8000)
     note_type: str = Field(
         default="general",
         description="Type of note: general, story, decision, goal, progress",
@@ -112,7 +112,7 @@ class ClientNoteCreate(BaseModel):
 class ClientNoteUpdate(BaseModel):
     """Payload for updating an existing client note."""
 
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=8000)
     title: Optional[str] = None
     note_type: Optional[str] = None
 
@@ -198,7 +198,7 @@ class CoachBriefing(BaseModel):
 class ToolClassifyRequest(BaseModel):
     """Request payload for classifying a message into a tool."""
 
-    message: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=8000)
 
 
 class ToolMatchItem(BaseModel):

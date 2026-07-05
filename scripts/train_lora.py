@@ -470,7 +470,7 @@ def main() -> None:
     output_dir = Path(args.artifacts_dir) / run_id
 
     if args.dry_run:
-        print(f"DRY RUN — would train with:")
+        print("DRY RUN — would train with:")
         print(f"  Profile   : {args.profile}")
         if args.profile == "sequential":
             print(f"  Stage 1   : {infinia_path}")
@@ -507,7 +507,6 @@ def main() -> None:
             sys.exit(1)
 
         final_adapter_dir = output_dir / "adapter"
-        stage2_path: Path | None = None
 
         if sessions_path.exists():
             stage1_dir = output_dir / "adapter_stage1"
@@ -553,7 +552,6 @@ def main() -> None:
                     adapter_dir=final_adapter_dir,
                     resume_adapter_path=stage1_dir,
                 )
-            stage2_path = sessions_path
         else:
             print(
                 f"WARNING: Sessions data not found at {sessions_path}. "
@@ -598,12 +596,12 @@ def main() -> None:
 
     model_name = ollama_model_name(args.profile)
     print(f"\nTraining complete. Artifacts: {output_dir}")
-    print(f"\nTo deploy:")
+    print("\nTo deploy:")
     print(f"  ollama create {model_name} -f {modelfile_path}")
     print(f"  # Set OLLAMA_MODEL={model_name} in .env, then restart the app")
-    print(f"\nTo evaluate:")
+    print("\nTo evaluate:")
     print(f"  python scripts/eval_coaching_style.py --models baseline,{model_name}")
-    print(f"  python scripts/eval_tool_routing.py")
+    print("  python scripts/eval_tool_routing.py")
 
 
 if __name__ == "__main__":

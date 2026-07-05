@@ -11,7 +11,7 @@ from app.core.confirmations import (
     parse_pending_write,
     register_pending_write,
 )
-from app.core.tools import ToolOutcome, execute_tool, execute_tool_outcome
+from app.core.tools import execute_tool, execute_tool_outcome
 from app.memory.store import MemoryStore
 
 

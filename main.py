@@ -2,10 +2,11 @@
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager, suppress
 
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import require_api_key
@@ -13,6 +14,8 @@ from app.api.briefing import router as briefing_router
 from app.api.chat import router as chat_router
 from app.api.collections import router as collections_router
 from app.api.ingest import router as ingest_router
+from app.api.metrics import observe_request_duration
+from app.api.metrics import router as metrics_router
 from app.api.openai_compat import router as openai_compat_router
 from app.api.tools import router as tools_router
 from app.api.users import router as users_router
@@ -101,9 +104,23 @@ app = FastAPI(
     version=settings.app_version,
     description="AI-powered coaching assistant — manage clients, track stories, and deliver actionable coaching guidance.",
     lifespan=lifespan,
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.middleware("http")
+async def _record_request_duration(request: Request, call_next):
+    """Record every request's wall-clock duration for /metrics (IMP-03)."""
+    start = time.perf_counter()
+    try:
+        return await call_next(request)
+    finally:
+        observe_request_duration(time.perf_counter() - start)
+
 
 _auth = [Depends(require_api_key)]
 
@@ -114,6 +131,8 @@ app.include_router(briefing_router, prefix="/api", tags=["briefing"], dependenci
 app.include_router(users_router, prefix="/api", tags=["users"], dependencies=_auth)
 app.include_router(tools_router, prefix="/api", tags=["tools"], dependencies=_auth)
 app.include_router(openai_compat_router, tags=["openai-compat"], dependencies=_auth)
+# Prometheus scrape endpoint — unauthenticated, mirroring /health's posture.
+app.include_router(metrics_router, tags=["metrics"])
 
 
 @app.get("/health/live")
@@ -230,6 +249,34 @@ async def health_check():
         "embeddings": embed_info,
         "tool_router": tool_router_info,
         "rerank": rerank_info,
+    }
+
+
+async def _layer_availability() -> dict[str, bool]:
+    """Per-layer availability booleans, shared by /metrics (IMP-03).
+
+    Mirrors the per-layer probes behind /health so the two surfaces report the
+    same view. Returns only booleans — no message content or identifiers.
+    """
+    from app.core.embeddings import probe_embed_model
+    from app.core.model_registry import probe_openrouter
+
+    ollama_ok = await _probe_ollama_server()
+    cloud_ok = await probe_openrouter()
+    embed_ok = probe_embed_model() if settings.tool_router_enabled else False
+
+    rerank_ok = False
+    if settings.rag_rerank_enabled:
+        from app.core.rerank import rerank_probe_cached
+
+        rerank_ok = rerank_probe_cached() is True
+
+    return {
+        "ollama": ollama_ok,
+        "openrouter": cloud_ok,
+        "embeddings": embed_ok,
+        "tool_router": settings.tool_router_enabled,
+        "rerank": rerank_ok,
     }
 
 

@@ -1,7 +1,6 @@
 """Tests for collection filesystem ingest."""
 
 import json
-from pathlib import Path
 
 from app.knowledge.ingest import ingest_collection_chunks_from_disk
 from app.knowledge.store import KnowledgeStore
