@@ -10,13 +10,15 @@ COPY . .
 # Flush stdout immediately so logs appear live in `docker compose logs -f`
 ENV PYTHONUNBUFFERED=1
 
-# Persist coaching data outside the container image
-VOLUME ["/app/data", "/app/docs/knowledge"]
-
+# Create the user and volume paths BEFORE declaring VOLUME: the legacy
+# builder discards changes made to a path after its VOLUME declaration.
 RUN adduser --system --group --no-create-home app \
     && mkdir -p /app/data /app/logs \
     && chown -R app:app /app/data /app/logs
 USER app
+
+# Persist coaching data outside the container image
+VOLUME ["/app/data", "/app/docs/knowledge"]
 
 EXPOSE 8000
 
