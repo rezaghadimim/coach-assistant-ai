@@ -176,6 +176,41 @@ class TestSessionManagerAsync(unittest.TestCase):
         self._run(scenario())
         store.update_session_summary.assert_called_once()
 
+    def test_timed_out_summary_releases_boundary_claim(self) -> None:
+        """A wait_for timeout cancels the summarizer; the claim must be released
+        so the next boundary check retries instead of skipping silently."""
+        from app.core.config import settings
+        from app.memory.session import SessionManager
+
+        store = MagicMock()
+        store.count_session_messages.return_value = 21
+        store.get_session_messages.return_value = [{"role": "user", "content": "x"}]
+        sm = SessionManager(store)
+
+        async def scenario() -> None:
+            async def hung_summary(_messages):
+                await asyncio.sleep(60)
+
+            old_timeout = settings.summary_timeout_s
+            settings.summary_timeout_s = 0.01
+            try:
+                with patch("app.memory.session.summarize_session", new=hung_summary):
+                    sm.schedule_update_summary("sess-1", threshold=20)
+                    await asyncio.gather(*sm._summary_tasks)
+            finally:
+                settings.summary_timeout_s = old_timeout
+
+            self.assertNotIn("sess-1", sm._summarized_boundary)
+            # The next check retries and succeeds.
+            with patch(
+                "app.memory.session.summarize_session",
+                new=AsyncMock(return_value="## Summary"),
+            ):
+                await sm.maybe_update_summary("sess-1", threshold=20)
+
+        self._run(scenario())
+        store.update_session_summary.assert_called_once()
+
     def test_schedule_update_summary_does_not_block_request(self) -> None:
         """REL-01: the endpoint path returns before the summarizer LLM call finishes."""
         from app.memory.session import SessionManager

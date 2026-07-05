@@ -95,8 +95,10 @@ class SessionManager:
             messages = self.store.get_session_messages(session_id)
             summary = await summarize_session(messages)
             self.store.update_session_summary(session_id, summary)
-        except Exception:
-            # Release the claim so the next boundary check retries.
+        except BaseException:
+            # Release the claim so the next boundary check retries. BaseException
+            # (not Exception) so a wait_for timeout's CancelledError also releases
+            # the claim instead of silently skipping this boundary forever.
             if self._summarized_boundary.get(session_id) == boundary:
                 self._summarized_boundary.pop(session_id, None)
             raise
