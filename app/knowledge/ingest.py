@@ -45,8 +45,30 @@ def ingest_collection_chunks_from_disk(
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     knowledge_store: KnowledgeStore | None = None,
 ) -> list[DocumentChunk]:
-    """Discover filesystem collections and return transcript chunks."""
-    root = Path(collections_dir or settings.rag_collections_dir).expanduser().resolve()
+    """Discover filesystem collections and return transcript chunks.
+
+    With ``collections_dir=None`` (the default) both the public collections dir
+    and the private (submodule) collections dir are ingested and merged — this
+    mirrors the starter+private pattern for framework docs. Pass an explicit path
+    to restrict ingestion to a single root.
+    """
+    if collections_dir is None:
+        from app.core.knowledge_paths import collection_dirs
+
+        store = knowledge_store or KnowledgeStore(settings.memory_db_path)
+        merged: list[DocumentChunk] = []
+        for root_dir in collection_dirs():
+            merged.extend(
+                ingest_collection_chunks_from_disk(
+                    str(root_dir),
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    knowledge_store=store,
+                )
+            )
+        return merged
+
+    root = Path(collections_dir).expanduser().resolve()
     if not root.exists():
         return []
 

@@ -37,10 +37,10 @@ User message
 
 ## Corpus
 
-The routing corpus lives in `docs/tool-knowledge/`:
+The routing corpus lives in `data/tool-knowledge/`:
 
 ```text
-docs/tool-knowledge/
+data/tool-knowledge/
   create_client.md          ← when to use, hard negatives
   add_client_note.md
   update_client_note.md
@@ -135,7 +135,7 @@ The cross-encoder model (`BAAI/bge-reranker-base`) downloads automatically on fi
 TOOL_ROUTER_ENABLED=true
 TOOL_ROUTER_BACKEND=auto
 RAG_EMBED_MODEL=karuniaperjuangan/multilingual-e5-small
-TOOL_KNOWLEDGE_DIR=docs/tool-knowledge
+TOOL_KNOWLEDGE_DIR=data/tool-knowledge
 # Tuned to 0.65 against 307-example corpus: 95.77% hard-set accuracy, precision 1.00.
 TOOL_ROUTER_THRESHOLD=0.65
 TOOL_ROUTER_MARGIN=0.08
@@ -153,7 +153,7 @@ TOOL_ROUTER_RERANK_MODEL=BAAI/bge-reranker-base
 TOOL_ROUTER_LLM_FALLBACK_ENABLED=true
 ```
 
-Docker users: the embed model must be pulled on the **host** Ollama. The API reaches it via `host.docker.internal:11434`. The `docs/tool-knowledge/` directory is mounted read-only into the container.
+Docker users: the embed model must be pulled on the **host** Ollama. The API reaches it via `host.docker.internal:11434`. The `data/tool-knowledge/` directory is mounted read-only into the container.
 
 ### 3. E5 prefix convention
 

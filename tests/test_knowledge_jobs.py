@@ -8,6 +8,7 @@ from app.knowledge.jobs import (
     _process_youtube_source,
     _validate_local_media_path,
     _validate_video_url,
+    _youtube_video_id,
     process_pending_sources,
 )
 from app.knowledge.store import KnowledgeStore
@@ -33,27 +34,62 @@ def test_process_pending_marks_unsupported_source_failed(tmp_path) -> None:
     assert updated["status"] == "failed"
 
 
-def test_youtube_job_requires_yt_dlp(tmp_path) -> None:
+def _make_youtube_source(tmp_path, slug="yt", uri="https://www.youtube.com/watch?v=abc"):
     store = KnowledgeStore(str(tmp_path / "db.sqlite"))
-    collection = store.create_collection(
-        slug="yt",
-        person_name="YT",
-        title="YT",
-    )
+    collection = store.create_collection(slug=slug, person_name="YT", title="YT")
     source = store.create_source(
         collection["id"],
         title="Video",
         source_type="youtube",
-        uri="https://www.youtube.com/watch?v=abc",
+        uri=uri,
         status="pending",
     )
-    with patch("app.knowledge.jobs.shutil.which", return_value=None):
-        try:
+    return store, collection, source
+
+
+def test_youtube_captions_path_writes_vtt_and_skips_download(tmp_path) -> None:
+    """When captions exist they are written as VTT and no yt-dlp download runs."""
+    store, collection, source = _make_youtube_source(tmp_path)
+
+    def fake_fetch(video_id, path):
+        assert video_id == "abc"
+        path.write_text("WEBVTT\n", encoding="utf-8")
+        return True
+
+    with (
+        patch("app.knowledge.jobs._fetch_youtube_captions", side_effect=fake_fetch),
+        patch("app.knowledge.jobs.subprocess.run") as run_mock,
+    ):
+        _process_youtube_source(store, collection, source, tmp_path)
+
+    run_mock.assert_not_called()
+    updated = store.get_source(source["id"])
+    assert updated is not None and updated["status"] == "ready"
+    assert (tmp_path / "yt" / "sources" / source["id"] / "transcript.vtt").exists()
+
+
+def test_youtube_job_requires_yt_dlp_for_audio_fallback(tmp_path) -> None:
+    """No captions + missing yt-dlp (needed for the audio fallback) -> RuntimeError."""
+    store, collection, source = _make_youtube_source(tmp_path)
+    with (
+        patch("app.knowledge.jobs._fetch_youtube_captions", return_value=False),
+        patch("app.knowledge.jobs.shutil.which", return_value=None),
+    ):
+        with pytest.raises(RuntimeError, match="yt-dlp"):
             _process_youtube_source(store, collection, source, tmp_path)
-        except RuntimeError as exc:
-            assert "yt-dlp" in str(exc)
-        else:
-            raise AssertionError("expected RuntimeError")
+
+
+@pytest.mark.parametrize(
+    "uri,expected",
+    [
+        ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+        ("https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+        ("https://www.youtube.com/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+        ("https://www.youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ"),
+    ],
+)
+def test_youtube_video_id_extraction(uri, expected) -> None:
+    assert _youtube_video_id(uri) == expected
 
 
 # ------------------------------------------------------------------
@@ -98,16 +134,8 @@ def test_option_like_uri_rejected_before_yt_dlp(tmp_path) -> None:
 
 
 def test_yt_dlp_argv_uses_end_of_options_separator(tmp_path) -> None:
-    """Even a valid URL is placed after `--` so it cannot be parsed as an option."""
-    store = KnowledgeStore(str(tmp_path / "db.sqlite"))
-    collection = store.create_collection(slug="yt3", person_name="YT", title="YT")
-    source = store.create_source(
-        collection["id"],
-        title="Video",
-        source_type="youtube",
-        uri="https://www.youtube.com/watch?v=abc",
-        status="pending",
-    )
+    """The audio-fallback URL is placed after `--` so it cannot be parsed as an option."""
+    store, collection, source = _make_youtube_source(tmp_path, slug="yt3")
     calls = []
 
     def fake_run(argv, **kwargs):
@@ -117,15 +145,14 @@ def test_yt_dlp_argv_uses_end_of_options_separator(tmp_path) -> None:
             returncode = 0
             stderr = ""
 
-        # Fake a produced subtitle so the audio-download branch is skipped.
-        (tmp_path / "yt3" / "sources" / source["id"] / "transcript.vtt").write_text(
-            "WEBVTT", encoding="utf-8"
-        )
         return Result()
 
     with (
+        # No captions -> falls through to the yt-dlp audio download + Whisper.
+        patch("app.knowledge.jobs._fetch_youtube_captions", return_value=False),
         patch("app.knowledge.jobs.shutil.which", return_value="/usr/bin/yt-dlp"),
         patch("app.knowledge.jobs.subprocess.run", side_effect=fake_run),
+        patch("app.knowledge.jobs._transcribe_audio"),
     ):
         _process_youtube_source(store, collection, source, tmp_path)
 

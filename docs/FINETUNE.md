@@ -178,7 +178,7 @@ The [Infinia Life Coach Dataset](https://huggingface.co/datasets/Infiniaai/infin
 (2,842 rows, Apache-2.0) provides poetic, empathy-focused prompt/completion pairs. Use it to give
 the model warmer emotional attunement **before** or alongside real session data.
 
-> **Do NOT store Infinia rows in `docs/knowledge/` (RAG).**
+> **Do NOT store Infinia rows in `data/knowledge/` (RAG).**
 > They are behavior training data, not retrievable knowledge. See [`RAG.md`](RAG.md).
 
 ### When to use each profile

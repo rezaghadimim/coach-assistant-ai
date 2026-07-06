@@ -91,12 +91,12 @@ python3 scripts/run_tuning_pipeline.py --profile infinia-only --steps all --dry-
 #    See docs/FINETUNE.md for the full Infinia integration guide.
 ```
 
-`docs/knowledge/starter/` holds committed bootstrap docs. Your real documents
+`data/knowledge/starter/` holds committed bootstrap docs. Your real documents
 live in the **`coach-knowledge`** private repo, linked as a git submodule at
-`docs/knowledge/private/`. See
+`data/knowledge/private/`. See
 [Private knowledge setup](./docs/knowledge/SETUP_PRIVATE_REPO.md).
 
-`docs/tool-knowledge/` contains per-tool documentation and the routing corpus
+`data/tool-knowledge/` contains per-tool documentation and the routing corpus
 (`examples/routing.jsonl`). This is tracked in git and is the source of truth for
 tool disambiguation. Add examples here when you observe misrouting, then call
 `POST /api/tools/reindex` to pick up changes without restarting.

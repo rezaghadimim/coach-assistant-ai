@@ -58,9 +58,9 @@ docker compose up --build
 # Coach Assistant API docs at http://localhost:8000/docs (DEBUG=true only; disabled in production)
 ```
 
-`docs/knowledge/starter/` holds bundled bootstrap docs (committed in this repo).
+`data/knowledge/starter/` holds bundled bootstrap docs (committed in this repo).
 Your real documents live in the **`coach-knowledge`** private repo, linked as a
-git submodule at `docs/knowledge/private/`. See
+git submodule at `data/knowledge/private/`. See
 [`docs/knowledge/SETUP_PRIVATE_REPO.md`](knowledge/SETUP_PRIVATE_REPO.md).
 
 Open WebUI will automatically list `coach-assistant-ai` (local) as an available

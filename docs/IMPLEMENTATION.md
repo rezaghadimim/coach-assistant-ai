@@ -154,7 +154,7 @@ See [ADR-0010](adr/0010-llm-response-formatter.md) for the rationale and design 
 **Problem solved:** arbitrary phrasing ("give me all visitors in table", "dump the roster") was failing the fast path entirely, reaching the LLM but getting back follow-up suggestions instead of data — because all fast-path layers were lexical and couldn't handle out-of-vocabulary synonyms. Messages like "Ali's age is 23" were also misrouted to `add_client_note` instead of `create_client`.
 
 **Done:**
-- [x] Tool knowledge corpus: `docs/tool-knowledge/` (9 per-tool markdown docs + `examples/routing.jsonl`, now 307 examples)
+- [x] Tool knowledge corpus: `data/tool-knowledge/` (9 per-tool markdown docs + `examples/routing.jsonl`, now 307 examples)
 - [x] Configuration: `TOOL_ROUTER_BACKEND`, `RAG_EMBED_MODEL`, `TOOL_ROUTER_THRESHOLD`, etc.
 - [x] Embedding client: `app/core/embeddings.py` — Ollama `/api/embeddings` with E5 prefix support
 - [x] Domain synonym lexicon: `app/core/lexicon.py` — `normalize_for_routing()` additive query expansion (`visitor→client`, `table→list clients`, `dump→show/list`, etc.); applied in token backend, embedding, and `top_n_tools`; never touches RAG

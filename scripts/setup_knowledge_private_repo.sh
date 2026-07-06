@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Initialize or clone private knowledge into docs/knowledge/private/
+# Initialize or clone private knowledge into data/knowledge/private/
 #
 # Preferred: git submodule (see .gitmodules)
 #   ./scripts/setup_knowledge_private_repo.sh
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="$ROOT/docs/knowledge/private"
+TARGET="$ROOT/data/knowledge/private"
 REPO_URL="${1:-}"
 
 if [[ -d "$TARGET/.git" ]]; then
@@ -23,15 +23,15 @@ if [[ -d "$TARGET/.git" ]]; then
   exit 0
 fi
 
-if [[ ! -d "$ROOT/docs/knowledge/starter" ]]; then
-  echo "ERROR: expected starter knowledge at $ROOT/docs/knowledge/starter" >&2
+if [[ ! -d "$ROOT/data/knowledge/starter" ]]; then
+  echo "ERROR: expected starter knowledge at $ROOT/data/knowledge/starter" >&2
   exit 1
 fi
 
 # Submodule path configured — init from .gitmodules
 if [[ -z "$REPO_URL" && -f "$ROOT/.gitmodules" ]]; then
   echo "Initializing private knowledge submodule..."
-  git -C "$ROOT" submodule update --init --recursive docs/knowledge/private
+  git -C "$ROOT" submodule update --init --recursive data/knowledge/private
   if [[ -d "$TARGET/.git" ]]; then
     echo "Done. Private knowledge at: $TARGET"
     exit 0
@@ -43,7 +43,7 @@ fi
 if [[ -z "$REPO_URL" ]]; then
   echo "Usage: $0 [git-clone-url]" >&2
   echo "  No URL: init from .gitmodules (submodule)" >&2
-  echo "  With URL: clone into docs/knowledge/private/" >&2
+  echo "  With URL: clone into data/knowledge/private/" >&2
   echo "Example: $0 https://github.com/rezaghadimim/coach-knowledge.git" >&2
   exit 1
 fi

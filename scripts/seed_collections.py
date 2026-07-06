@@ -48,17 +48,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    collections_dir = Path(settings.rag_collections_dir)
-    if not collections_dir.exists():
-        print(f"Collections directory not found: {collections_dir}")
-        print("Expected seed files under data/knowledge/collections/")
+    from app.core.knowledge_paths import collection_dirs
+
+    roots = collection_dirs()
+    if not roots:
+        print(f"No collections directory found (looked for {settings.rag_collections_dir}")
+        print(f" and {settings.rag_collections_private_dir}).")
         sys.exit(1)
+    print("Collection roots:")
+    for root in roots:
+        print(f"  - {root}")
 
     store = KnowledgeStore(settings.memory_db_path)
-    chunks = ingest_collection_chunks_from_disk(
-        str(collections_dir),
-        knowledge_store=store,
-    )
+    # collections_dir=None → ingest + merge every configured root (public + private).
+    chunks = ingest_collection_chunks_from_disk(knowledge_store=store)
     collections = store.list_collections()
     print(f"Registered {len(collections)} collection(s), {len(chunks)} chunk(s) from disk.")
     for row in collections:

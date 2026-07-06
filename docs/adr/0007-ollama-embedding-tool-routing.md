@@ -27,7 +27,7 @@ The system needs a semantic pre-classifier that:
 
 ## Decision
 
-Implement a **two-backend tool router** backed by an **example corpus** in `docs/tool-knowledge/examples/routing.jsonl`:
+Implement a **two-backend tool router** backed by an **example corpus** in `data/tool-knowledge/examples/routing.jsonl`:
 
 1. **Token backend** — token-frequency cosine similarity over example utterances, reusing `_cosine_similarity` and `_tokenize` from `app/rag/retriever.py`. Zero dependencies; used in CI and as automatic fallback.
 

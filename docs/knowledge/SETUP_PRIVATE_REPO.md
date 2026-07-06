@@ -2,7 +2,7 @@
 
 Your real coaching documents live in a **separate private GitHub repository**
 ([`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge)). It is linked
-as a **git submodule** at `docs/knowledge/private/` in this project.
+as a **git submodule** at `data/knowledge/private/` in this project.
 
 Ingest merges **starter + private** on every startup and `POST /api/ingest`.
 
@@ -11,8 +11,8 @@ Ingest merges **starter + private** on every startup and `POST /api/ingest`.
 ```text
 coach-assistant-ai/                    ← this repo
   .gitmodules                          ← pins coach-knowledge commit
-  docs/knowledge/starter/              ← committed bootstrap docs
-  docs/knowledge/private/              ← git submodule → coach-knowledge
+  data/knowledge/starter/              ← committed bootstrap docs
+  data/knowledge/private/              ← git submodule → coach-knowledge
 
 coach-knowledge/                        ← private GitHub repo (separate)
   grow_model.md
@@ -27,8 +27,8 @@ coach-knowledge/                        ← private GitHub repo (separate)
 The submodule is already configured in `.gitmodules`:
 
 ```ini
-[submodule "docs/knowledge/private"]
-    path = docs/knowledge/private
+[submodule "data/knowledge/private"]
+    path = data/knowledge/private
     url = https://github.com/rezaghadimim/coach-knowledge.git
 ```
 
@@ -36,7 +36,7 @@ Initialize it:
 
 ```bash
 ./scripts/setup_knowledge_private_repo.sh
-# or: git submodule update --init --recursive docs/knowledge/private
+# or: git submodule update --init --recursive data/knowledge/private
 
 python3 scripts/ingest.py
 ```
@@ -68,7 +68,7 @@ git submodule update --init --recursive
 ## Add or edit documents
 
 ```bash
-cd docs/knowledge/private
+cd data/knowledge/private
 
 # Optional: override a starter doc from the app repo
 cp ../starter/grow_model.md ./grow_model.md
@@ -102,9 +102,9 @@ automatically.
 After pushing changes to `coach-knowledge`, update the submodule pointer in this repo:
 
 ```bash
-cd docs/knowledge/private && git pull
+cd data/knowledge/private && git pull
 cd ../../..
-git add docs/knowledge/private
+git add data/knowledge/private
 git commit -m "Update private knowledge submodule"
 git push
 ```
@@ -115,10 +115,10 @@ git push
 
 | Action | Command |
 |--------|---------|
-| Edit knowledge | Edit files in `docs/knowledge/private/` |
+| Edit knowledge | Edit files in `data/knowledge/private/` |
 | Save + backup | `git add . && git commit -m "..." && git push` (inside submodule) |
 | Refresh RAG index | `python3 scripts/ingest.py` or restart API |
-| Pull on another machine | `git submodule update --remote docs/knowledge/private` |
+| Pull on another machine | `git submodule update --remote data/knowledge/private` |
 
 ---
 
@@ -127,8 +127,8 @@ git push
 Defaults (no change needed):
 
 ```env
-RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
-RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
+RAG_KNOWLEDGE_STARTER_DIR=data/knowledge/starter
+RAG_KNOWLEDGE_PRIVATE_DIR=data/knowledge/private
 PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/coach-knowledge.git
 ```
 
@@ -152,7 +152,7 @@ PRIVATE_KNOWLEDGE_REPO=https://github.com/rezaghadimim/coach-knowledge.git
 **Submodule directory is empty after clone**
 
 ```bash
-git submodule update --init --recursive docs/knowledge/private
+git submodule update --init --recursive data/knowledge/private
 ```
 
 **Permission denied / 404 on submodule**
@@ -161,7 +161,7 @@ You need access to the private `coach-knowledge` repo. Use HTTPS with a personal
 access token, or SSH:
 
 ```bash
-git config submodule.docs/knowledge/private.url git@github.com:rezaghadimim/coach-knowledge.git
+git config submodule.data/knowledge/private.url git@github.com:rezaghadimim/coach-knowledge.git
 git submodule sync
 git submodule update --init --recursive
 ```
@@ -178,9 +178,9 @@ docker compose logs coach-api | grep "rag:"
 ## Creating `coach-knowledge` from scratch (reference)
 
 Already done for this project. For a new fork, push scaffold from
-`docs/knowledge/private-repo-scaffold/` then:
+`data/knowledge/private-repo-scaffold/` then:
 
 ```bash
-git submodule add https://github.com/YOUR_USER/coach-knowledge.git docs/knowledge/private
+git submodule add https://github.com/YOUR_USER/coach-knowledge.git data/knowledge/private
 git commit -m "Add private knowledge submodule"
 ```

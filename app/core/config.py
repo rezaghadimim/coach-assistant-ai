@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     rag_enabled: bool = True
     # Committed starter / bundled knowledge (safe to git). Indexed on every ingest.
     rag_knowledge_starter_dir: str = Field(
-        default="docs/knowledge/starter",
+        default="data/knowledge/starter",
         validation_alias=AliasChoices(
             "rag_knowledge_starter_dir",
             "RAG_KNOWLEDGE_STARTER_DIR",
@@ -132,7 +132,7 @@ class Settings(BaseSettings):
     # Local-only content (private git repo). Merged after starter on ingest.
     # Files with the same relative path override the starter copy.
     rag_knowledge_private_dir: str = Field(
-        default="docs/knowledge/private",
+        default="data/knowledge/private",
         validation_alias=AliasChoices(
             "rag_knowledge_private_dir",
             "RAG_KNOWLEDGE_PRIVATE_DIR",
@@ -196,6 +196,15 @@ class Settings(BaseSettings):
         default="data/knowledge/collections",
         validation_alias=AliasChoices("rag_collections_dir", "RAG_COLLECTIONS_DIR"),
     )
+    # Real (non-demo) collections live in the private knowledge submodule and are
+    # merged after the public collections dir on ingest — mirrors starter+private.
+    rag_collections_private_dir: str = Field(
+        default="data/knowledge/private/collections",
+        validation_alias=AliasChoices(
+            "rag_collections_private_dir",
+            "RAG_COLLECTIONS_PRIVATE_DIR",
+        ),
+    )
     # Two-phase coach retrieval
     rag_problem_top_k: int = 3
     rag_expert_top_k: int = 6
@@ -214,7 +223,7 @@ class Settings(BaseSettings):
     # backend: "embedding" | "token" | "auto"
     # "auto" uses embedding when the Ollama embed model probe passes, else falls back to token.
     tool_router_backend: str = "auto"
-    tool_knowledge_dir: str = "docs/tool-knowledge"
+    tool_knowledge_dir: str = "data/tool-knowledge"
     # Tuned against the routing corpus + three eval sets (standard/hard/short).
     # 0.65 was optimal for full-sentence queries but starved short/elliptical ones:
     # terse phrasings ("Sara's goals?", "her email") top out around 0.50 cosine
@@ -352,6 +361,13 @@ class Settings(BaseSettings):
             self.rag_rerank_cache_dir = str(project_root / self.rag_rerank_cache_dir)
         if self.rag_collections_dir and not Path(self.rag_collections_dir).is_absolute():
             self.rag_collections_dir = str(project_root / self.rag_collections_dir)
+        if (
+            self.rag_collections_private_dir
+            and not Path(self.rag_collections_private_dir).is_absolute()
+        ):
+            self.rag_collections_private_dir = str(
+                project_root / self.rag_collections_private_dir
+            )
         if self.rag_index_cache_path and not Path(self.rag_index_cache_path).is_absolute():
             self.rag_index_cache_path = str(project_root / self.rag_index_cache_path)
         if self.media_root and not Path(self.media_root).is_absolute():

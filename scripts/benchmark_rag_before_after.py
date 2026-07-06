@@ -2,7 +2,7 @@
 
 BEFORE snapshot (from git HEAD):
   - Original code (no off-topic gate, no hybrid RRF, plain chunking)
-  - Only docs/knowledge/sample.md indexed
+  - Only data/knowledge/sample.md indexed
   - Original 20-question eval set
   - RAG_MIN_SCORE=0.15, RAG_TOP_K=3, RAG_RETRIEVE_K=25, rerank off
 
@@ -121,7 +121,7 @@ def main() -> int:
 
         before_knowledge = tmp / "knowledge_before"
         before_knowledge.mkdir()
-        (before_knowledge / "sample.md").write_bytes(_git_show("docs/knowledge/sample.md"))
+        (before_knowledge / "sample.md").write_bytes(_git_show("data/knowledge/sample.md"))
 
         before_code = tmp / "code_before"
         before_code.mkdir()
@@ -168,7 +168,7 @@ def main() -> int:
             label="AFTER (32 Q)",
             eval_file=ROOT / "data/eval/rag_grounding.jsonl",
             env=after_env,
-            knowledge_dir=ROOT / "docs/knowledge",
+            knowledge_dir=ROOT / "data/knowledge",
         )
 
         print("Running AFTER benchmark (original 20 Q, apples-to-apples)...")
@@ -176,7 +176,7 @@ def main() -> int:
             label="AFTER (20 Q)",
             eval_file=before_eval,
             env=after_env,
-            knowledge_dir=ROOT / "docs/knowledge",
+            knowledge_dir=ROOT / "data/knowledge",
         )
 
         # --- Report ---

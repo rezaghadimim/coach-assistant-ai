@@ -50,7 +50,7 @@ async def classify_tool_endpoint(request: ToolClassifyRequest) -> ToolClassifyRe
 async def reindex_tool_router() -> ToolReindexResponse:
     """Rebuild the tool routing index from ``routing.jsonl``.
 
-    Call after editing ``docs/tool-knowledge/examples/routing.jsonl`` to pick
+    Call after editing ``data/tool-knowledge/examples/routing.jsonl`` to pick
     up new examples without restarting the server.
     """
     from app.core.tool_router import build_index, effective_backend, is_degraded, reset_index

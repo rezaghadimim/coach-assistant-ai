@@ -17,8 +17,9 @@ RUN adduser --system --group --no-create-home app \
     && chown -R app:app /app/data /app/logs
 USER app
 
-# Persist coaching data outside the container image
-VOLUME ["/app/data", "/app/docs/knowledge"]
+# Persist coaching data outside the container image. Knowledge (starter,
+# private, collections, tool-knowledge) now lives under /app/data.
+VOLUME ["/app/data"]
 
 EXPOSE 8000
 

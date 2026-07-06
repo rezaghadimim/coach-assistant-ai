@@ -107,7 +107,7 @@ The local Ollama provider is always the default.
   - **token** — TF cosine (offline/CI-safe, always available)
 - Backend selection via `TOOL_ROUTER_BACKEND`: `"token"` | `"embedding"` | `"auto"` (default; probes Ollama and fastembed at startup)
 - **LLM router fallback** (`llm_router.py`): when all fast-path layers defer on a data-retrieval message, one compact LLM call picks a tool name (`{"tool": "..."}`) before falling into the full tool loop
-- Corpus: `docs/tool-knowledge/examples/routing.jsonl` (130 examples); eval sets in `data/eval/`
+- Corpus: `data/tool-knowledge/examples/routing.jsonl` (130 examples); eval sets in `data/eval/`
 - API: `POST /api/tools/classify` (exposes `rerank_score`, `backend`), `POST /api/tools/reindex`
 - **Deferral observability**: when all fast-path backends defer, `classify_tool()` records top-3 candidates in `app/core/routing_observability.py`; near-misses (top score ≥ `TOOL_ROUTER_NEAR_MISS_SCORE`, default 0.25) are logged at INFO and exposed on `/health` under `tool_router`
 - See `[TOOL_ROUTING.md](TOOL_ROUTING.md)` and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)

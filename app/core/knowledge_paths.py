@@ -23,6 +23,29 @@ def knowledge_private_dir_if_exists() -> Path | None:
     return path if path.is_dir() else None
 
 
+def collections_public_dir() -> Path:
+    """Return the public (demo/seed) collections directory path."""
+    return Path(settings.rag_collections_dir).expanduser().resolve()
+
+
+def collections_private_dir() -> Path:
+    """Return the private (real data) collections directory path."""
+    return Path(settings.rag_collections_private_dir).expanduser().resolve()
+
+
+def collection_dirs() -> list[Path]:
+    """Collection roots to ingest, in order: public demos then private real data.
+
+    Only existing directories are returned. The private dir lives inside the
+    knowledge submodule and is absent until the submodule is initialized.
+    """
+    roots: list[Path] = []
+    for path in (collections_public_dir(), collections_private_dir()):
+        if path.is_dir() and path not in roots:
+            roots.append(path)
+    return roots
+
+
 def knowledge_ingest_summary() -> str:
     """Human-readable description of which knowledge roots are indexed."""
     starter = knowledge_starter_dir()

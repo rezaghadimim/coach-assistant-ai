@@ -80,7 +80,7 @@ class ToolsClassifyEndpointTests(unittest.TestCase):
             mock_settings.tool_router_backend = "token"
             mock_settings.tool_router_threshold = 0.9999
             mock_settings.tool_router_margin = 0.0
-            mock_settings.tool_knowledge_dir = "docs/tool-knowledge"
+            mock_settings.tool_knowledge_dir = "data/tool-knowledge"
             mock_settings.tool_router_use_e5_prefix = True
             mock_settings.rag_embed_model = "test"
             response = self.client.post(

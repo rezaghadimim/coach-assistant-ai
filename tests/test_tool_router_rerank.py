@@ -295,7 +295,7 @@ class ClassifyToolReRankIntegrationTests(unittest.TestCase):
             mock_settings.tool_router_rerank_threshold = 0.55
             mock_settings.tool_router_rerank_margin = 0.10
             mock_settings.tool_router_rerank_model = "BAAI/bge-reranker-base"
-            mock_settings.tool_knowledge_dir = "docs/tool-knowledge"
+            mock_settings.tool_knowledge_dir = "data/tool-knowledge"
             mock_settings.tool_router_use_e5_prefix = True
             mock_settings.rag_embed_model = "test"
 

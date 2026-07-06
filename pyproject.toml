@@ -15,6 +15,15 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Optional: ingesting YouTube / local media into knowledge collections.
+# youtube-transcript-api fetches captions (yt-dlp caption download is blocked by
+# YouTube's PO-token requirement as of 2025). yt-dlp is used for channel
+# enumeration and audio download; faster-whisper transcribes captionless media.
+media = [
+    "youtube-transcript-api>=1.2.0",
+    "yt-dlp>=2025.1.1",
+    "faster-whisper>=1.0.0",
+]
 finetune = [
     "torch>=2.1.0",
     "datasets>=2.19.0",

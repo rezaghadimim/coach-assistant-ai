@@ -89,7 +89,7 @@ This follows the *retrieval-conditional abstain* pattern: inject context only wh
 ## Knowledge layout
 
 ```text
-docs/knowledge/
+data/knowledge/
 ├── README.md                    ← overview (this repo)
 ├── SETUP_PRIVATE_REPO.md        ← GitHub + clone guide (start here)
 ├── private-repo-scaffold/       ← reference files for new private repos
@@ -128,7 +128,7 @@ See [`docs/knowledge/README.md`](knowledge/README.md) for collection workflow.
 ```bash
 # After clone (once):
 ./scripts/setup_knowledge_private_repo.sh
-# or: git submodule update --init --recursive docs/knowledge/private
+# or: git submodule update --init --recursive data/knowledge/private
 
 python3 scripts/ingest.py
 ```
@@ -195,8 +195,8 @@ When fastembed is missing, the local model fails to load, or the TEI server is u
 | `RAG_RERANK_BATCH_SIZE` | `32` | Passages scored per ONNX batch (local provider only) |
 | `RAG_RERANK_MAX_PASSAGE_CHARS` | `2000` | Passage truncation before scoring |
 | `RAG_RERANK_CACHE_DIR` | `<project_root>/data/rerank_cache` | On-disk model cache (absolute by default, local provider only) |
-| `RAG_KNOWLEDGE_STARTER_DIR` | `docs/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
-| `RAG_KNOWLEDGE_PRIVATE_DIR` | `docs/knowledge/private` | Private knowledge (git submodule → `coach-knowledge`) merged on ingest |
+| `RAG_KNOWLEDGE_STARTER_DIR` | `data/knowledge/starter` | Committed bundled docs (legacy: `RAG_KNOWLEDGE_TEMPLATES_DIR`, `RAG_DOCS_DIR`) |
+| `RAG_KNOWLEDGE_PRIVATE_DIR` | `data/knowledge/private` | Private knowledge (git submodule → `coach-knowledge`) merged on ingest |
 | `RAG_TOP_K` | `2` | Final chunks for legacy `retrieve()` (framework only) |
 | `RAG_TWO_PHASE_ENABLED` | `true` | Enable two-phase coach retrieval in chat/briefing |
 | `RAG_PROBLEM_TOP_K` | `3` | Phase-1 situation chunks |
@@ -208,7 +208,8 @@ When fastembed is missing, the local model fails to load, or the TEI server is u
 | `RAG_EMBED_MODEL` | `karuniaperjuangan/multilingual-e5-small` | Model for framework corpus |
 | `RAG_COLLECTION_EMBED_PROVIDER` | `openrouter` | Collection ingest: `openrouter` \| `openai` \| `ollama` |
 | `RAG_COLLECTION_EMBED_MODEL` | `openai/text-embedding-3-small` | Model for collection corpus (batch at ingest) |
-| `RAG_COLLECTIONS_DIR` | `data/knowledge/collections` | Filesystem root for per-person collections |
+| `RAG_COLLECTIONS_DIR` | `data/knowledge/collections` | Public (demo) collections root |
+| `RAG_COLLECTIONS_PRIVATE_DIR` | `data/knowledge/private/collections` | Private (real data) collections root — in the `coach-knowledge` submodule; merged after the public dir on ingest |
 | `OPENAI_API_KEY` | *(empty)* | Required when `RAG_EMBED_PROVIDER=openai` and pointed at the real `api.openai.com` host |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Default address for the `openai` embed provider when `RAG_EMBED_BASE_URL` is unset — override to hit a self-hosted OpenAI-compatible server (e.g. TEI's `/v1/embeddings`) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | LLM address, and the `ollama` embed provider's default address when `RAG_EMBED_BASE_URL` is unset |

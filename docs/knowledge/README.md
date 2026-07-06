@@ -4,9 +4,10 @@ Three sources are indexed together on every startup and `POST /api/ingest`:
 
 | Source | Location | Git | Purpose |
 |--------|----------|-----|---------|
-| Starter | [`starter/`](starter/) | **This repo** | Bundled coaching frameworks (GROW, MI, SMART, …) |
-| Private | [`private/`](private/) | **Submodule** → [`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge) | Your manuals and overrides |
-| Collections | `data/knowledge/collections/` | **Local data** (not in git by default) | Per-person video/transcript expert guides |
+| Starter | [`data/knowledge/starter/`](../../data/knowledge/starter/) | **This repo** | Bundled coaching frameworks (GROW, MI, SMART, …) |
+| Private | [`data/knowledge/private/`](../../data/knowledge/private/) | **Submodule** → [`coach-knowledge`](https://github.com/rezaghadimim/coach-knowledge) | Your manuals and overrides |
+| Collections (demo) | [`data/knowledge/collections/`](../../data/knowledge/collections/) | **This repo** | Public sample expert guides (synthetic) |
+| Collections (real) | `data/knowledge/private/collections/` | **Submodule** → `coach-knowledge` | Real video/transcript expert guides — merged after demos on ingest |
 
 **Merge rule (starter + private):** all starter files are indexed. Private files are **appended**.
 If the same relative path exists in both (e.g. `grow_model.md`), the **private copy overrides** the starter copy.
@@ -31,7 +32,7 @@ python3 scripts/ingest.py
 
 ```bash
 # Edit knowledge (private repo)
-cd docs/knowledge/private
+cd data/knowledge/private
 vim grow_model.md
 git add . && git commit -m "Update GROW notes" && git push
 
@@ -115,9 +116,10 @@ Put production content in your **private repo** or **collections**.
 ## Environment
 
 ```env
-RAG_KNOWLEDGE_STARTER_DIR=docs/knowledge/starter
-RAG_KNOWLEDGE_PRIVATE_DIR=docs/knowledge/private
+RAG_KNOWLEDGE_STARTER_DIR=data/knowledge/starter
+RAG_KNOWLEDGE_PRIVATE_DIR=data/knowledge/private
 RAG_COLLECTIONS_DIR=data/knowledge/collections
+RAG_COLLECTIONS_PRIVATE_DIR=data/knowledge/private/collections
 
 # Framework + collections use the same embed provider/model by default.
 # RAG_EMBED_BASE_URL is an optional address override (e.g. a second server);

@@ -36,13 +36,13 @@ services:
     volumes:
       - coach_data:/app/data
       - ./logs:/app/logs
-      - ./docs/knowledge:/app/docs/knowledge:ro
-      - ./docs/tool-knowledge:/app/docs/tool-knowledge:ro
       - ./static:/app/static:ro
-      # RAG_COLLECTIONS_DIR seed source (demo coach transcripts). coach_data is a
-      # named volume with no host content, so without this mount the API never
-      # sees data/knowledge/collections and knowledge_collections stays empty.
-      - ./data/knowledge/collections:/app/data/knowledge/collections:ro
+      # Knowledge + tool-knowledge live under data/, but coach_data is an empty
+      # named volume that shadows /app/data — without these read-only bind mounts
+      # the API never sees the starter/private/collections seed content or the
+      # tool-routing corpus, and both indices come up empty.
+      - ./data/knowledge:/app/data/knowledge:ro
+      - ./data/tool-knowledge:/app/data/tool-knowledge:ro
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')" ]
