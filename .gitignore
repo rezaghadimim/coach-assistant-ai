@@ -44,6 +44,8 @@ ollama_data/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 
 # Logs
