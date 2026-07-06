@@ -2,7 +2,7 @@
 
 Your **private** coaching knowledge base for [Coach Assistant AI](https://github.com/rezaghadimim/coach-assistant-ai).
 
-This repository is linked as a **git submodule** at `docs/knowledge/private/` in
+This repository is linked as a **git submodule** at `data/knowledge/private/` in
 the app project. On every ingest, these files are **merged with** the app’s
 committed `starter/` docs — same filename in this repo **overrides** the starter copy.
 
