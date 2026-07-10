@@ -1,5 +1,7 @@
 # Implementation Plan Status
 
+> **Historical work log.** Entries record the state at the time they were written and are not maintained. For current facts see ARCHITECTURE.md, docs/CONTRACTS.md, and the code.
+
 ## Completed
 
 ### Phase 1: Core Chat
@@ -154,7 +156,7 @@ See [ADR-0010](adr/0010-llm-response-formatter.md) for the rationale and design 
 **Problem solved:** arbitrary phrasing ("give me all visitors in table", "dump the roster") was failing the fast path entirely, reaching the LLM but getting back follow-up suggestions instead of data — because all fast-path layers were lexical and couldn't handle out-of-vocabulary synonyms. Messages like "Ali's age is 23" were also misrouted to `add_client_note` instead of `create_client`.
 
 **Done:**
-- [x] Tool knowledge corpus: `data/tool-knowledge/` (9 per-tool markdown docs + `examples/routing.jsonl`, now 307 examples)
+- [x] Tool knowledge corpus: `data/tool-knowledge/` (9 per-tool markdown docs + `examples/routing.jsonl`, now 363+ (count with: wc -l data/tool-knowledge/examples/routing.jsonl))
 - [x] Configuration: `TOOL_ROUTER_BACKEND`, `RAG_EMBED_MODEL`, `TOOL_ROUTER_THRESHOLD`, etc.
 - [x] Embedding client: `app/core/embeddings.py` — Ollama `/api/embeddings` with E5 prefix support
 - [x] Domain synonym lexicon: `app/core/lexicon.py` — `normalize_for_routing()` additive query expansion (`visitor→client`, `table→list clients`, `dump→show/list`, etc.); applied in token backend, embedding, and `top_n_tools`; never touches RAG
@@ -212,16 +214,13 @@ fully deterministic — no extra LLM call — so they cannot themselves hallucin
   a record. Fires inside the `_is_data_request` gate, before the LLM router.
 - [x] **D — broadened `_is_data_request`.** See the Tool Routing → Medium impact
   entry below.
-- [x] Tests: `tests/test_llm_guardrails.py` (12 tests, CI-safe — no Ollama):
+- [x] **E — notes grounded.** `_notes_grounded` in `app/core/llm.py` blocks
+  fabricated note/goal/decision content that is not present in the stored record.
+  Covered by `tests/test_llm_guardrails.py`.
+- [x] Tests: `tests/test_llm_guardrails.py` (CI-safe — no Ollama):
   `_is_data_request` recall/exclusion, `_references_unknown_client` known vs.
   unknown, `_ground_data_reply` fabricated-PII replacement + legitimate-reply
-  pass-through.
-
-**Residual gap (documented, not fixed):** non-PII fabrication (e.g. inventing a
-*goal* or *story* text) on a question that `_is_data_request` misses is not
-caught by a regex guard. The mitigations are the hardened LLM router, the
-object-noun-gated `_is_data_request`, and growing the corpus from production
-logs — not a deterministic content check.
+  pass-through, `_notes_grounded` fabricated note/goal/decision content.
 
 ## Remaining
 
@@ -248,7 +247,7 @@ The current stack (lexicon → token → embedding → rerank → LLM fallback) 
 #### High impact (do first)
 
 - [x] **Run the benchmark and measure the baseline.** Baseline on this hardware
-  (2026-06-25, corpus = 307 examples, `llama3.1:8b` + `multilingual-e5-small` +
+  (2026-06-25, corpus = 363+ (count with: wc -l data/tool-knowledge/examples/routing.jsonl), `llama3.1:8b` + `multilingual-e5-small` +
   `BAAI/bge-reranker-base`):
 
   | Backend   | Standard (55) acc / defer | Hard (71) acc / defer | Precision |
@@ -258,7 +257,7 @@ The current stack (lexicon → token → embedding → rerank → LLM fallback) 
   | rerank    | 96.4% / 0.0%              | 97.2% / 2.8%           | **1.00 on every tool** |
 
   The three backends are near-identical on these sets because the corpus grew to
-  307 and `TOOL_ROUTER_THRESHOLD` was already tuned to 0.65 — the standard/hard
+  363+ (count with: wc -l data/tool-knowledge/examples/routing.jsonl) and `TOOL_ROUTER_THRESHOLD` was already tuned to 0.65 — the standard/hard
   sets no longer separate them. The rerank layer's distinct value is on truly
   out-of-vocabulary production phrasings, which these held-out sets only
   partially capture. **rerank precision is 1.00 on every tool on both sets — it
