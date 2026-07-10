@@ -1,3 +1,3 @@
-[submodule "docs/knowledge/private"]
+[submodule "data/knowledge/private"]
 	path = data/knowledge/private
 	url = https://github.com/rezaghadimim/coach-knowledge.git
