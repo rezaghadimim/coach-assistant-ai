@@ -14,6 +14,8 @@ backend while retaining all coaching features:
 
 The UI is branded as **Coach Assistant AI** with `WEBUI_NAME` set in docker-compose.
 
+Wire-format contract (envelope, SSE, fake streaming, error-as-content): [WIRE_FORMATS.md](WIRE_FORMATS.md).
+
 ## New Endpoints
 
 | Method | Path | Description |
