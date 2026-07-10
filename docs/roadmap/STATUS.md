@@ -17,9 +17,9 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | T-011 | Create docs/CONVENTIONS.md | DONE | c0e6ed7 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). |
 | T-012 | Create docs/CONTRACTS.md | DONE | 2079d62 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). ChunkRole only in ingest.py (not embed_providers/types.py) — noted in CONTRACTS. _WRITE_TOOLS includes update_client alias. |
 | T-013 | Create docs/MODULE_MAP.md | DONE | a213027 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). ChunkRole only in ingest.py (not embed_providers/types.py) — noted in CONTRACTS. _WRITE_TOOLS includes update_client alias. |
-| T-014 | Create docs/WIRE_FORMATS.md | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
+| T-014 | Create docs/WIRE_FORMATS.md | DONE | 1a4f92f | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-015 | ADR-0012: define the ADR process | DONE | 2295466 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). |
-| T-016 | Create docs/CONFIG.md (env-var reference) | TODO | — | — | |
+| T-016 | Create docs/CONFIG.md (env-var reference) | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-017 | Create docs/DEVELOPMENT.md | TODO | — | — | |
 | T-020 | scripts/check_contracts.py + CI step | TODO | — | — | |
 | T-021 | scripts/check_doc_paths.py + CI step | TODO | — | — | |
