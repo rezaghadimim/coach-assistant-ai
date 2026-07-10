@@ -12,8 +12,8 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | T-004 | Correct stale facts in ARCHITECTURE.md | DONE | 9565ce1 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-005 | Correct tool table in MEMORY.md | DONE | 89a259e | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-006 | Correct IMPLEMENTATION.md, mark historical | DONE | 44a32b8 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
-| T-007 | Annotate backfilled ADR dates | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
-| T-010 | Create root CLAUDE.md (AI contract) | TODO | — | — | |
+| T-007 | Annotate backfilled ADR dates | DONE | 4592bb0 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
+| T-010 | Create root CLAUDE.md (AI contract) | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). Also resolved U-05 (partial). |
 | T-011 | Create docs/CONVENTIONS.md | TODO | — | — | |
 | T-012 | Create docs/CONTRACTS.md | TODO | — | — | |
 | T-013 | Create docs/MODULE_MAP.md | TODO | — | — | |
@@ -44,5 +44,5 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | U-02 | Callers of `embed_collection_chunks`? | No | — |
 | U-03 | Is `knowledge_chunks` table read back? | No | — |
 | U-04 | Worker/thread model vs unlocked indices | No | — |
-| U-05 | Suite passes + coverage ≥ 75% right now? | No | — |
+| U-05 | Suite passes + coverage ≥ 75% right now? | Yes (partial) | Locally: 33 failed / 594 passed with CI env pins (2026-07-10). Failures look like `.env` making embed provider openai instead of ollama defaults — not a clean green suite. Coverage floor not re-checked this session. |
 | U-06 | pyproject deps vs requirements files drift | No | — |
