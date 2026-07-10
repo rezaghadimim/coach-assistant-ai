@@ -29,15 +29,21 @@
 ### Chat Tools (via LLM)
 
 Coaches can say things like "Add Ali as a client" or "Save Sara's goal" in chat.
-The model calls tools defined in `app/core/tools.py`:
+The model calls tools defined in `app/core/tools.py`.
+
+Authoritative source: `TOOL_DEFINITIONS` in `app/core/tools.py` — update this table when that list changes.
 
 | Tool | Purpose |
 |------|---------|
-| `create_client` | Register or update a client profile (merges with existing fields) |
-| `add_client_note` | Save a story, goal, decision, or progress note |
-| `get_client` | Look up a client's profile |
-| `list_client_notes` | List notes for a client (optional type filter) |
+| `create_client` | Create or update a client (patient/visitor) profile (preview then confirm) |
+| `add_client_note` | Add a note, story, goal, decision, or progress update for a client |
+| `get_client` | Retrieve a client's profile and contact information only (no notes) |
+| `get_client_full` | Retrieve a client's complete record: profile, contact details, and all notes |
+| `list_client_notes` | List all notes for a client, optionally filtered by type |
 | `list_clients` | List all registered clients |
+| `update_client_note` | Update an existing client note by id (preview then confirm) |
+| `delete_client_note` | Delete a client note by id (preview then confirm) |
+| `delete_client` | Delete a client and all their notes (preview then confirm) |
 
 The REST API endpoints below remain available for direct CRUD from other clients.
 
