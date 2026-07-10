@@ -167,6 +167,7 @@ header (`X-API-Key` or `Authorization: Bearer`) unless `DEBUG=true`.
 
 ## Documentation
 
+- [Development guide](./docs/DEVELOPMENT.md) — setup, test, lint, roadmap workflow
 - [Architecture](./docs/ARCHITECTURE.md)
 - [Operations & Production Deployment](./docs/OPERATIONS.md) — auth, Docker hardening, reliability, CI gates
 - [Implementation Plan](./docs/IMPLEMENTATION.md)
