@@ -11,8 +11,8 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | T-003 | Fix stale doc pointer in pyproject.toml | DONE | 2c380f0 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-004 | Correct stale facts in ARCHITECTURE.md | DONE | 9565ce1 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-005 | Correct tool table in MEMORY.md | DONE | 89a259e | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
-| T-006 | Correct IMPLEMENTATION.md, mark historical | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
-| T-007 | Annotate backfilled ADR dates | TODO | — | — | |
+| T-006 | Correct IMPLEMENTATION.md, mark historical | DONE | 44a32b8 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
+| T-007 | Annotate backfilled ADR dates | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-010 | Create root CLAUDE.md (AI contract) | TODO | — | — | |
 | T-011 | Create docs/CONVENTIONS.md | TODO | — | — | |
 | T-012 | Create docs/CONTRACTS.md | TODO | — | — | |

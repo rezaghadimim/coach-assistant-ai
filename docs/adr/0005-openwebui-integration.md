@@ -1,6 +1,6 @@
 # ADR-0005: Open WebUI Integration via OpenAI-Compatible API
 
-**Date:** 2024-01-01
+**Date:** 2024-01-01 (backfilled placeholder — written retroactively; see ADR-0006 onward for dated records)
 **Status:** Accepted
 
 ## Context

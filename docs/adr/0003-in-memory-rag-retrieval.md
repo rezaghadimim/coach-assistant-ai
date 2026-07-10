@@ -1,6 +1,6 @@
 # ADR-0003: In-Memory Token-Similarity RAG Retrieval
 
-**Date:** 2024-01-01
+**Date:** 2024-01-01 (backfilled placeholder — written retroactively; see ADR-0006 onward for dated records)
 **Status:** Accepted (extended by ADR-0008, ADR-0011 — see below)
 
 > **Update (2026-06-25):** ADR-0011 extends this decision with dual in-memory indices
