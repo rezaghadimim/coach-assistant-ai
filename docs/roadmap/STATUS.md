@@ -8,8 +8,8 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 |----|-------|--------|--------|------|-------|
 | T-001 | Remove tracked junk files | DONE | 20ea828 | 2026-07-10 | Committed despite pre-existing pytest failures (U-05 / `.env` embed-provider drift); ruff+mypy clean. |
 | T-002 | Fix .gitmodules submodule name | DONE | c92b434 | 2026-07-10 | ruff+mypy clean; pytest skipped (same U-05 pre-existing failures). Submodule status unchanged at 34c7489. |
-| T-003 | Fix stale doc pointer in pyproject.toml | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
-| T-004 | Correct stale facts in ARCHITECTURE.md | TODO | — | — | |
+| T-003 | Fix stale doc pointer in pyproject.toml | DONE | 2c380f0 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
+| T-004 | Correct stale facts in ARCHITECTURE.md | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-005 | Correct tool table in MEMORY.md | TODO | — | — | |
 | T-006 | Correct IMPLEMENTATION.md, mark historical | TODO | — | — | |
 | T-007 | Annotate backfilled ADR dates | TODO | — | — | |

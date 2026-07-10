@@ -34,7 +34,6 @@ The local Ollama provider is always the default.
 
 - `ingest.py`: document discovery + heading-aware chunking (`.txt`, `.md`, `.pdf`); merges `starter/` + `private/` (private wins on path collision); extended `DocumentChunk` with collection/timestamp metadata
 - `transcript.py`: SRT/VTT parsing and time-aware chunking for video guides
-- `knowledge_paths.py`: resolves configured starter and private directories
 - `retriever.py`: **dual indices** (`framework_index`, `collection_index`); two-phase `retrieve_coach_context()` for chat; legacy `retrieve()` on framework corpus; bi-encoder, TF cosine, or hybrid RRF (stage 1) + cross-encoder rerank (stage 2); `diversify_by_collection()` for multi-expert phase 2
 - `reranker.py`: thin wrapper over `app/core/rerank.py` (fastembed `BAAI/bge-reranker-base`); raises on scoring failure — the retriever falls back to stage-1 ordering with original stage-1 scores (filtered by `RAG_MIN_SCORE`, not the rerank floor), and a failed model load is cached so later queries skip the reranker cheaply
 - `POST /api/ingest`: reindex starter + private + all collections
@@ -107,7 +106,7 @@ The local Ollama provider is always the default.
   - **token** — TF cosine (offline/CI-safe, always available)
 - Backend selection via `TOOL_ROUTER_BACKEND`: `"token"` | `"embedding"` | `"auto"` (default; probes Ollama and fastembed at startup)
 - **LLM router fallback** (`llm_router.py`): when all fast-path layers defer on a data-retrieval message, one compact LLM call picks a tool name (`{"tool": "..."}`) before falling into the full tool loop
-- Corpus: `data/tool-knowledge/examples/routing.jsonl` (130 examples); eval sets in `data/eval/`
+- Corpus: `data/tool-knowledge/examples/routing.jsonl` (363+ examples (authoritative count: wc -l data/tool-knowledge/examples/routing.jsonl)); eval sets in `data/eval/`
 - API: `POST /api/tools/classify` (exposes `rerank_score`, `backend`), `POST /api/tools/reindex`
 - **Deferral observability**: when all fast-path backends defer, `classify_tool()` records top-3 candidates in `app/core/routing_observability.py`; near-misses (top score ≥ `TOOL_ROUTER_NEAR_MISS_SCORE`, default 0.25) are logged at INFO and exposed on `/health` under `tool_router`
 - See `[TOOL_ROUTING.md](TOOL_ROUTING.md)` and [ADR-0007](adr/0007-ollama-embedding-tool-routing.md)
@@ -188,6 +187,7 @@ app/
 │   ├── client_intents.py
 │   ├── confirmations.py   ← structured pending-write registry + confirm replay
 │   ├── intent_kb.py
+│   ├── knowledge_paths.py ← resolves configured starter and private directories
 │   ├── tool_json.py       ← tolerant tool-call JSON parsing (shared)
 │   └── llm_providers/
 │       ├── types.py
@@ -211,15 +211,13 @@ app/
 └── models/
     └── schemas.py         ← ToolMatchItem/ToolClassifyResponse include rerank_score
 
-docs/
-├── tool-knowledge/        ← per-tool docs + routing corpus (130 examples)
+data/
+├── tool-knowledge/        ← per-tool docs + routing corpus (363+ examples (authoritative count: wc -l data/tool-knowledge/examples/routing.jsonl))
 │   ├── create_client.md
 │   ├── add_client_note.md
 │   ├── ... (one per tool)
 │   └── examples/
 │       └── routing.jsonl
-
-data/
 ├── knowledge/
 │   └── collections/       ← per-person video/transcript corpora
 └── eval/
