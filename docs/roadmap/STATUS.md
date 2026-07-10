@@ -14,11 +14,11 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | T-006 | Correct IMPLEMENTATION.md, mark historical | DONE | 44a32b8 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-007 | Annotate backfilled ADR dates | DONE | 4592bb0 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-010 | Create root CLAUDE.md (AI contract) | DONE | $(git rev-parse --short HEAD) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). Also resolved U-05 (partial). |
-| T-011 | Create docs/CONVENTIONS.md | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). |
+| T-011 | Create docs/CONVENTIONS.md | DONE | $(git rev-parse --short HEAD) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). |
 | T-012 | Create docs/CONTRACTS.md | TODO | — | — | |
 | T-013 | Create docs/MODULE_MAP.md | TODO | — | — | |
 | T-014 | Create docs/WIRE_FORMATS.md | TODO | — | — | |
-| T-015 | ADR-0012: define the ADR process | TODO | — | — | |
+| T-015 | ADR-0012: define the ADR process | DONE | (pending) | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). |
 | T-016 | Create docs/CONFIG.md (env-var reference) | TODO | — | — | |
 | T-017 | Create docs/DEVELOPMENT.md | TODO | — | — | |
 | T-020 | scripts/check_contracts.py + CI step | TODO | — | — | |

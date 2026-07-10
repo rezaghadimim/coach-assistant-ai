@@ -18,6 +18,11 @@ Each ADR captures a significant architectural or technical decision, its context
 | [0009](0009-tool-routing-synonym-rerank-llm-fallback.md) | Tool routing overhaul — synonym lexicon, rerank, LLM fallback | Accepted |
 | [0010](0010-llm-response-formatter.md) | Optional LLM formatting pass for human-friendly data replies | Accepted |
 | [0011](0011-collection-video-knowledge.md) | Per-collection video knowledge, dual embed providers, two-phase coach retrieval | Accepted |
+| [0012](0012-adr-process.md) | ADR process (when required, numbering, supersession) | Accepted |
+
+## Process
+
+When to write an ADR, how to number it, and how to mark supersession: **[ADR-0012](0012-adr-process.md)**.
 
 ## Template
 
