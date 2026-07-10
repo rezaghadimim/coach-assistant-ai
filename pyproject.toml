@@ -62,7 +62,7 @@ exclude = ["tests/", "scripts/"]
 
 # Pre-existing type errors, silenced so the CI gate can go in without a large
 # refactor. Each is a real mismatch worth fixing on its own — see
-# docs/PRODUCTION_READINESS_CHECKLIST.md TEST-03 — not an intentional ignore.
+# docs/archive/PRODUCTION_READINESS_CHECKLIST.md TEST-03 — not an intentional ignore.
 [[tool.mypy.overrides]]
 module = [
     "app.core.tools",
