@@ -30,6 +30,9 @@ jobs:
       - name: Check cross-file contracts
         run: python scripts/check_contracts.py
 
+      - name: Check doc paths
+        run: python scripts/check_doc_paths.py
+
       - name: Type check (mypy)
         run: mypy app/
 

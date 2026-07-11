@@ -132,8 +132,8 @@ These are the load-bearing design decisions; future changes should preserve them
    `RAG_RERANK_MIN_SCORE`. RRF fused scores (~0.03) are for ordering only and
    must never reach either filter. If you add a new fusion/scoring stage, decide
    explicitly which floor its scores are compared against.
-2. **Rerank failure must be loud to the caller.** `app/rag/reranker.rerank`
-   raises on scoring failure; `_retrieve_from_indices` catches and falls back
+2. **Rerank failure must be loud to the caller.** `app/rag/reranker.py`'s
+   `rerank()` raises on scoring failure; `_retrieve_from_indices` catches and falls back
    to stage-1 scores. Don't "helpfully" swallow exceptions inside the reranker —
    that reintroduces the silent-empty-retrieval bug.
 3. **The LLM never sees ungated writes.** Write tools stop the loop at ⏳/✅/❌
