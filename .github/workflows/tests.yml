@@ -27,6 +27,9 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Check cross-file contracts
+        run: python scripts/check_contracts.py
+
       - name: Type check (mypy)
         run: mypy app/
 

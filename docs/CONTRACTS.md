@@ -1,6 +1,6 @@
 # Cross-file contracts (must-match registry)
 
-Before changing any value in the tables below, update **every** listed location in the same commit, then run `scripts/check_contracts.py` (once T-020 lands).
+Before changing any value in the tables below, update **every** listed location in the same commit, then run `scripts/check_contracts.py` (also runs in CI, `.github/workflows/tests.yml`).
 
 Verified 2026-07-10 against source. Centralization of these values is scheduled: magic strings → T-030; tool-name lists → T-031.
 

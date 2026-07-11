@@ -21,7 +21,7 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | T-015 | ADR-0012: define the ADR process | DONE | 2295466 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05: 33 fail / 594 pass under .env embed drift — suite does NOT currently pass locally). |
 | T-016 | Create docs/CONFIG.md (env-var reference) | DONE | be195a2 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
 | T-017 | Create docs/DEVELOPMENT.md | DONE | a874467 | 2026-07-10 | ruff+mypy clean; pytest skipped (U-05). |
-| T-020 | scripts/check_contracts.py + CI step | TODO | — | — | |
+| T-020 | scripts/check_contracts.py + CI step | DONE | (pending) | 2026-07-11 | ruff+mypy clean. `python3 scripts/check_contracts.py` exits 0 on clean tree, offline (checked with `OLLAMA_BASE_URL=http://127.0.0.1:1`). Mutate-and-revert test: mutated `"No notes on file."` in tools.py → checker FAILED that check (exit 1); reverted → PASS again (exit 0). pytest baseline: standard validation command reproduced U-05 exactly (33 failed / 594 passed / 1 warning / 34 subtests passed, same test IDs) — zero new failures, as expected since this task touches no app code. Tried `RAG_EMBED_PROVIDER=ollama` override for a cheaper green run per the baseline caveat; it reduced failures to 25 (reranker/cross-encoder tests still fail, unrelated to embed provider) but was not genuinely green, so it was not used as the recorded baseline. No `.env` change committed. |
 | T-021 | scripts/check_doc_paths.py + CI step | TODO | — | — | |
 | T-030 | Centralize reply-marker strings | TODO | — | — | |
 | T-031 | Single source of truth for tool names | TODO | — | — | |
