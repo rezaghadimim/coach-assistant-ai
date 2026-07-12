@@ -21,7 +21,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Paths the checker cannot resolve confidently; each entry needs a comment
 # explaining why, and a matching note in docs/roadmap/STATUS.md.
-KNOWN_UNRESOLVED: set[str] = set()
+KNOWN_UNRESOLVED: dict[str, str] = {
+    "data/coach_assistant.db": (
+        "SQLite file matched by the *.db gitignore rule; created at runtime, "
+        "never committed."
+    ),
+    "data/rag_index_cache.json": (
+        "Explicitly gitignored regenerable cache file (see .gitignore); "
+        "created on startup/ingest, never committed."
+    ),
+    "data/knowledge/private/collections": (
+        "Subdirectory inside the data/knowledge/private git submodule "
+        "(.gitmodules); CI's actions/checkout does not init submodules, "
+        "so this path is absent in CI even though the doc reference is valid."
+    ),
+}
 
 _TOP_LEVEL_DIRS = ("app", "data", "docs", "scripts", "tests")
 
@@ -54,7 +68,7 @@ def candidate_files() -> list[Path]:
 def _strip_suffix(candidate: str) -> str:
     candidate = candidate.split("#", 1)[0]
     candidate = candidate.split(":", 1)[0]
-    return candidate.strip()
+    return candidate.strip().rstrip("/")
 
 
 def _is_skippable(candidate: str) -> bool:
