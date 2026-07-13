@@ -19,7 +19,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 
-from app.rag.retriever import _tf_cosine as _cosine_similarity, _tokenize
+from app.rag.retriever import tf_cosine as _cosine_similarity, tokenize
 
 # Default confidence thresholds. Tuned conservatively so pure coaching talk
 # ("How can I support Ali emotionally?", "What should Ali focus on for his
@@ -46,7 +46,7 @@ class _IntentSpec:
     def index(self) -> None:
         self._vectors.clear()
         for example in self.examples:
-            tokens = _tokenize(example)
+            tokens = tokenize(example)
             if not tokens:
                 continue
             tf = Counter(tokens)
@@ -208,7 +208,7 @@ def classify(
     Returns a match only when the best intent's score is at least ``threshold``
     and exceeds the next-best *distinct* intent by at least ``margin``.
     """
-    tokens = _tokenize(message)
+    tokens = tokenize(message)
     if not tokens:
         return None
 

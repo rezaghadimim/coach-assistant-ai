@@ -49,7 +49,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.core.observability import log_step
-from app.rag.retriever import _tf_cosine as _cosine_similarity, _tokenize
+from app.rag.retriever import tf_cosine as _cosine_similarity, tokenize
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ class _TokenBackend:
         # 1.0 (e.g. "Fetch all contacts" ≈ 0.61 against its own corpus entry).
         from app.core.lexicon import normalize_for_routing
 
-        tokens = _tokenize(normalize_for_routing(ex.utterance))
+        tokens = tokenize(normalize_for_routing(ex.utterance))
         if not tokens:
             return
         tf = Counter(tokens)
@@ -125,7 +125,7 @@ class _TokenBackend:
         from app.core.lexicon import normalize_for_routing
 
         normalized = normalize_for_routing(message)
-        tokens = _tokenize(normalized)
+        tokens = tokenize(normalized)
         if not tokens or not self._examples:
             return None
 
@@ -794,7 +794,7 @@ def top_n_tools(
     from app.core.lexicon import normalize_for_routing
 
     normalized = normalize_for_routing(message)
-    tokens = _tokenize(normalized)
+    tokens = tokenize(normalized)
     if not tokens or not _token_backend._examples:
         return []
 

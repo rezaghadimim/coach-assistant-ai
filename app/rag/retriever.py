@@ -910,3 +910,10 @@ def _tf_cosine(
 
 def _tokenize(text: str) -> list[str]:
     return [match.group(0).lower() for match in _TOKEN_RE.finditer(text)]
+
+
+# Public API: tokenization/cosine used by tool_router and intent_kb.
+# The leading-underscore names are kept for internal/test compatibility.
+# Note: app/rag/ingest.py defines a DIFFERENT _tokenize (whitespace split) — do not conflate.
+tokenize = _tokenize
+tf_cosine = _tf_cosine
