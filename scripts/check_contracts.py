@@ -104,8 +104,14 @@ def main() -> int:
             "from app.core.reply_markers import" in read(relpath),
         )
 
-    # --- tool-name lists in sync with TOOL_DEFINITIONS ---
+    # --- tool-name lists derived from TOOL_DEFINITIONS ---
     definition_names = {d["function"]["name"] for d in TOOL_DEFINITIONS}
+    llm_router_src = read("app/core/llm_router.py")
+
+    check(
+        "llm_router.py imports TOOL_DEFINITIONS for tool-name derivation",
+        "from app.core.tools import TOOL_DEFINITIONS" in llm_router_src,
+    )
 
     check(
         "_KNOWN_TOOLS (llm_router.py) == TOOL_DEFINITIONS names",

@@ -21,6 +21,18 @@ def _make_provider(content: str):
     return provider
 
 
+class KnownToolsSyncTests(unittest.TestCase):
+    """Ensure llm_router tool names stay derived from TOOL_DEFINITIONS."""
+
+    def test_known_tools_match_definitions(self) -> None:
+        from app.core.llm_router import _KNOWN_TOOLS
+        from app.core.tools import TOOL_DEFINITIONS
+
+        definition_names = {d["function"]["name"] for d in TOOL_DEFINITIONS}
+        self.assertGreaterEqual(len(definition_names), 9)
+        self.assertEqual(set(_KNOWN_TOOLS), definition_names)
+
+
 class ParseToolFromResponseTests(unittest.TestCase):
     """Unit tests for the JSON parser."""
 

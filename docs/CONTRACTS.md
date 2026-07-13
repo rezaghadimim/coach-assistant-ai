@@ -30,8 +30,8 @@ Authoritative list: `TOOL_DEFINITIONS` in `app/core/tools.py:237` —
 |----------|------|-------|
 | `app/core/tools.py:237` `TOOL_DEFINITIONS` | **Source of truth** | Schemas + descriptions for the LLM |
 | `app/core/tools.py:53` `_WRITE_TOOLS` | Hand list | Write/confirm tools. Includes `update_client` (alias, not a `TOOL_DEFINITIONS` name) — keep in sync when adding writes |
-| `app/core/llm_router.py:35` `_KNOWN_TOOLS` | Hand list | Must equal the 9 `TOOL_DEFINITIONS` names |
-| `app/core/llm_router.py:106` `_ROUTER_SCHEMA` | JSON-schema enum | Must list the same 9 names (+ `"none"`) |
+| `app/core/llm_router.py` `_KNOWN_TOOLS` | **Derived** | `frozenset(name for d in TOOL_DEFINITIONS)` |
+| `app/core/llm_router.py` `_ROUTER_SCHEMA` | **Derived** | JSON-schema enum built from `_TOOL_NAMES` + `"none"` |
 | `data/tool-knowledge/*.md` | Tool cards | One markdown card per tool (9 files present) |
 | `data/tool-knowledge/examples/routing.jsonl` | Routing corpus | Each example's `tool` field must be one of the 9 (or abstention conventions used by eval) |
 

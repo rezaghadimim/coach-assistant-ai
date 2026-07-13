@@ -21,30 +21,23 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from app.core.config import settings
 from app.core.observability import log_step
+from app.core.tools import TOOL_DEFINITIONS
 
 if TYPE_CHECKING:
     from app.core.tool_router import ToolMatch
 
 logger = logging.getLogger(__name__)
 
-# Canonical tool names the router may return.
-_KNOWN_TOOLS = frozenset(
-    {
-        "create_client",
-        "add_client_note",
-        "update_client_note",
-        "delete_client_note",
-        "delete_client",
-        "get_client",
-        "get_client_full",
-        "list_client_notes",
-        "list_clients",
-    }
+# Canonical tool names the router may return (derived from TOOL_DEFINITIONS).
+_TOOL_NAMES = tuple(
+    d["function"]["name"]
+    for d in cast(list[dict[str, Any]], TOOL_DEFINITIONS)
 )
+_KNOWN_TOOLS = frozenset(_TOOL_NAMES)
 
 _SYSTEM_PROMPT = """\
 You are a tool classifier for a life-coaching assistant.
@@ -108,18 +101,7 @@ _ROUTER_SCHEMA: dict = {
     "properties": {
         "tool": {
             "type": "string",
-            "enum": [
-                "create_client",
-                "add_client_note",
-                "update_client_note",
-                "delete_client_note",
-                "delete_client",
-                "get_client",
-                "get_client_full",
-                "list_client_notes",
-                "list_clients",
-                "none",
-            ],
+            "enum": [*list(_TOOL_NAMES), "none"],
         }
     },
     "required": ["tool"],
