@@ -4,8 +4,9 @@ Auth fails closed by default (no API key -> 401). Tests exercise business
 logic without credentials, so run the suite in debug mode; tests that assert
 auth behavior (tests/test_authz.py) override these flags explicitly.
 
-Loaded before any test module imports `app.core.config`, so both the env var
-and the direct settings mutation take effect regardless of import order.
+Loaded before any test module imports ``app.core.config``, so env pins and
+the settings singleton stay deterministic regardless of developer ``.env``
+or shell exports. See ``docs/TEST_EXECUTION.md``.
 """
 
 import atexit
@@ -13,7 +14,14 @@ import os
 import shutil
 import tempfile
 
-os.environ.setdefault("DEBUG", "true")
+from tests.isolation_support import (
+    apply_env_overrides,
+    apply_settings_overrides,
+    install_network_guard,
+)
+
+apply_env_overrides()
+install_network_guard()
 
 # Point the shared MemoryStore singleton (app.api.chat.store, constructed at
 # import time from settings.memory_db_path) at a throwaway file instead of the
@@ -22,9 +30,9 @@ os.environ.setdefault("DEBUG", "true")
 # an ephemeral database that starts empty every run and never pollutes — or is
 # polluted by — real coach data on disk.
 _TEST_DB_DIR = tempfile.mkdtemp(prefix="coach_assistant_tests_")
-os.environ.setdefault("MEMORY_DB_PATH", os.path.join(_TEST_DB_DIR, "test.db"))
+os.environ["MEMORY_DB_PATH"] = os.path.join(_TEST_DB_DIR, "test.db")
 atexit.register(shutil.rmtree, _TEST_DB_DIR, True)
 
 from app.core.config import settings  # noqa: E402
 
-settings.debug = True
+apply_settings_overrides(settings)

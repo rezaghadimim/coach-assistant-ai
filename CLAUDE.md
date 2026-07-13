@@ -9,9 +9,8 @@ via an OpenAI-compatible API (`/v1/chat/completions`).
 ## Commands
 
 ```bash
-# Tests — always use these env pins; without them pytest hangs waiting on Ollama
-RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false \
-  .venv/bin/python -m pytest tests/ -q
+# Tests — conftest pins offline behaviour; explicit CI pins optional
+.venv/bin/python -m pytest tests/ -q
 
 # Lint / types / run
 .venv/bin/ruff check .
@@ -36,6 +35,7 @@ Never use `unittest discover` — it skips `tests/conftest.py` (auth fails close
 4. Module layering / import rules: `docs/MODULE_MAP.md` (if this file does not exist yet, the corresponding roadmap task has not run).
 5. OpenAI-compat wire formats: `docs/WIRE_FORMATS.md` (if this file does not exist yet, the corresponding roadmap task has not run).
 6. Do not invent APIs, env vars, or constants — verify from code or the docs above.
+7. Test execution contract: `docs/TEST_EXECUTION.md` (ADR-0014). Automated tests are offline by default; benchmarks/evals live under `scripts/`.
 
 ## Roadmap pointer
 

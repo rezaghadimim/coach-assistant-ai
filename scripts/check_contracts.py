@@ -153,6 +153,40 @@ def main() -> int:
         f"missing={missing_cards}",
     )
 
+    # --- test execution env pins (docs/CONTRACTS.md §4, ADR-0014) ---
+    from tests.isolation_support import TEST_ENV_OVERRIDES  # noqa: E402
+
+    contracts_doc = read("docs/CONTRACTS.md")
+    for key in TEST_ENV_OVERRIDES:
+        check(
+            f"TEST_ENV_OVERRIDES lists {key} in docs/CONTRACTS.md §4",
+            f"`{key}`" in contracts_doc,
+        )
+
+    expected_keys = {
+        "DEBUG",
+        "RAG_BACKEND",
+        "TOOL_ROUTER_BACKEND",
+        "RESPONSE_FORMATTER_ENABLED",
+        "RAG_EMBED_PROVIDER",
+        "RAG_EMBED_BASE_URL",
+        "RAG_COLLECTION_EMBED_PROVIDER",
+        "RAG_COLLECTION_EMBED_MODEL",
+        "RAG_RERANK_PROVIDER",
+        "RAG_RERANK_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_MODEL",
+        "OPENROUTER_API_KEY",
+        "OLLAMA_BASE_URL",
+        "OPENAI_BASE_URL",
+        "OPENROUTER_BASE_URL",
+    }
+    check(
+        "TEST_ENV_OVERRIDES keys match CONTRACTS.md §4 registry",
+        set(TEST_ENV_OVERRIDES) == expected_keys,
+        f"dict={sorted(TEST_ENV_OVERRIDES)} expected={sorted(expected_keys)}",
+    )
+
     if _FAILURES:
         print(f"\n{len(_FAILURES)} contract check(s) FAILED: {', '.join(_FAILURES)}")
         return 1

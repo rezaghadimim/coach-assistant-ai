@@ -23,26 +23,34 @@ Prerequisites and Compose details live in the root [README](../README.md) and [O
 
 ## 3. Testing
 
-Use **pytest only**, with the CI env pins (from `CLAUDE.md` / `.github/workflows/tests.yml`):
+Use **pytest only**. `tests/conftest.py` pins deterministic offline behaviour (full contract in [TEST_EXECUTION.md](TEST_EXECUTION.md)) — you do **not** need to unset your `.env` for a normal local run:
+
+```bash
+.venv/bin/python -m pytest tests/ -q
+```
+
+CI also sets these env vars explicitly (redundant with conftest, kept for visibility in `.github/workflows/tests.yml`):
 
 ```bash
 RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false \
   .venv/bin/python -m pytest tests/ -q
 ```
 
-Why each pin:
+Why the three CI-visible pins:
 
 | Env | Why |
 |-----|-----|
-| `RAG_BACKEND=token` | Avoids embedding probes / Ollama network hangs in CI |
+| `RAG_BACKEND=token` | Avoids embedding probes / Ollama network hangs |
 | `TOOL_ROUTER_BACKEND=token` | Same for the tool router |
 | `RESPONSE_FORMATTER_ENABLED=false` | Skips formatter LLM calls and related model downloads |
 
+Additional pins (embed/rerank provider, API keys, dead-letter base URLs) are applied automatically by conftest — see [CONTRACTS.md](CONTRACTS.md) §4.
+
 **Never** `python -m unittest discover`: it skips `tests/conftest.py`, which sets `DEBUG=true` and a temp `MEMORY_DB_PATH`. Without that, auth fails closed (401s) and tests can touch the real `data/coach_assistant.db`.
 
-Optional live / heavy tests gate on env flags (no pytest marks), e.g. `RUN_RERANK_INTEGRATION=1`. See individual test modules.
+Optional live / heavy tests gate on env flags (no pytest marks), e.g. `RUN_RERANK_INTEGRATION=1`. See [TEST_EXECUTION.md](TEST_EXECUTION.md) §2.
 
-Known local issue (U-05): with a populated `.env`, some tests may fail when embed defaults drift to `openai` — prefer CI-like env or unset conflicting vars when validating.
+Benchmarks and evaluations (`scripts/benchmark_*.py`, `scripts/eval_*.py`) are **not** pytest — see [BENCHMARKS.md](BENCHMARKS.md).
 
 ## 4. Lint & types
 

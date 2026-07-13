@@ -44,5 +44,5 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | U-02 | Callers of `embed_collection_chunks`? | No | — |
 | U-03 | Is `knowledge_chunks` table read back? | No | — |
 | U-04 | Worker/thread model vs unlocked indices | No | — |
-| U-05 | Suite passes + coverage ≥ 75% right now? | Yes (partial) | Locally: 33 failed / 594 passed with CI env pins (2026-07-10). Failures look like `.env` making embed provider openai instead of ollama defaults — not a clean green suite. Coverage floor not re-checked this session. |
+| U-05 | Suite passes + coverage ≥ 75% right now? | Yes | 631 passed / 1 skipped / ~7s with Test Execution Contract (ADR-0014, 2026-07-13). Prior baseline: 33 failed / 596 passed / ~22 min under `.env` embed-provider leak. Coverage floor not re-checked this session. |
 | U-06 | pyproject deps vs requirements files drift | No | — |

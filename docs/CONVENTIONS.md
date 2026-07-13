@@ -73,7 +73,7 @@ Many `from app.core... import ...` calls sit inside functions to break import cy
 - Mostly `unittest.TestCase`; bare pytest classes are also accepted.
 - No pytest marks for optional live tests — gate on env flags (e.g. `RUN_RERANK_INTEGRATION=1`).
 - Run **only** via pytest (never `unittest discover`).
-- `tests/conftest.py` sets `DEBUG=true` and a temp `MEMORY_DB_PATH` before app imports.
+- `tests/conftest.py` sets `DEBUG=true`, a temp `MEMORY_DB_PATH`, full env pins (`tests/isolation_support.py`), and a fail-fast network guard before app imports. Policy: `docs/TEST_EXECUTION.md` (ADR-0014).
 
 ## 8. MemoryStore migrations
 

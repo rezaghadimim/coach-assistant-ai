@@ -19,6 +19,7 @@ Each ADR captures a significant architectural or technical decision, its context
 | [0010](0010-llm-response-formatter.md) | Optional LLM formatting pass for human-friendly data replies | Accepted |
 | [0011](0011-collection-video-knowledge.md) | Per-collection video knowledge, dual embed providers, two-phase coach retrieval | Accepted |
 | [0012](0012-adr-process.md) | ADR process (when required, numbering, supersession) | Accepted |
+| [0014](0014-test-execution-contract.md) | Test execution contract (offline pytest, env isolation, network guard) | Accepted |
 
 ## Process
 

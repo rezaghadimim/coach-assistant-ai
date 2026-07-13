@@ -32,7 +32,8 @@ class TestSeparateServiceAddresses:
     """LLM, embedding, and reranker each have an independently settable address."""
 
     def test_defaults_are_independent(self):
-        settings = Settings()
+        # Schema defaults — not conftest test pins (see docs/TEST_EXECUTION.md).
+        settings = Settings.model_construct()
         assert settings.ollama_base_url == "http://localhost:11434"
         assert settings.rag_embed_provider == "ollama"
         assert settings.rag_embed_base_url == ""

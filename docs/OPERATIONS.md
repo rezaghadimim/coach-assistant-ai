@@ -129,17 +129,16 @@ uv pip compile requirements.txt -o requirements.lock
 
 ## CI gates
 
-`.github/workflows/tests.yml` runs, in order: `ruff check .`, `mypy app/`,
-then `coverage run -m pytest tests/ -v` with `coverage report --fail-under=75`.
-pytest (not `unittest discover`) is required so `tests/conftest.py` can point
-`MEMORY_DB_PATH` at a throwaway temp DB and set `DEBUG=true` before the config
-module loads.
+`.github/workflows/tests.yml` runs, in order: `ruff check .`, `scripts/check_contracts.py`,
+`scripts/check_doc_paths.py`, `mypy app/`, then `coverage run -m pytest tests/ -v` with
+`coverage report --fail-under=75`. pytest (not `unittest discover`) is required so
+`tests/conftest.py` can apply the [Test Execution Contract](TEST_EXECUTION.md) (env pins,
+temp DB, network guard) before the config module loads.
 
-Local CI-safe invocation (avoids Ollama network dependence):
+Normal local/CI test invocation (conftest applies full pins automatically):
 
 ```bash
-RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false \
-  .venv/bin/python -m pytest -q tests/
+.venv/bin/python -m pytest -q tests/
 ```
 
 ## AI-layer contracts worth preserving

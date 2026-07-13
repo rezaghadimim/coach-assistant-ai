@@ -46,3 +46,30 @@ Adding a tool requires updating all of the above in one commit (plus routing exa
 | Note types | `general`, `story`, `decision`, `goal`, `progress` | `app/core/tools.py:52` `_VALID_NOTE_TYPES`; inline schema enums at `tools.py:313`, `:393`, `:425` | Invalid note_type accepted/rejected inconsistently; LLM schema disagrees with executor |
 | `CorpusKind` | `framework`, `collection` | `app/rag/retriever.py:35`; `app/rag/ingest.py:21`; `app/core/embed_providers/types.py:9` | Wrong index / embed profile selected |
 | `ChunkRole` | `general`, `problem`, `solution` | `app/rag/ingest.py:22` (and uses in same module) | Role inference / chunk metadata mismatch. **Not** redefined in `embed_providers/types.py` (only `CorpusKind` is) |
+
+---
+
+## 4. Test execution env pins
+
+Authoritative dict: `tests/isolation_support.py::TEST_ENV_OVERRIDES` (applied by `tests/conftest.py` before `app` import). Full policy: `docs/TEST_EXECUTION.md` · ADR-0014.
+
+| Env var | Test value | Drift breaks |
+|---------|------------|--------------|
+| `DEBUG` | `true` | Auth fails closed → 401s across suite |
+| `RAG_BACKEND` | `token` | Embed probes / Ollama hangs |
+| `TOOL_ROUTER_BACKEND` | `token` | Embedding router hits real embed servers |
+| `RESPONSE_FORMATTER_ENABLED` | `false` | Formatter LLM + reranker warm-up in tests |
+| `RAG_EMBED_PROVIDER` | `ollama` | Embed unit tests mock Ollama httpx — wrong provider |
+| `RAG_EMBED_BASE_URL` | *(empty)* | Remote embed server from developer `.env` |
+| `RAG_COLLECTION_EMBED_PROVIDER` | *(empty)* | Collection embed override from `.env` |
+| `RAG_COLLECTION_EMBED_MODEL` | *(empty)* | Collection model override from `.env` |
+| `RAG_RERANK_PROVIDER` | `local` | Rerank unit tests mock fastembed — remote rerank used |
+| `RAG_RERANK_BASE_URL` | *(empty)* | Remote TEI/OpenAI-compat rerank from `.env` |
+| `OPENAI_API_KEY` | *(empty)* | Real OpenAI calls when mocks missing |
+| `OPENAI_MODEL` | *(empty)* | `OpenAIProvider` replaces Ollama in tool-loop tests |
+| `OPENROUTER_API_KEY` | *(empty)* | Cloud probe / provider calls |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:1` | Slow timeouts instead of fast connection refused |
+| `OPENAI_BASE_URL` | `http://127.0.0.1:1` | Same |
+| `OPENROUTER_BASE_URL` | `http://127.0.0.1:1` | Same |
+
+`MEMORY_DB_PATH` is set to a temp file in `conftest.py` (not in the dict above). `scripts/check_contracts.py` verifies the dict keys match this table.

@@ -1,5 +1,9 @@
 # Benchmarks & Fast Error Detection
 
+**Not pytest.** Benchmarks and evaluations are explicit opt-in tooling for quality and
+latency measurement with real providers. The automated test suite (`pytest tests/`) stays
+offline by default — see [TEST_EXECUTION.md](TEST_EXECUTION.md).
+
 Two goals, two tools:
 
 1. **"Is everything good right now?"** → `scripts/benchmark_pipeline.py` — a

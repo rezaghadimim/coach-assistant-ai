@@ -37,12 +37,9 @@ jobs:
         run: mypy app/
 
       - name: Run tests with coverage
-        # conftest.py's debug-mode setup is a pytest fixture convention — it is
-        # never loaded by `unittest discover`, so pytest (which understands
-        # unittest.TestCase tests natively) is the correct runner here.
-        # Env pins match the CI-safe invocation in docs/OPERATIONS.md: token
-        # backends avoid auto-probe nondeterminism (no Ollama in CI) and the
-        # disabled formatter avoids reranker model downloads.
+        # conftest.py applies the full Test Execution Contract (docs/TEST_EXECUTION.md)
+        # before app import — temp DB, env pins, network guard. These three env vars
+        # are redundant with conftest but kept visible as the historical CI-safe trio.
         env:
           RAG_BACKEND: token
           TOOL_ROUTER_BACKEND: token
