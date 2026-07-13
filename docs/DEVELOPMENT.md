@@ -5,7 +5,7 @@ Terse AI contract (same commands): root [`CLAUDE.md`](../CLAUDE.md).
 
 ## 1. Setup
 
-- **Python version story (as of 2026-07-10):** local `.python-version` = **3.12**; CI uses **3.11** (`.github/workflows/tests.yml`); `requires-python = ">=3.11"`. Alignment is roadmap **T-050** / ADR-0013 (not landed yet). Prefer 3.11 locally if you want to match CI exactly.
+- **Python version policy (ADR-0013):** runtime floor **3.11** (`requires-python`, ruff `target-version` py311); local default **3.12** (`.python-version`); CI matrix **3.11 + 3.12** (`.github/workflows/tests.yml`); mypy parses as **3.12**. Write application code that runs on 3.11 even when developing on 3.12.
 - Create a venv and install **requirements files** (what CI/Docker install — **not** pyproject `[dependency-groups]`):
 
 ```bash
