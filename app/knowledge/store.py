@@ -115,6 +115,8 @@ class KnowledgeStore:
                 )
                 """
             )
+            # NOTE: rows are written at ingest but retrieval reads only the in-memory
+            # index (app/rag/retriever.py); this table is bookkeeping/inspection only.
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS knowledge_chunks (

@@ -121,6 +121,8 @@ data/knowledge/collections/
 
 Metadata is mirrored in SQLite (`app/knowledge/store.py`). On startup and `POST /api/ingest`, framework docs and all collection transcripts are indexed into separate in-memory indices.
 
+**Retrieval vs SQLite chunks:** Coach chat and briefing retrieval never query the `knowledge_chunks` table. `app/rag/retriever.py` builds and searches two in-memory indices (`framework_index`, `collection_index`) at ingest time, persisting embeddings in the headered `RAG_INDEX_CACHE_PATH` JSON cache. The SQLite rows are written during filesystem ingest (`replace_chunks_for_source`) for bookkeeping, admin counts (`list_collections`), and inspection only — they are not the retrieval source of truth.
+
 See [`docs/knowledge/README.md`](knowledge/README.md) for collection workflow.
 
 ## Ingestion

@@ -29,7 +29,7 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | T-033 | openai_compat uses shared pipeline | DONE | (pending) | 2026-07-13 | ruff+mypy clean; 631 passed / 1 skipped / ~7s (Test Execution Contract). Non-streaming `/v1/chat/completions` now calls `run_chat_turn` with `gate_formatting_on_setting=True` and `generate_reply_fn=_generate_reply_for_turn`; streaming path unchanged with WIRE_FORMATS comment on `_stream_and_persist`. `chat_pipeline.py` unchanged (T-032 hooks sufficient). `chat.py` diff empty. `python3 -c "import main"` fails on system Python 3.9.6 (union syntax); `.venv/bin/python` → IMPORT-OK. WIRE_FORMATS.md §0 documents pipeline ownership. |
 | T-034 | KnowledgeStore migrations + PRAGMA parity | DONE | (pending) | 2026-07-13 | ruff+mypy clean; 635 passed / 1 skipped / ~8s (Test Execution Contract). PRAGMAs match MemoryStore (foreign_keys, busy_timeout=5000, journal_mode=WAL). Migrations via `knowledge_schema_version` table (not `PRAGMA user_version`); `MIGRATIONS` starts empty (version 0 = baseline CREATE TABLE IF NOT EXISTS). New tests: `tests/test_knowledge_store_migrations.py` (fresh v0, dummy migration bump, legacy upgrade, MemoryStore coexistence). Doc updates (MEMORY.md, ADR-0004) deferred — not in task allow-list. |
 | T-035 | Move _layer_availability out of main.py | DONE | (pending) | 2026-07-13 | ruff+mypy clean; 635 passed / 1 skipped / ~8s (Test Execution Contract). `layer_availability`, `_probe_ollama_server`, embed-probe cache moved to `app/core/health.py`; metrics imports from core (no `import main` in `app/`). Deprecated `_layer_availability` alias kept in `main.py` for backward compat. test_metrics.py patch targets updated. `python3 -c "import main"` fails on system Python 3.9.6 (union syntax); `.venv/bin/python` → IMPORT-OK. MODULE_MAP.md doc update deferred — not in task allow-list. |
-| T-036 | Resolve dead embed cache / write-only chunks | TODO | — | — | |
+| T-036 | Resolve dead embed cache / write-only chunks | DONE | (pending) | 2026-07-13 | Branch A: `embed_collection_chunks` deleted (grep: sole hit was definition in ingest.py; no quoted-string hits). `knowledge_chunks`: WRITE-only for chunk text (replace_chunks_for_source, clear_all); READ is COUNT-only in list_collections LEFT JOIN — no retrieval reader. store.py DDL comment + RAG.md paragraph added. |
 | T-037 | Public tokenizer API, end _private imports | TODO | — | — | |
 | T-038 | Extract embedding-cache I/O from retriever | TODO | — | — | |
 | T-039 | Extract citation formatting from retriever | TODO | — | — | |
@@ -41,8 +41,8 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 | ID | Unknown | Resolved? | Answer |
 |----|---------|-----------|--------|
 | U-01 | Single-tenant deployment? | No | — |
-| U-02 | Callers of `embed_collection_chunks`? | No | — |
-| U-03 | Is `knowledge_chunks` table read back? | No | — |
+| U-02 | Callers of `embed_collection_chunks`? | Yes | None outside `app/knowledge/ingest.py:239` definition (grep app/scripts/tests + quoted-string grep). Function removed in T-036. |
+| U-03 | Is `knowledge_chunks` table read back? | Yes | No code reads chunk text for retrieval. Writes: `replace_chunks_for_source`, `clear_all`. Reads: `list_collections` COUNT only. Retrieval uses in-memory indices + `RAG_INDEX_CACHE_PATH` (retriever.py). |
 | U-04 | Worker/thread model vs unlocked indices | No | — |
 | U-05 | Suite passes + coverage ≥ 75% right now? | Yes | 631 passed / 1 skipped / ~7s with Test Execution Contract (ADR-0014, 2026-07-13). Prior baseline: 33 failed / 596 passed / ~22 min under `.env` embed-provider leak. Coverage floor not re-checked this session. |
 | U-06 | pyproject deps vs requirements files drift | No | — |

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
-from app.core.embed_providers import embed_profile_for_corpus, get_embed_provider
+from app.core.embed_providers import embed_profile_for_corpus
 from app.knowledge.store import KnowledgeStore
 from app.rag.ingest import DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DocumentChunk
 from app.rag.transcript import build_transcript_chunks, read_transcript_file
@@ -234,54 +234,3 @@ def _register_pending_media_source(
             status="pending",
             source_id=source_dir.name,
         )
-
-
-def embed_collection_chunks(
-    chunks: list[DocumentChunk],
-    *,
-    cache_path: str | None = None,
-) -> dict[str, list[float]]:
-    """Batch-embed collection chunks using the collection embed provider."""
-    import hashlib
-    import json
-    from pathlib import Path
-
-    from app.core.embed_providers import embed_profile_for_corpus
-
-    if not chunks:
-        return {}
-
-    profile = embed_profile_for_corpus("collection")
-    provider = get_embed_provider(profile)
-    cache: dict[str, list[float]] = {}
-    path = Path(cache_path) if cache_path else None
-    if path and path.exists():
-        try:
-            cache = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            cache = {}
-
-    pending_texts: list[str] = []
-    pending_keys: list[str] = []
-    for chunk in chunks:
-        text_hash = hashlib.sha256(chunk.text.encode()).hexdigest()[:16]
-        key = f"{chunk.embed_profile_id}::{chunk.chunk_id}::{text_hash}"
-        if key in cache:
-            continue
-        pending_keys.append(key)
-        pending_texts.append(chunk.text)
-
-    if pending_texts:
-        logger.info(
-            "collection embed: embedding %d new chunks via %s",
-            len(pending_texts),
-            profile.profile_id,
-        )
-        vectors = provider.embed_passages(pending_texts)
-        for key, vector in zip(pending_keys, vectors):
-            cache[key] = vector
-        if path:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(cache), encoding="utf-8")
-
-    return cache
