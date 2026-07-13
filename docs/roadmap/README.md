@@ -32,7 +32,7 @@ RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false \
   .venv/bin/python -m pytest tests/ -q
 ```
 
-Facts to know (see REPO_AUDIT.md §4): CI runs Python 3.11; tests hang on Ollama without the env pins; `unittest discover` must never be used (skips `conftest.py`).
+Facts to know (see REPO_AUDIT.md §4): CI runs Python 3.12; tests hang on Ollama without the env pins; `unittest discover` must never be used (skips `conftest.py`).
 
 ---
 

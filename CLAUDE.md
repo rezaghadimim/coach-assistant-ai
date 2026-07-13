@@ -22,8 +22,7 @@ Never use `unittest discover` — it skips `tests/conftest.py` (auth fails close
 
 ## Environment facts
 
-- **CI:** Python **3.11 and 3.12** matrix (see ADR-0013, `.github/workflows/tests.yml`); installs `requirements-dev.txt`.
-- **Local:** `.python-version` = 3.12; `requires-python = ">=3.11"` — write code that runs on 3.11 (ruff target py311).
+- **Python:** **3.12 only** everywhere (local `.python-version`, CI, Docker, `requires-python`, ruff `py312`, mypy). CI installs `requirements-dev.txt`.
 - pyproject `[dependency-groups]` are **not** what CI/Docker install — edit `requirements*.txt` for deployable deps.
 - mypy `ignore_errors = true` for: `app.core.tools`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat` (`pyproject.toml`).
 

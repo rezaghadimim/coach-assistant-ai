@@ -86,7 +86,7 @@ install source in the Dockerfile. `requirements.txt` stays the human-edited
 source; regenerate the lock after editing it:
 
 ```bash
-uv pip compile requirements.txt -o requirements.lock
+uv pip compile requirements.txt -o requirements.lock --python-version 3.12
 ```
 
 ## Reliability design

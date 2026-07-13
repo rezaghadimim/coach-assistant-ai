@@ -33,7 +33,7 @@ Runs locally using open-source LLMs.  **English-only interface.**
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - [Ollama](https://ollama.com) installed
 - `ollama pull llama3.1:8b`
 - `ollama pull karuniaperjuangan/multilingual-e5-small` — embeddings + tool routing + RAG stage-1

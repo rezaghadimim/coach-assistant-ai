@@ -3,7 +3,7 @@ name = "coach-assistant-ai"
 version = "0.1.0"
 description = "AI-powered coaching assistant"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn>=0.27.0",
@@ -34,7 +34,7 @@ finetune = [
 ]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
@@ -50,8 +50,6 @@ ignore = ["E501"]
 "scripts/*.py" = ["E402"]
 
 [tool.mypy]
-# numpy's bundled stubs use PEP 695 `type` statements that need a 3.12+ target
-# to parse; the app itself still only requires >=3.11 (see Dockerfile/pyproject).
 python_version = "3.12"
 ignore_missing_imports = true
 # Non-strict starting point — tighten incrementally.

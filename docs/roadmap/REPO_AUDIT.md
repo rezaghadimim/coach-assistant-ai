@@ -17,7 +17,7 @@ Rules used throughout: facts below are **VERIFIED** against source (with `file:l
 - **RAG:** two in-memory corpora `framework` + `collection` (`app/rag/retriever.py:84-85`); two-phase coach retrieval (`retriever.py:325`); embedding-vector JSON caches under `data/` are the only persisted retrieval state — indices rebuild every process start (startup `main.py:56-79`).
 - **Persistence:** one SQLite file (`data/coach_assistant.db`) written by **two** store classes: `MemoryStore` (`app/memory/store.py`, versioned migrations, WAL) and `KnowledgeStore` (`app/knowledge/store.py`, no migrations, no WAL).
 - **Auth:** fail-closed API key (`app/api/auth.py`); `DEBUG=true` bypass only when no key configured. `/metrics` and `/health*` unauthenticated by design (`main.py:134-138`).
-- **CI:** `.github/workflows/tests.yml` — Python 3.11, `ruff check .`, `mypy app/`, pytest with `RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false`, coverage floor 75%.
+- **CI:** `.github/workflows/tests.yml` — Python 3.12, `ruff check .`, `mypy app/`, pytest with `RAG_BACKEND=token TOOL_ROUTER_BACKEND=token RESPONSE_FORMATTER_ENABLED=false`, coverage floor 75%.
 
 ---
 
@@ -38,8 +38,8 @@ A model that trusts docs will be wrong:
 - `.gitmodules` names the submodule `docs/knowledge/private` while its path is `data/knowledge/private`.
 - ADRs 0001–0005 carry placeholder date `2024-01-01`; real ADR activity starts 2026-06 (0006–0011).
 
-### R-03 ⚠️⚠️ Python version story is inconsistent
-`.python-version` = 3.12 · CI `setup-python` = 3.11 (`tests.yml:20`) · `requires-python = ">=3.11"` · ruff `target-version = py311` · mypy `python_version = 3.12`. A model can introduce 3.12-only syntax that passes locally and fails CI (or vice versa). Also: CI/Docker install from `requirements*.txt`/`requirements.lock`, **not** from pyproject `[dependency-groups]` — editing pyproject deps alone has no CI effect.
+### R-03 ✅ Resolved — Python version story is consistent
+Formerly: `.python-version` 3.12 vs CI/Docker/`requires-python`/ruff targeting 3.11 while mypy used 3.12. **Resolved:** the project is **Python 3.12 only** across local, CI, Docker (`python:3.12-slim`), `requires-python >=3.12`, ruff `py312`, and mypy. (Still true and separate: CI/Docker install from `requirements*.txt`/`requirements.lock`, **not** from pyproject `[dependency-groups]`.)
 
 ### R-04 ⚠️⚠️⚠️ Chat pipeline duplicated across two endpoints
 The persist→history→direct-reply→prompt→generate→append-ideas→persist→schedule-summary sequence is implemented twice: `app/api/chat.py:160-206` and `app/api/openai_compat.py:394-483`. They already diverge: openai_compat gates direct-reply formatting on `response_formatter_enabled` (`openai_compat.py:152`), chat.py does not; chat.py keeps a legacy `_sessions` dict (`chat.py:32,165,201`). Any pipeline edit must be mirrored by hand.
@@ -131,7 +131,7 @@ No `CLAUDE.md`, no `CONTRIBUTING.md`, no dev-environment guide, no coding-conven
 1. Routing corpus = 363 examples today; count it, never quote a doc.
 2. There are **9** chat tools, not 5; the authoritative list is `TOOL_DEFINITIONS` in `app/core/tools.py`.
 3. Guardrails are A, B, C, **E** (no D); E = `_notes_grounded` in `app/core/llm.py`.
-4. CI runs Python **3.11** with token backends and the formatter **disabled** — local `.python-version` is 3.12.
+4. CI runs Python **3.12** with token backends and the formatter **disabled** — same version as local `.python-version` / Docker.
 5. CI installs `requirements-dev.txt`, not pyproject dependency groups.
 6. Tests must run via **pytest**, never `unittest discover`.
 7. The mypy-clean status of `tools/model_registry/retriever/tool_router/chat/openai_compat` is an illusion: those modules are `ignore_errors = true`.

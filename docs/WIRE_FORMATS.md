@@ -11,7 +11,7 @@ Source: `app/api/openai_compat.py` (verified 2026-07-10; non-streaming pipeline 
 
 | Path | Orchestration |
 |------|---------------|
-| Non-streaming (`"stream": false`) | `app/api/chat_pipeline.run_chat_turn` (shared with `/api/chat`) |
+| Non-streaming (`"stream": false`) | `app/api/chat_pipeline.py` `run_chat_turn` (shared with `/api/chat`) |
 | Streaming (`"stream": true`) | Inline in `openai_compat.py` — persistence intentionally duplicates `chat_pipeline` for SSE interleaving (see §3) |
 
 **DO NOT** merge streaming into `run_chat_turn` without an explicit durability design + Open WebUI test.
