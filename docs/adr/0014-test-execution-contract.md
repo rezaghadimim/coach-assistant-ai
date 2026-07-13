@@ -71,5 +71,5 @@ No workflow change beyond documentation — conftest makes CI env pins redundant
 
 - **pytest-socket dependency** — rejected; a small in-repo guard avoids a new dev dependency and matches the existing “no pytest.ini” minimalism.
 - **pytest markers (`@pytest.mark.integration`)** — rejected; repo convention gates live tests on env flags (see `docs/CONVENTIONS.md` §7).
-- **Separate `tests/unit/` and `tests/integration/` trees** — rejected; flat `tests/` layout is established across 53 modules.
+- **Separate unit/ and integration/ test directory trees** — rejected; the flat tests/ layout (53 modules in one directory) is established.
 - **Disabling `.env` loading in tests via `SettingsConfigDict`** — rejected; would require app code changes and weaken production config loading; env force-set in conftest is sufficient.
