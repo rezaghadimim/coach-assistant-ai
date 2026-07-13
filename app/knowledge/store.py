@@ -6,7 +6,49 @@ import json
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
+
+MigrationFn = Callable[[sqlite3.Connection], None]
+
+
+def _current_knowledge_version(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_schema_version'"
+    ).fetchone()
+    if row is None:
+        return 0
+    ver = conn.execute("SELECT version FROM knowledge_schema_version LIMIT 1").fetchone()
+    if ver is None:
+        return 0
+    return int(ver[0])
+
+
+def _ensure_version_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_schema_version (
+            version INTEGER NOT NULL
+        )
+        """
+    )
+    count = conn.execute("SELECT COUNT(*) FROM knowledge_schema_version").fetchone()[0]
+    if count == 0:
+        conn.execute("INSERT INTO knowledge_schema_version (version) VALUES (0)")
+
+
+def _set_knowledge_version(conn: sqlite3.Connection, version: int) -> None:
+    conn.execute("DELETE FROM knowledge_schema_version")
+    conn.execute(
+        "INSERT INTO knowledge_schema_version (version) VALUES (?)",
+        (version,),
+    )
+
+
+# Ordered, forward-only, idempotent migrations. Each function's index in this
+# list is the schema version it upgrades *to* (i.e. migration i moves the db
+# from version == i to version == i + 1). Never reorder or remove entries here
+# — append new migrations to the end instead.
+MIGRATIONS: list[MigrationFn] = []
 
 
 class KnowledgeStore:
@@ -21,9 +63,26 @@ class KnowledgeStore:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        # busy_timeout must be set *before* the journal_mode switch: changing
+        # journal mode itself takes an exclusive lock, and with multiple
+        # uvicorn workers starting concurrently (each running _init_schema on
+        # import) two processes can race for that lock. Without busy_timeout
+        # already active on this connection, the loser fails immediately with
+        # "database is locked" instead of waiting for the winner to finish.
+        conn.execute("PRAGMA busy_timeout = 5000")
+        # WAL lets readers run concurrently with a single writer (default
+        # rollback journal blocks both).
+        conn.execute("PRAGMA journal_mode = WAL")
         return conn
 
     def _init_schema(self) -> None:
+        """Ensure baseline tables and apply pending knowledge migrations.
+
+        Migrations are idempotent and forward-only, tracked in
+        ``knowledge_schema_version`` (not ``PRAGMA user_version``, which
+        MemoryStore owns). All pending migrations commit together in one
+        transaction when the ``with`` block exits.
+        """
         with self._connect() as conn:
             conn.execute(
                 """
@@ -74,6 +133,10 @@ class KnowledgeStore:
                 )
                 """
             )
+            _ensure_version_table(conn)
+            for version in range(_current_knowledge_version(conn), len(MIGRATIONS)):
+                MIGRATIONS[version](conn)
+                _set_knowledge_version(conn, version + 1)
 
     def create_collection(
         self,
