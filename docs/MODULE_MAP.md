@@ -14,6 +14,7 @@ Verified 2026-07-10.
 | `app/api/chat_pipeline.py` | Shared persist→history→direct-reply→prompt→generate→persist turn orchestration (`run_chat_turn`; used by `chat.py`; `openai_compat` in T-033) |
 | `app/core/` | Orchestration + shared services: LLM loop, intents, tools, routers, formatter, config, providers, embed/rerank, scope, confirmations |
 | `app/rag/` | Framework/collection retrieval indices, ingest/chunking, transcript parse, RAG rerank facade |
+| `app/rag/embed_cache.py` | On-disk embedding cache I/O (versioned JSON envelope; per-corpus cache paths) |
 | `app/knowledge/` | Collection SQLite store, filesystem ingest, media jobs (Whisper / yt-dlp) |
 | `app/memory/` | Coach session SQLite (`MemoryStore`), session lifecycle, summarizer, training export |
 | `app/models/` | Pydantic / API schemas |

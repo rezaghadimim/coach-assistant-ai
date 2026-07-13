@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from app.core.embed_providers import embed_profile_for_corpus
+from app.rag.embed_cache import load_cache, save_cache
 from app.rag.ingest import (
     build_document_chunks,
     chunk_text,
@@ -121,6 +123,22 @@ class RagIngestTests(unittest.TestCase):
             sources = {Path(chunk.source_path).name for chunk in chunks}
 
             self.assertEqual(sources, {"a.md", "b.md"})
+
+    def test_embed_cache_roundtrip(self) -> None:
+        """save_cache → load_cache preserves vectors and identity header fields."""
+        import json
+
+        vectors = {"default::doc:0::abc123": [0.1, 0.2, 0.3]}
+        profile = embed_profile_for_corpus("framework")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = str(Path(temp_dir) / "cache.json")
+            save_cache(path, vectors, profile)
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.assertEqual(raw["version"], 1)
+            self.assertEqual(raw["model"], profile.model)
+            self.assertEqual(raw["dim"], profile.dimensions)
+            self.assertEqual(raw["chunks"], vectors)
+            self.assertEqual(load_cache(path, profile), vectors)
 
 
 if __name__ == "__main__":
