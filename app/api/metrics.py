@@ -121,8 +121,8 @@ async def metrics_endpoint() -> PlainTextResponse:
     Not gated behind API-key auth since external scrapers typically cannot
     present one — mirrors the existing ``/health`` endpoint's posture.
     """
-    from main import _layer_availability
+    from app.core.health import layer_availability
 
-    availability = await _layer_availability()
+    availability = await layer_availability()
     body = render_metrics(availability)
     return PlainTextResponse(content=body, media_type=CONTENT_TYPE_LATEST)

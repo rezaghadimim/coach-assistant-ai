@@ -41,7 +41,10 @@ class MetricsEndpointTests(unittest.TestCase):
 
     def _get_metrics(self):
         # Avoid real network probes in _layer_availability.
-        with patch("main._layer_availability", new=AsyncMock(return_value=_AVAILABILITY)):
+        with patch(
+            "app.core.health.layer_availability",
+            new=AsyncMock(return_value=_AVAILABILITY),
+        ):
             return self.client.get("/metrics")
 
     def test_metrics_unauthenticated_and_prometheus_format(self) -> None:
@@ -69,14 +72,17 @@ class MetricsEndpointTests(unittest.TestCase):
 
     def test_embed_probe_not_rerun_within_ttl(self) -> None:
         """Repeated /metrics scrapes within the TTL must not re-probe the embed model."""
-        import main as main_module
+        from app.core import health as health_module
 
-        main_module._embed_probe_cache = (False, 0.0)
+        health_module._embed_probe_cache = (False, 0.0)
         old_enabled = settings.tool_router_enabled
         settings.tool_router_enabled = True
         try:
             with (
-                patch("main._probe_ollama_server", new=AsyncMock(return_value=True)),
+                patch(
+                    "app.core.health._probe_ollama_server",
+                    new=AsyncMock(return_value=True),
+                ),
                 patch(
                     "app.core.model_registry.probe_openrouter",
                     new=AsyncMock(return_value=False),
@@ -88,7 +94,7 @@ class MetricsEndpointTests(unittest.TestCase):
                 self.assertEqual(probe.call_count, 1)
         finally:
             settings.tool_router_enabled = old_enabled
-            main_module._embed_probe_cache = (False, 0.0)
+            health_module._embed_probe_cache = (False, 0.0)
 
 
 if __name__ == "__main__":
