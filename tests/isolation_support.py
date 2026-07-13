@@ -17,6 +17,7 @@ TEST_ENV_OVERRIDES: dict[str, str] = {
     "RAG_BACKEND": "token",
     "TOOL_ROUTER_BACKEND": "token",
     "RESPONSE_FORMATTER_ENABLED": "false",
+    "RAG_RERANK_ENABLED": "false",
     "RAG_EMBED_PROVIDER": "ollama",
     "RAG_EMBED_BASE_URL": "",
     "RAG_COLLECTION_EMBED_PROVIDER": "",
@@ -56,6 +57,7 @@ def apply_settings_overrides(settings: object) -> None:
     settings.rag_backend = "token"  # type: ignore[attr-defined]
     settings.tool_router_backend = "token"  # type: ignore[attr-defined]
     settings.response_formatter_enabled = False  # type: ignore[attr-defined]
+    settings.rag_rerank_enabled = False  # type: ignore[attr-defined]
     settings.rag_embed_provider = "ollama"  # type: ignore[attr-defined]
     settings.rag_embed_base_url = ""  # type: ignore[attr-defined]
     settings.rag_collection_embed_provider = None  # type: ignore[attr-defined]
@@ -111,3 +113,12 @@ def install_network_guard() -> None:
 
 def uninstall_network_guard() -> None:
     socket.socket.connect = _original_socket_connect  # type: ignore[method-assign]
+
+
+def reset_rerank_probe_cache() -> None:
+    """Clear module-level rerank probe state polluted by app lifespan or probe tests."""
+    import app.core.rerank as rerank_mod
+
+    rerank_mod._probe_ok = None
+    rerank_mod._encoder = None
+    rerank_mod._encoder_model_name = None

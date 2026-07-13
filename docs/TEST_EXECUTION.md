@@ -66,6 +66,7 @@ Pin registry (must stay in sync): `docs/CONTRACTS.md` §4 and `scripts/check_con
 | `RAG_BACKEND` | `token` | Ollama embed auto-probe / hangs |
 | `TOOL_ROUTER_BACKEND` | `token` | Embedding-based routing hitting real embed servers |
 | `RESPONSE_FORMATTER_ENABLED` | `false` | Formatter LLM pass + reranker warm-up |
+| `RAG_RERANK_ENABLED` | `false` | Lifespan rerank warm sets `_probe_ok=False` when model uncached |
 | `RAG_EMBED_PROVIDER` | `ollama` | `.env` `openai`/`openrouter` breaking Ollama-mocked embed tests |
 | `RAG_EMBED_BASE_URL` | *(empty)* | Remote embed server from `.env` |
 | `RAG_RERANK_PROVIDER` | `local` | Remote TEI/OpenAI-compat rerank from `.env` |

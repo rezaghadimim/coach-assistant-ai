@@ -59,6 +59,7 @@ Authoritative dict: `tests/isolation_support.py::TEST_ENV_OVERRIDES` (applied by
 | `RAG_BACKEND` | `token` | Embed probes / Ollama hangs |
 | `TOOL_ROUTER_BACKEND` | `token` | Embedding router hits real embed servers |
 | `RESPONSE_FORMATTER_ENABLED` | `false` | Formatter LLM + reranker warm-up in tests |
+| `RAG_RERANK_ENABLED` | `false` | Lifespan rerank warm sets `_probe_ok=False` when model uncached |
 | `RAG_EMBED_PROVIDER` | `ollama` | Embed unit tests mock Ollama httpx — wrong provider |
 | `RAG_EMBED_BASE_URL` | *(empty)* | Remote embed server from developer `.env` |
 | `RAG_COLLECTION_EMBED_PROVIDER` | *(empty)* | Collection embed override from `.env` |

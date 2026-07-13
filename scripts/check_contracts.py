@@ -168,6 +168,7 @@ def main() -> int:
         "RAG_BACKEND",
         "TOOL_ROUTER_BACKEND",
         "RESPONSE_FORMATTER_ENABLED",
+        "RAG_RERANK_ENABLED",
         "RAG_EMBED_PROVIDER",
         "RAG_EMBED_BASE_URL",
         "RAG_COLLECTION_EMBED_PROVIDER",

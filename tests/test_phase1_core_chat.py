@@ -64,6 +64,7 @@ class Phase1CoreChatTests(unittest.TestCase):
             ),
             patch("app.core.embeddings.probe_embed_model", return_value=False),
             patch("app.core.config.settings.openrouter_api_key", ""),
+            patch("app.core.config.settings.rag_rerank_enabled", True),
             patch("app.core.rerank.rerank_probe_cached", return_value=False),
         ):
             response = self.client.get("/health")

@@ -14,10 +14,13 @@ import os
 import shutil
 import tempfile
 
+import pytest
+
 from tests.isolation_support import (
     apply_env_overrides,
     apply_settings_overrides,
     install_network_guard,
+    reset_rerank_probe_cache,
 )
 
 apply_env_overrides()
@@ -36,3 +39,9 @@ atexit.register(shutil.rmtree, _TEST_DB_DIR, True)
 from app.core.config import settings  # noqa: E402
 
 apply_settings_overrides(settings)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_rerank_probe_cache() -> None:
+    """Prevent cross-test pollution of app.core.rerank._probe_ok (lifespan warm, probe tests)."""
+    reset_rerank_probe_cache()
