@@ -59,7 +59,7 @@ Benchmarks and evaluations (`scripts/benchmark_*.py`, `scripts/eval_*.py`) are *
 .venv/bin/python -m mypy app/   # non-strict
 ```
 
-mypy currently `ignore_errors = true` for: `app.core.tools`, `app.core.model_registry`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat`. Un-ignoring `model_registry` is roadmap **T-040**.
+mypy currently `ignore_errors = true` for: `app.core.tools`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat`. `app.core.model_registry` was un-ignored in roadmap **T-040**.
 
 ## 5. Working a roadmap task
 

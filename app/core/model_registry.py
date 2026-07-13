@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, TypeGuard, Union
 
 import httpx
 
@@ -56,7 +56,7 @@ def openrouter_models() -> dict[str, str]:
     return registry
 
 
-def is_cloud_model_id(model_id: Optional[str]) -> bool:
+def is_cloud_model_id(model_id: Optional[str]) -> TypeGuard[str]:
     """Return True when ``model_id`` routes to OpenRouter."""
     return model_id is not None and model_id in openrouter_models()
 
