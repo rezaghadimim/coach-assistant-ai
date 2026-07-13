@@ -15,6 +15,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.llm_router import _KNOWN_TOOLS, _ROUTER_SCHEMA  # noqa: E402
+from app.core.reply_markers import (  # noqa: E402
+    DATA_REPLY_PREFIX,
+    NO_NOTES_REPLY,
+    PENDING_CONFIRMATION_MARKER,
+    REGISTERED_CLIENTS_PREFIX,
+)
 from app.core.response_formatter import _DATA_REPLY_PREFIX  # noqa: E402
 from app.core.tools import (  # noqa: E402
     TOOL_DEFINITIONS,
@@ -25,6 +31,13 @@ from app.core.tools import (  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _FAILURES: list[str] = []
+
+_REPLY_MARKER_CONSUMERS = {
+    "app/core/llm.py",
+    "app/core/response_formatter.py",
+    "app/core/tools.py",
+    "app/core/confirmations.py",
+}
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
@@ -59,32 +72,36 @@ def collect_note_type_enums(obj: object, found: set) -> None:
 
 
 def main() -> int:
-    # --- _DATA_REPLY_PREFIX byte-identical to the literal in llm.py ---
-    literal = "Here are the details on file:"
+    # --- reply markers: single definition site + consumer imports ---
     check(
-        "_DATA_REPLY_PREFIX matches the literal used in app/core/llm.py",
-        _DATA_REPLY_PREFIX == literal + "\n\n"
-        and literal in read("app/core/llm.py")
-        and literal in read("app/core/response_formatter.py"),
+        "_DATA_REPLY_PREFIX aliases DATA_REPLY_PREFIX from reply_markers.py",
+        _DATA_REPLY_PREFIX == DATA_REPLY_PREFIX,
     )
 
-    # --- magic strings occur in both producer and consumer files ---
-    magic_strings = [
-        ("No notes on file.", ["app/core/tools.py", "app/core/llm.py"]),
-        (
-            "Registered clients:",
-            ["app/core/tools.py", "app/core/response_formatter.py"],
-        ),
-        (
-            "pending confirmation",
-            ["app/core/tools.py", "app/core/confirmations.py"],
-        ),
+    reply_marker_literals = [
+        DATA_REPLY_PREFIX,
+        NO_NOTES_REPLY,
+        REGISTERED_CLIENTS_PREFIX,
+        PENDING_CONFIRMATION_MARKER,
     ]
-    for literal_str, files in magic_strings:
-        contents = {f: read(f) for f in files}
+    for literal_str in reply_marker_literals:
+        offenders = []
+        for py_file in sorted((REPO_ROOT / "app").rglob("*.py")):
+            if py_file.name == "reply_markers.py":
+                continue
+            if literal_str in py_file.read_text(encoding="utf-8"):
+                offenders.append(py_file.relative_to(REPO_ROOT).as_posix())
+        preview = literal_str.replace("\n", "\\n")[:40]
         check(
-            f'"{literal_str}" occurs in {", ".join(files)}',
-            all(literal_str in text for text in contents.values()),
+            f'"{preview}..." literal appears only in app/core/reply_markers.py',
+            not offenders,
+            f"also in {offenders}",
+        )
+
+    for relpath in sorted(_REPLY_MARKER_CONSUMERS):
+        check(
+            f"{relpath} imports app.core.reply_markers",
+            "from app.core.reply_markers import" in read(relpath),
         )
 
     # --- tool-name lists in sync with TOOL_DEFINITIONS ---

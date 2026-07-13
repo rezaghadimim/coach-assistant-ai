@@ -2,19 +2,21 @@
 
 Before changing any value in the tables below, update **every** listed location in the same commit, then run `scripts/check_contracts.py` (also runs in CI, `.github/workflows/tests.yml`).
 
-Verified 2026-07-10 against source. Centralization of these values is scheduled: magic strings → T-030; tool-name lists → T-031.
+Verified 2026-07-13 against source. Tool-name list centralization is scheduled in T-031.
 
 ---
 
 ## 1. Magic strings
 
-| Value | Locations | Role | Drift breaks |
-|-------|-----------|------|--------------|
-| `"Here are the details on file:\n\n"` | Producer: `app/core/llm.py:249` (`_format_direct_lookup_reply`). Consumer constant: `app/core/response_formatter.py:31` (`_DATA_REPLY_PREFIX`); gate: `is_formattable` uses it | Prefix on successful data-reply templates | Formatter never treats replies as formattable → all data-reply formatting silently disabled |
-| `"No notes on file."` | Producer: `app/core/tools.py:175`. Matcher: `app/core/llm.py:144` (`_notes_grounded`, guardrail E) | Empty-notes sentinel | Guardrail E stops firing or fires incorrectly |
-| `"Registered clients:"` | Producer: `app/core/tools.py:621`. Matchers: `app/core/response_formatter.py:137`, `:281` | `list_clients` reply header | Deterministic client-list table formatting skipped |
-| `"pending confirmation"` | Producers: `app/core/tools.py:148`, `:161`, `:199` (also related preview copy at `:217`, `:229`). Matcher: `app/core/confirmations.py:167` | Marks write-preview text so confirm/cancel can find the pending write | Confirmation replay fails to bind to the preview |
-| Emoji `⏳` / `✅` / `❌` | Producers throughout `app/core/tools.py` execute paths (e.g. `:148`, `:528`, `:539`). Semantics documented in `ToolOutcome` docstring `:16-33` and `docs/CONVENTIONS.md` | User-facing status markers tied to `preview` / `ok` / `error` | Coaches (and formatters that key off prefixes) misread write vs error vs success |
+Authoritative definitions: `app/core/reply_markers.py` (imported by every producer/consumer below).
+
+| Value | Constant | Locations | Role | Drift breaks |
+|-------|----------|-----------|------|--------------|
+| `"Here are the details on file:\n\n"` | `DATA_REPLY_PREFIX` | Producer: `app/core/llm.py` (`_format_direct_lookup_reply`). Consumer alias: `app/core/response_formatter.py` (`_DATA_REPLY_PREFIX`); gate: `is_formattable` uses it | Prefix on successful data-reply templates | Formatter never treats replies as formattable → all data-reply formatting silently disabled |
+| `"No notes on file."` | `NO_NOTES_REPLY` | Producer: `app/core/tools.py` (`_format_client_notes`). Matcher: `app/core/llm.py` (`_notes_grounded`, guardrail E) | Empty-notes sentinel | Guardrail E stops firing or fires incorrectly |
+| `"Registered clients:"` | `REGISTERED_CLIENTS_PREFIX` | Producer: `app/core/tools.py` (`list_clients`). Matchers: `app/core/response_formatter.py` (`_format_registered_clients_table`, `_format_compact_client_list`) | `list_clients` reply header | Deterministic client-list table formatting skipped |
+| `"pending confirmation"` | `PENDING_CONFIRMATION_MARKER` | Producers: `app/core/tools.py` write-preview formatters. Matcher: `app/core/confirmations.py` (`_lookup_pending_write_from_messages`) | Marks write-preview text so confirm/cancel can find the pending write | Confirmation replay fails to bind to the preview |
+| Emoji `⏳` / `✅` / `❌` | — | Producers throughout `app/core/tools.py` execute paths. Semantics documented in `ToolOutcome` docstring and `docs/CONVENTIONS.md` | User-facing status markers tied to `preview` / `ok` / `error` | Coaches (and formatters that key off prefixes) misread write vs error vs success |
 
 ---
 

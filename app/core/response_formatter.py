@@ -22,13 +22,14 @@ from typing import Optional
 
 from app.core.config import settings
 from app.core.observability import log_step
+from app.core.reply_markers import DATA_REPLY_PREFIX, REGISTERED_CLIENTS_PREFIX
 
 logger = logging.getLogger(__name__)
 
 # Prefix used by _format_direct_lookup_reply to wrap successful tool results.
 # Stripped before sending raw data to the LLM formatter so it doesn't see the
 # mechanical header.
-_DATA_REPLY_PREFIX = "Here are the details on file:\n\n"
+_DATA_REPLY_PREFIX = DATA_REPLY_PREFIX
 
 # Patterns used to extract PII tokens that must survive the formatting pass.
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
@@ -134,7 +135,7 @@ def _display_value(value: str) -> str:
 
 def _format_registered_clients_table(raw_data: str) -> Optional[str]:
     """Build a markdown table from ``list_clients`` tool output, or ``None``."""
-    if "Registered clients:" not in raw_data:
+    if REGISTERED_CLIENTS_PREFIX not in raw_data:
         return None
 
     rows: list[tuple[str, str, str]] = []
@@ -278,7 +279,7 @@ def _format_client_notes_numbered(raw_data: str) -> Optional[str]:
 
 def _format_compact_client_list(raw_data: str) -> Optional[str]:
     """Return a short sentence listing client names from ``list_clients`` output."""
-    if "Registered clients:" not in raw_data:
+    if REGISTERED_CLIENTS_PREFIX not in raw_data:
         return None
 
     names = [match.group("name").strip() for match in _LIST_CLIENT_LINE.finditer(raw_data)]

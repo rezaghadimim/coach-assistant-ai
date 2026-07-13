@@ -6,6 +6,8 @@ import re
 from collections import OrderedDict
 from typing import Any, Optional
 
+from app.core.reply_markers import PENDING_CONFIRMATION_MARKER
+
 # Structured pending-write state (AI-01): when a write preview is produced,
 # its exact rendered text is mapped to the (tool_name, arguments) to replay on
 # confirmation. Confirm-to-save therefore does not depend on re-parsing the
@@ -164,7 +166,7 @@ def parse_pending_write(messages: list[dict]) -> Optional[tuple[str, dict[str, A
     if registered is not None:
         return registered
 
-    if "pending confirmation" not in content:
+    if PENDING_CONFIRMATION_MARKER not in content:
         return None
     return _parse_preview_text(content)
 

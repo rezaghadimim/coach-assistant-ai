@@ -46,6 +46,11 @@ class IsFormattableTests(unittest.TestCase):
     def test_false_for_plain_text(self) -> None:
         self.assertFalse(self.is_formattable("Hello! How can I help you today?"))
 
+    def test_true_for_data_reply_prefix_constant(self) -> None:
+        from app.core.reply_markers import DATA_REPLY_PREFIX
+
+        self.assertTrue(self.is_formattable(DATA_REPLY_PREFIX + "x"))
+
     def test_false_for_scope_refusal(self) -> None:
         self.assertFalse(
             self.is_formattable(

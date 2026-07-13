@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 from app.core.observability import log_step
+from app.core.reply_markers import (
+    NO_NOTES_REPLY,
+    PENDING_CONFIRMATION_MARKER,
+    REGISTERED_CLIENTS_PREFIX,
+)
 from app.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
@@ -145,7 +150,7 @@ def _format_create_client_preview(
     action = "Update client" if is_update else "Create client"
     preview_user = {"user_id": client_id, "name": client_name, "profile": profile}
     return (
-        f"⏳ {action} — pending confirmation (not saved yet).\n\n"
+        f"⏳ {action} — {PENDING_CONFIRMATION_MARKER} (not saved yet).\n\n"
         f"{_format_client_profile(preview_user)}\n\n"
         f"{_CONFIRM_CLIENT_HINT}"
     )
@@ -158,7 +163,7 @@ def _format_add_note_preview(
     title: Optional[str],
 ) -> str:
     lines = [
-        "⏳ Add note — pending confirmation (not saved yet).",
+        f"⏳ Add note — {PENDING_CONFIRMATION_MARKER} (not saved yet).",
         f"Client: {client_id}",
         f"Type: {note_type}",
     ]
@@ -172,7 +177,7 @@ def _format_add_note_preview(
 
 def _format_client_notes(notes: list[dict[str, Any]]) -> str:
     if not notes:
-        return "No notes on file."
+        return NO_NOTES_REPLY
     lines: list[str] = []
     for note in notes:
         header = f"[{note['note_type'].upper()}]"
@@ -196,7 +201,7 @@ def _format_update_note_preview(
     title: Optional[str],
 ) -> str:
     lines = [
-        "⏳ Update note — pending confirmation (not saved yet).",
+        f"⏳ Update note — {PENDING_CONFIRMATION_MARKER} (not saved yet).",
         f"Note ID: {note_id}",
         f"Client: {client_id}",
         f"Type: {note_type}",
@@ -214,7 +219,7 @@ def _format_delete_note_preview(note_id: int, client_id: str, note: dict[str, An
     if note.get("title"):
         header += f" {note['title']}"
     return (
-        "⏳ Delete note — pending confirmation (not deleted yet).\n\n"
+        f"⏳ Delete note — {PENDING_CONFIRMATION_MARKER} (not deleted yet).\n\n"
         f"Note ID: {note_id}\n"
         f"Client: {client_id}\n"
         f"Type: {note['note_type']}\n"
@@ -226,7 +231,7 @@ def _format_delete_note_preview(note_id: int, client_id: str, note: dict[str, An
 def _format_delete_client_preview(user: dict[str, Any], note_count: int) -> str:
     name = user.get("name") or user["user_id"]
     return (
-        "⏳ Delete client — pending confirmation (not deleted yet).\n\n"
+        f"⏳ Delete client — {PENDING_CONFIRMATION_MARKER} (not deleted yet).\n\n"
         f"Client ID: {user['user_id']}\n"
         f"Name: {name}\n"
         f"Notes on file: {note_count}\n\n"
@@ -618,7 +623,7 @@ def execute_tool_outcome(
                     f"- {u['name'] or u['user_id']} (ID: {u['user_id']}, Email: {email})"
                 )
             log_step(logger, "tool.list_clients", "ok", count=len(users))
-            return ToolOutcome("info", "Registered clients:\n" + "\n".join(lines))
+            return ToolOutcome("info", REGISTERED_CLIENTS_PREFIX + "\n" + "\n".join(lines))
 
         if name == "update_client_note":
             note_id = int(arguments["note_id"])

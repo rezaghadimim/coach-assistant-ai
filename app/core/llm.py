@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, AsyncGenerator, Optional, Union
 from app.core.config import settings
 from app.core.observability import log_step
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
+from app.core.reply_markers import DATA_REPLY_PREFIX, NO_NOTES_REPLY
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ def _notes_grounded(record: str, reply: str) -> bool:
     asserts specific goal/decision/story content has nothing on file to draw
     that content from — it can only be fabricated.
     """
-    if "No notes on file." not in record:
+    if NO_NOTES_REPLY not in record:
         return True
     return not _NOTE_CONTENT_HINT_RE.search(reply)
 
@@ -246,7 +247,7 @@ def _format_direct_lookup_reply(tool_result: str, status: str = "info") -> str:
     """Wrap a successful read in the data-reply template; errors pass through."""
     if status == "error":
         return tool_result
-    return f"Here are the details on file:\n\n{tool_result}"
+    return f"{DATA_REPLY_PREFIX}{tool_result}"
 
 
 async def _try_llm_router_action(
