@@ -15,6 +15,7 @@ Verified 2026-07-10.
 | `app/core/` | Orchestration + shared services: LLM loop, intents, tools, routers, formatter, config, providers, embed/rerank, scope, confirmations |
 | `app/rag/` | Framework/collection retrieval indices, ingest/chunking, transcript parse, RAG rerank facade |
 | `app/rag/embed_cache.py` | On-disk embedding cache I/O (versioned JSON envelope; per-corpus cache paths) |
+| `app/rag/formatting.py` | Citation/prompt formatting for retrieved chunks (two-phase coach context strings) |
 | `app/knowledge/` | Collection SQLite store, filesystem ingest, media jobs (Whisper / yt-dlp) |
 | `app/memory/` | Coach session SQLite (`MemoryStore`), session lifecycle, summarizer, training export |
 | `app/models/` | Pydantic / API schemas |
