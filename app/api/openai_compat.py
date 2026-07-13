@@ -42,6 +42,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.api.chat import build_prompt_and_ideas, session_manager, store
+from app.api.chat_pipeline import run_chat_turn
 from app.rag.expert_ideas import format_expert_ideas_markdown
 from app.core.config import settings
 from app.core.llm import generate_response, try_direct_reply_with_meta
@@ -284,6 +285,9 @@ async def _stream_and_persist(
 ) -> AsyncGenerator[str, None]:
     """Tool-calling + optional streaming response, then persist the full reply.
 
+    Persistence here intentionally duplicates chat_pipeline for SSE interleaving —
+    see docs/WIRE_FORMATS.md.
+
     The request coroutine has already returned (and reset its log context) by
     the time this generator runs, so it re-binds the original ``msg_id``/``user``
     to keep the LLM log lines correlated, and resets in a ``finally`` block.
@@ -391,26 +395,26 @@ async def chat_completions(
         log_step(logger, "message", "received", endpoint="/v1/chat/completions",
                  stream=request.stream, model=model_id, len=len(last_user_message))
 
-    session_id = session_manager.get_or_create_session_id(
-        user_id, coach_name=coach_name
-    )
-    if last_user_message:
-        store.add_message(session_id, "user", last_user_message)
-
-    history = store.get_session_messages(session_id)
-    direct_meta = try_direct_reply_with_meta(last_user_message, store, history)
-    direct_reply = await _maybe_format_direct_reply(
-        last_user_message,
-        direct_meta.reply if direct_meta is not None else None,
-        model_id,
-        tool=direct_meta.tool if direct_meta is not None else None,
-        hint=direct_meta.hint if direct_meta is not None else None,
-    )
-
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
 
     if request.stream:
+        session_id = session_manager.get_or_create_session_id(
+            user_id, coach_name=coach_name
+        )
+        if last_user_message:
+            store.add_message(session_id, "user", last_user_message)
+
+        history = store.get_session_messages(session_id)
+        direct_meta = try_direct_reply_with_meta(last_user_message, store, history)
+        direct_reply = await _maybe_format_direct_reply(
+            last_user_message,
+            direct_meta.reply if direct_meta is not None else None,
+            model_id,
+            tool=direct_meta.tool if direct_meta is not None else None,
+            hint=direct_meta.hint if direct_meta is not None else None,
+        )
+
         system_prompt = ""
         ideas_markdown = ""
         if direct_reply is None:
@@ -442,25 +446,31 @@ async def chat_completions(
             media_type="text/event-stream",
         )
 
-    async def _run_non_streaming() -> tuple[str, str]:
-        if direct_reply is not None:
-            return direct_reply, "direct"
-        system_prompt, ideas = await asyncio.to_thread(
-            build_prompt_and_ideas, user_id, last_user_message
-        )
-        reply = await _generate_reply_or_unavailable(
+    async def _generate_reply_for_turn(
+        *, history: list[dict], system_prompt: str
+    ) -> str:
+        return await _generate_reply_or_unavailable(
             history=history,
             system_prompt=system_prompt,
             model_id=model_id,
         )
-        ideas_markdown = format_expert_ideas_markdown(ideas)
-        if ideas_markdown:
-            reply = f"{reply}\n\n{ideas_markdown}"
-        return reply, "llm"
 
     try:
-        reply, path = await asyncio.wait_for(
-            _run_non_streaming(), timeout=settings.request_timeout_s
+        result = await asyncio.wait_for(
+            run_chat_turn(
+                user_id=user_id,
+                message=last_user_message,
+                store=store,
+                session_manager=session_manager,
+                generate_response=generate_response,
+                try_direct_reply_with_meta=try_direct_reply_with_meta,
+                build_prompt_and_ideas=build_prompt_and_ideas,
+                coach_name=coach_name,
+                model_id=model_id,
+                gate_formatting_on_setting=True,
+                generate_reply_fn=_generate_reply_for_turn,
+            ),
+            timeout=settings.request_timeout_s,
         )
     except asyncio.TimeoutError:
         ms = int((time.monotonic() - t0) * 1000)
@@ -477,10 +487,9 @@ async def chat_completions(
                 }
             },
         )
-    store.add_message(session_id, "assistant", reply)
-    session_manager.schedule_update_summary(
-        session_id, threshold=settings.summary_trigger_messages
-    )
+
+    reply = result.reply
+    path = result.path
 
     ms = int((time.monotonic() - t0) * 1000)
     log_step(logger, "message", "done", endpoint="/v1/chat/completions",

@@ -3,7 +3,18 @@
 Contract for Open WebUI (and any OpenAI Chat Completions client).  
 **DO NOT change any detail below without testing Open WebUI end-to-end.**
 
-Source: `app/api/openai_compat.py` (verified 2026-07-10).
+Source: `app/api/openai_compat.py` (verified 2026-07-10; non-streaming pipeline note 2026-07-13).
+
+---
+
+## 0. Pipeline ownership
+
+| Path | Orchestration |
+|------|---------------|
+| Non-streaming (`"stream": false`) | `app/api/chat_pipeline.run_chat_turn` (shared with `/api/chat`) |
+| Streaming (`"stream": true`) | Inline in `openai_compat.py` — persistence intentionally duplicates `chat_pipeline` for SSE interleaving (see §3) |
+
+**DO NOT** merge streaming into `run_chat_turn` without an explicit durability design + Open WebUI test.
 
 ---
 
