@@ -7,17 +7,16 @@ import time
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.chat_pipeline import run_chat_turn
 from app.core.config import settings
 from app.core.llm import generate_response, try_direct_reply_with_meta
 from app.core.observability import bind_message, log_step, preview, reset_message
 from app.core.prompts import COACH_ASSISTANT_SYSTEM_PROMPT
-from app.core.tools import TOOL_DEFINITIONS
 from app.memory import MemoryStore, SessionManager
 from app.models.schemas import ChatRequest, ChatResponse, ExpertIdeaItem
 from app.rag.expert_ideas import (
     ExpertIdea,
     build_expert_ideas,
-    format_expert_ideas_markdown,
 )
 from app.rag.retriever import (
     CoachRetrievalResult,
@@ -157,53 +156,24 @@ async def chat(request: ChatRequest) -> ChatResponse:
     t0 = time.monotonic()
     path = "unknown"
 
+    def _sync_sessions(history: list[dict[str, str]]) -> None:
+        _sessions[request.user_id] = history
+
     async def _run() -> tuple[str, list[ExpertIdea]]:
         nonlocal path
-        session_id = session_manager.get_or_create_session_id(request.user_id)
-        store.add_message(session_id, "user", request.message)
-        history = store.get_session_messages(session_id)
-        _sessions[request.user_id] = history
-
-        ideas: list[ExpertIdea] = []
-        direct_meta = try_direct_reply_with_meta(request.message, store, history)
-        if direct_meta is None:
-            path = "llm"
-            system_prompt, ideas = await asyncio.to_thread(
-                build_prompt_and_ideas, request.user_id, request.message
-            )
-            reply = await generate_response(
-                messages=history,
-                system_prompt=system_prompt,
-                tools=TOOL_DEFINITIONS,
-                store=store,
-                skip_direct_reply=True,
-            )
-            ideas_section = format_expert_ideas_markdown(ideas)
-            if ideas_section:
-                reply = f"{reply}\n\n{ideas_section}"
-        else:
-            path = "direct"
-            reply = direct_meta.reply
-            from app.core.model_registry import resolve_provider
-            from app.core.response_formatter import format_data_reply, is_formattable
-            if is_formattable(reply):
-                provider = resolve_provider(None)
-                reply = await format_data_reply(
-                    request.message,
-                    reply,
-                    provider,
-                    tool=direct_meta.tool,
-                    hint=direct_meta.hint,
-                )
-        store.add_message(session_id, "assistant", reply)
-
-        history = store.get_session_messages(session_id)
-        _sessions[request.user_id] = history
-        session_manager.schedule_update_summary(
-            session_id,
-            threshold=settings.summary_trigger_messages,
+        result = await run_chat_turn(
+            user_id=request.user_id,
+            message=request.message,
+            store=store,
+            session_manager=session_manager,
+            generate_response=generate_response,
+            try_direct_reply_with_meta=try_direct_reply_with_meta,
+            build_prompt_and_ideas=build_prompt_and_ideas,
+            on_history=_sync_sessions,
+            gate_formatting_on_setting=False,
         )
-        return reply, ideas
+        path = result.path
+        return result.reply, result.ideas
 
     try:
         if settings.log_step_payloads:
