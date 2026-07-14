@@ -63,9 +63,9 @@ from app.core.config import settings
 
 `settings` is the module singleton (`app/core/config.py:379`). Env var name = uppercased field name. **Do not** read `os.environ` directly in `app/` code (tests/conftest may set env before import).
 
-## 6. In-function imports are deliberate
+## 6. In-function imports
 
-Many `from app.core... import ...` calls sit inside functions to break import cycles among `llm` ↔ `client_intents` ↔ `tools` ↔ `tool_router` ↔ `response_formatter` ↔ `llm_router`. **Do not lift them to module level** without checking the cycle. Full layering rules: `docs/MODULE_MAP.md` (if missing, roadmap T-013 has not run).
+Many `from app.core... import ...` calls sit inside functions for optional/heavy deps or historical style. The orchestration cluster is an **import DAG** today (not a circular tangle — see `docs/MODULE_MAP.md` §2). Soft pairs that still need lazy/`TYPE_CHECKING` care: `retriever` ↔ `reranker`, `tool_router` ↔ `routing_observability`. Lifting an import to module level is fine when `python -c "import main"` (project venv) still succeeds; do not assume every deferred import is a cycle break.
 
 ## 7. Test conventions
 
@@ -81,5 +81,5 @@ Many `from app.core... import ...` calls sit inside functions to break import cy
 
 ## 9. Naming debt (do not imitate)
 
-- Cross-module imports of `_underscored` “private” names exist (`_tokenize`, `_tf_cosine`, `_pii_preserved`, …) but are **deprecated** — public APIs land in roadmap T-037.
+- Prefer public `tokenize` / `tf_cosine` from `app.rag.retriever` (T-037). Remaining cross-module `_underscored` imports (`_pii_preserved`, `_resolve_client_id`, …) are deprecated — do not add new ones.
 - Rerank filenames: engine `app/core/rerank.py`; transports `rerank_tei.py` / `rerank_openai_compat.py`; RAG facade `app/rag/reranker.py`. Do not merge these names casually.

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Iterable, Literal
@@ -30,6 +31,10 @@ _EMBED_INGEST_BATCH_SIZE = 64
 Backend = Literal["auto", "embedding", "token"]
 CorpusKind = Literal["framework", "collection"]
 IndexName = Literal["framework", "collection"]
+
+# Serializes copy-on-write index publish so list ref + embedding_ready flip
+# together. Readers snapshot under this lock, then score outside it.
+_index_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -89,12 +94,8 @@ _embedding_index_ready = False
 
 def clear_index() -> None:
     """Clear all in-memory indices (used by tests and re-ingest)."""
-    global _framework_embedding_ready, _collection_embedding_ready, _embedding_index_ready
-    _framework_index.clear()
-    _collection_index.clear()
-    _framework_embedding_ready = False
-    _collection_embedding_ready = False
-    _embedding_index_ready = False
+    _publish_index("framework", [], embedding_ready=False)
+    _publish_index("collection", [], embedding_ready=False)
 
 
 def _target_index(corpus: CorpusKind) -> list[_IndexedChunk]:
@@ -105,13 +106,47 @@ def _embedding_ready(corpus: CorpusKind) -> bool:
     return _collection_embedding_ready if corpus == "collection" else _framework_embedding_ready
 
 
-def _set_embedding_ready(corpus: CorpusKind, ready: bool) -> None:
+def _snapshot_index(corpus: CorpusKind) -> tuple[list[_IndexedChunk], bool]:
+    """Return one consistent generation: (immutable-after-publish list, ready).
+
+    The returned list object is never mutated in place after publish; reindex
+    replaces the module binding instead. Callers may score outside the lock.
+    """
+    with _index_lock:
+        if corpus == "collection":
+            return _collection_index, _collection_embedding_ready
+        return _framework_index, _framework_embedding_ready
+
+
+def _publish_index(
+    corpus: CorpusKind,
+    entries: list[_IndexedChunk],
+    *,
+    embedding_ready: bool,
+) -> None:
+    """Atomically install a new index generation (copy-on-write replacement)."""
+    global _framework_index, _collection_index, _index
     global _framework_embedding_ready, _collection_embedding_ready, _embedding_index_ready
-    if corpus == "collection":
-        _collection_embedding_ready = ready
-    else:
-        _framework_embedding_ready = ready
-        _embedding_index_ready = ready
+    with _index_lock:
+        if corpus == "collection":
+            _collection_index = entries
+            _collection_embedding_ready = embedding_ready
+        else:
+            _framework_index = entries
+            _index = entries
+            _framework_embedding_ready = embedding_ready
+            _embedding_index_ready = embedding_ready
+
+
+def _set_embedding_ready(corpus: CorpusKind, ready: bool) -> None:
+    """Update readiness for the current list generation (tests / rare paths)."""
+    global _framework_embedding_ready, _collection_embedding_ready, _embedding_index_ready
+    with _index_lock:
+        if corpus == "collection":
+            _collection_embedding_ready = ready
+        else:
+            _framework_embedding_ready = ready
+            _embedding_index_ready = ready
 
 
 def index_chunks(
@@ -126,15 +161,13 @@ def index_chunks(
     chunk_list = list(chunks)
     if not chunk_list:
         if reset and corpus:
-            _target_index(corpus).clear()
-            _set_embedding_ready(corpus, False)
+            _publish_index(corpus, [], embedding_ready=False)
         return 0
 
     resolved_corpus: CorpusKind = corpus or chunk_list[0].corpus
-    target = _target_index(resolved_corpus)
-    if reset:
-        target.clear()
-        _set_embedding_ready(resolved_corpus, False)
+    with _index_lock:
+        prior = list(_target_index(resolved_corpus))
+        prior_ready = _embedding_ready(resolved_corpus)
 
     profile = embed_profile_for_corpus(resolved_corpus)
 
@@ -151,7 +184,6 @@ def index_chunks(
 
     provider = get_embed_provider(profile) if embed else None
     newly_embedded: dict[str, list[float]] = {}
-    added = 0
 
     indexed_entries: list[_IndexedChunk] = []
     # Chunks whose embedding was not cached, embedded in batches below.
@@ -189,18 +221,20 @@ def index_chunks(
                 entry.embedding = vector
                 newly_embedded[cache_key] = vector
 
-    for entry in indexed_entries:
-        target.append(entry)
-        added += 1
+    if reset:
+        new_index = indexed_entries
+        new_ready = False
+    else:
+        new_index = prior + indexed_entries
+        new_ready = prior_ready
 
     if embed:
-        has_any = any(item.embedding for item in target)
-        _set_embedding_ready(resolved_corpus, has_any)
+        new_ready = any(item.embedding for item in new_index)
         if corpus_cache_path:
             if reset:
                 cache = {
                     _cache_key(item.chunk): item.embedding
-                    for item in target
+                    for item in new_index
                     if item.embedding
                 }
                 _save_cache(corpus_cache_path, cache, profile)
@@ -208,7 +242,8 @@ def index_chunks(
                 cache.update(newly_embedded)
                 _save_cache(corpus_cache_path, cache, profile)
 
-    return added
+    _publish_index(resolved_corpus, new_index, embedding_ready=new_ready)
+    return len(indexed_entries)
 
 
 def ingest_and_index_directory(
@@ -418,7 +453,10 @@ def _retrieve_from_indices(
     rerank_query: str | None = None,
     dedup_key: Literal["source", "collection"] = "source",
 ) -> list[RetrievedChunk]:
-    if not any(_target_index(name) for name in indices):
+    # One snapshot per corpus for this retrieve so stage-1 scoring never mixes
+    # generations if a reindex publishes mid-call.
+    snapshots = {name: _snapshot_index(name) for name in indices}
+    if not any(entries for entries, _ready in snapshots.values()):
         return []
 
     from app.core.scope import is_off_topic
@@ -432,10 +470,13 @@ def _retrieve_from_indices(
 
     ranked_lists: list[list[RetrievedChunk]] = []
     for index_name in indices:
-        use_embedding = _resolve_backend(backend, index_name)
+        entries, embedding_ready = snapshots[index_name]
+        use_embedding = _resolve_backend(backend, embedding_ready=embedding_ready)
         hits = _stage1_candidates(
             query,
             index_name=index_name,
+            entries=entries,
+            embedding_ready=embedding_ready,
             top_k=candidate_k,
             min_score=min_score,
             use_embedding=use_embedding,
@@ -530,26 +571,25 @@ def _stage1_candidates(
     query: str,
     *,
     index_name: IndexName,
+    entries: list[_IndexedChunk],
+    embedding_ready: bool,
     top_k: int,
     min_score: float,
     use_embedding: bool,
     chunk_roles: set[str] | None,
 ) -> list[RetrievedChunk]:
-    if (
-        use_embedding
-        and settings.rag_hybrid_rrf_enabled
-        and _embedding_ready(index_name)
-    ):
+    if use_embedding and settings.rag_hybrid_rrf_enabled and embedding_ready:
         embedding_hits = _retrieve_embedding(
             query,
             index_name=index_name,
+            entries=entries,
             top_k=top_k,
             min_score=min_score,
             chunk_roles=chunk_roles,
         )
         token_hits = _retrieve_token(
             query,
-            index_name=index_name,
+            entries=entries,
             top_k=top_k,
             min_score=min_score,
             chunk_roles=chunk_roles,
@@ -564,13 +604,14 @@ def _stage1_candidates(
         return _retrieve_embedding(
             query,
             index_name=index_name,
+            entries=entries,
             top_k=top_k,
             min_score=min_score,
             chunk_roles=chunk_roles,
         )
     return _retrieve_token(
         query,
-        index_name=index_name,
+        entries=entries,
         top_k=top_k,
         min_score=min_score,
         chunk_roles=chunk_roles,
@@ -607,18 +648,19 @@ def _reciprocal_rank_fusion(
     return [best_chunk[chunk_id] for chunk_id, _score in ordered]
 
 
-def _resolve_backend(backend: Backend, index_name: IndexName) -> bool:
+def _resolve_backend(backend: Backend, *, embedding_ready: bool) -> bool:
     if backend == "embedding":
-        return _embedding_ready(index_name)
+        return embedding_ready
     if backend == "token":
         return False
-    return _embedding_ready(index_name)
+    return embedding_ready
 
 
 def _retrieve_embedding(
     query: str,
     *,
     index_name: IndexName,
+    entries: list[_IndexedChunk],
     top_k: int,
     min_score: float,
     chunk_roles: set[str] | None,
@@ -632,14 +674,14 @@ def _retrieve_embedding(
         logger.warning("rag: embedding query failed (%s), falling back to token", exc)
         return _retrieve_token(
             query,
-            index_name=index_name,
+            entries=entries,
             top_k=top_k,
             min_score=min_score,
             chunk_roles=chunk_roles,
         )
 
     scored: list[RetrievedChunk] = []
-    for indexed in _target_index(index_name):
+    for indexed in entries:
         if not indexed.embedding:
             continue
         if chunk_roles and indexed.chunk.chunk_role not in chunk_roles:
@@ -656,7 +698,7 @@ def _retrieve_embedding(
 def _retrieve_token(
     query: str,
     *,
-    index_name: IndexName,
+    entries: list[_IndexedChunk],
     top_k: int,
     min_score: float,
     chunk_roles: set[str] | None,
@@ -671,7 +713,7 @@ def _retrieve_token(
         return []
 
     scored: list[RetrievedChunk] = []
-    for indexed in _target_index(index_name):
+    for indexed in entries:
         if chunk_roles and indexed.chunk.chunk_role not in chunk_roles:
             continue
         score = _tf_cosine(query_tf, query_norm, indexed.tf, indexed.norm)

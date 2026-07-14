@@ -40,9 +40,9 @@ Session rule (from README.md §1): pick the first `TODO` task whose dependencies
 
 | ID | Unknown | Resolved? | Answer |
 |----|---------|-----------|--------|
-| U-01 | Single-tenant deployment? | No | — |
+| U-01 | Single-tenant deployment? | Yes | **Single-tenant per deployment instance** (one `API_KEY`, one SQLite CRM, one worker by design). ADRs 0003/0004/0010. Scale via separate containers, not multi-coach on one process. `_pending_writes` is process-global by that design — not a SaaS multi-tenant bug. |
 | U-02 | Callers of `embed_collection_chunks`? | Yes | None outside `app/knowledge/ingest.py:239` definition (grep app/scripts/tests + quoted-string grep). Function removed in T-036. |
 | U-03 | Is `knowledge_chunks` table read back? | Yes | No code reads chunk text for retrieval. Writes: `replace_chunks_for_source`, `clear_all`. Reads: `list_collections` COUNT only. Retrieval uses in-memory indices + `RAG_INDEX_CACHE_PATH` (retriever.py). |
-| U-04 | Worker/thread model vs unlocked indices | No | — |
+| U-04 | Worker/thread model vs unlocked indices | Yes | Default deploy is uvicorn `--workers 1` (Dockerfile). Tool-router/session already locked (REL-03). RAG used in-place list clear/rebuild; concurrent retrieve (`asyncio.to_thread`) + reindex mixed generations in one call (not RuntimeError). Fixed via copy-on-write publish + snapshot-under-lock (`retriever._publish_index` / `_snapshot_index`); regression in `tests/test_concurrency.py`. |
 | U-05 | Suite passes + coverage ≥ 75% right now? | Yes | 631 passed / 1 skipped / ~7s with Test Execution Contract (ADR-0014, 2026-07-13). Prior baseline: 33 failed / 596 passed / ~22 min under `.env` embed-provider leak. Coverage floor not re-checked this session. |
-| U-06 | pyproject deps vs requirements files drift | No | — |
+| U-06 | pyproject deps vs requirements files drift | Yes | **Intentional dual SoT, not harmful drift.** CI installs `requirements-dev.txt`; Docker installs `requirements.lock` (from `requirements.txt`). pyproject `[dependency-groups]` are non-authoritative (`CLAUDE.md` / `DEVELOPMENT.md`). Overlapping runtime floors match; residual diffs (`aiofiles` unused in reqs; optional `media` group only in pyproject) do not break CI/runtime. |

@@ -56,8 +56,10 @@ The persist→history→direct-reply→prompt→generate→append-ideas→persis
 - Note-type enum `{general,story,decision,goal,progress}`: `tools._VALID_NOTE_TYPES` (`tools.py:52`) + repeated inline in tool schemas (`tools.py:313,393,425`).
 - `CorpusKind`/`ChunkRole` Literals redefined in `app/rag/retriever.py:35`, `app/rag/ingest.py:21-22`, and `app/core/embed_providers/types.py`.
 
-### R-07 ⚠️⚠️ Circular-import tangle, resolved by ~30 in-function imports
-The cluster `llm ↔ client_intents ↔ tools ↔ tool_router ↔ response_formatter ↔ llm_router ↔ model_registry` has no layered structure; cycles are broken by function-local imports (e.g. `llm.py:126,161-163,207,232,262-269,337-342,416,447,489,521`; `client_intents.py:241,445,575,599,644,677`; `tools.py:122,481`; `tool_router.py:107,125,203,234,307,469,482,499`). No document states which imports are allowed where; a model moving an import to module level can create an ImportError at startup only.
+### R-07 ✅ Resolved as audit noise — no orchestration-cluster import cycle
+**Original claim:** cluster `llm ↔ client_intents ↔ tools ↔ tool_router ↔ response_formatter ↔ llm_router ↔ model_registry` is a circular-import tangle held by ~30 in-function imports; lifting them causes startup ImportError.
+
+**Current fact (2026-07-14):** that cluster is a **DAG** at import time. Lifting all peer deferred imports among those modules still yields **no SCCs**. Deferred imports remain (optional/heavy deps, historical style). Soft cycles that still need care (TYPE_CHECKING + lazy counterpart): `retriever` ↔ `reranker`, `tool_router` ↔ `routing_observability`. R-10 (`metrics` ← `main`) was fixed in T-035 (`app.core.health`). Do not treat “never lift any in-function import” as an absolute; verify with `python -c "import main"` after lifts.
 
 ### R-08 ⚠️⚠️ Oversized multi-responsibility files
 - `app/rag/retriever.py` (912): models + global index state + ingestion orchestration + retrieval API + citation formatting + ranking math + cache I/O + tokenizer (~7 concerns).
@@ -70,35 +72,45 @@ None fit comfortably in an 8B context window alongside a task prompt.
 ### R-09 ⚠️⚠️ Two stores, one SQLite file, divergent disciplines
 `MemoryStore` uses versioned migrations via `PRAGMA user_version` (`app/memory/store.py:92-135`) and sets `foreign_keys=ON`, `busy_timeout=5000`, WAL (`store.py:106-120`). `KnowledgeStore` uses bare `CREATE TABLE IF NOT EXISTS` (`app/knowledge/store.py:30,44,61`) and sets only `foreign_keys=ON` (`store.py:20-24`). Schema changes to existing knowledge tables have **no migration path**; PRAGMA divergence is a latent concurrency inconsistency.
 
-### R-10 ⚠️ Reverse dependency: API module imports from the app entrypoint
-`app/api/metrics.py:124` imports `_layer_availability` **from `main`** while `main.py:17-18` imports the metrics router — call-time circularity. Moving `_layer_availability` breaks `/metrics`.
+### R-10 ✅ Resolved — metrics no longer imports from `main`
+Formerly `metrics.py` imported `_layer_availability` from `main`. **T-035** moved health probes to `app/core/health.py`; `metrics.py` imports `layer_availability` from there. Do not reintroduce `app/` → `main` imports.
 
 ### R-11 ⚠️⚠️ Private (underscored) names imported across modules
-`tool_router.py:52` and `intent_kb.py:22` import `_tf_cosine`, `_tokenize` from `app.rag.retriever`; also cross-module use of `_truncate_words` (`embeddings.py:33`), `_resolve_client_id`/`_fuzzy_resolve_client_id`, `_pii_preserved` (`llm.py:163`). A model "cleaning up" private names breaks distant callers.
+Partial fix **T-037**: public `tokenize` / `tf_cosine` in `retriever.py`; `tool_router` / `intent_kb` use those. Remaining cross-module `_`-imports (e.g. `_truncate_words`, `_resolve_client_id`, `_pii_preserved`) are still a footgun for AI "cleanup".
 
 ### R-12 ⚠️⚠️ Same name, different semantics
-`_tokenize` exists 3×: `app/rag/retriever.py:911` (regex+lowercase), `app/rag/ingest.py:294` (whitespace split), and `intent_kb` imports retriever's. WebVTT timestamp formatting exists 3× (`app/knowledge/jobs.py:72-78`, `scripts/seed_youtube_channel.py:53-61`, `app/rag/transcript.py:205-213` — the last with different HH:MM:SS semantics). `chunk_text` vs `_chunk_token_window` near-duplicates in `app/rag/ingest.py:98-117,175-195`.
+`_tokenize` exists 3×: `app/rag/retriever.py` (regex+lowercase), `app/rag/ingest.py` (whitespace split), and `intent_kb` imports retriever's. WebVTT timestamp formatting exists 3× (`app/knowledge/jobs.py`, `scripts/seed_youtube_channel.py`, `app/rag/transcript.py` — the last with different HH:MM:SS semantics). `chunk_text` vs `_chunk_token_window` near-duplicates in `app/rag/ingest.py`.
 
 ### R-13 ⚠️ Suspected dead / write-only code
-- `app/knowledge/ingest.py:embed_collection_chunks` (`:239-287`) writes a **second, header-less** embedding-cache format with its own sha256 key logic duplicating `retriever._cache_key` (`retriever.py:816-818`). No caller found in `app/` (see U-02).
-- SQLite `knowledge_chunks` rows are written on ingest (`knowledge/ingest.py:196-209`) but retrieval reads only the in-memory index; no read of that table found beyond counts (see U-03).
-- Legacy parallel APIs: `execute_tool` (string) vs `execute_tool_outcome` (`tools.py:734`); legacy aliases `_index`, `_embedding_index_ready` "for tests" (`retriever.py:89-91`); deprecated env aliases (`RAG_DOCS_DIR`, `RAG_KNOWLEDGE_TEMPLATES_DIR`, `OLLAMA_EMBED_MODEL`, `config.py:301-328`).
+- `embed_collection_chunks` removed in **T-036** (U-02).
+- SQLite `knowledge_chunks` still write-mostly; retrieval uses in-memory indices (U-03).
+- Legacy parallel APIs: `execute_tool` vs `execute_tool_outcome`; legacy `_index` / `_embedding_index_ready` aliases; deprecated env aliases in `config.py`.
 
 ### R-14 ⚠️⚠️ Weak static gates exactly where risk is highest
-mypy `ignore_errors = true` for `app.core.tools`, `app.core.model_registry`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat` (`pyproject.toml:66-75`) — the six most-edited files. Ruff runs `E,F` only with `E501` ignored. CI will not catch most AI-introduced type errors in the hot files.
+mypy `ignore_errors = true` for `app.core.tools`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat` (`pyproject.toml`) — hot files. (`model_registry` un-ignored in T-040.) Ruff runs `E,F` only with `E501` ignored.
 
 ### R-15 ⚠️⚠️⚠️ Rigid, undocumented wire formats
-`/v1/chat/completions` must return the exact OpenAI envelope incl. `usage` with sentinel `-1` counts (`openai_compat.py:490-507`); streaming must emit `data: {chunk}\n\n` frames, final `finish_reason="stop"`, literal `data: [DONE]\n\n` (`openai_compat.py:226-268`). Streaming is faked (full reply generated, sliced into 6-char chunks, `openai_compat.py:250-268`); persistence + summary scheduling happen **inside** the stream generator (`:262-265`); LLM failures are returned as normal-looking content, not HTTP errors (`:164-181`). None of this is documented outside the code.
+`/v1/chat/completions` must return the exact OpenAI envelope incl. `usage` with sentinel `-1` counts; streaming must emit `data: {chunk}\n\n` frames, final `finish_reason="stop"`, literal `data: [DONE]\n\n`. Streaming is faked (full reply generated, sliced into 6-char chunks); persistence + summary scheduling happen **inside** the stream generator; LLM failures are returned as normal-looking content, not HTTP errors. See `docs/WIRE_FORMATS.md` (T-014) for the documented contract.
 
-### R-16 ⚠️⚠️ Module-level mutable state and import-time side effects
-- Unlocked global indices `_framework_index`/`_collection_index` + 4 readiness flags (`retriever.py:84-91`); back-compat alias `_index` can desync (`:112-118`).
-- `confirmations._pending_writes` is process-global, keyed by preview text, not user/session (`confirmations.py:14-15,44`) — latent multi-tenant hazard (U-01).
-- Import-time side effects: `chat.py:34-35` instantiates `MemoryStore` (runs migrations, touches disk) + `SessionManager`; `collections.py:27` a second `KnowledgeStore` on the same DB file; `rerank.py:27` sets `HF_HUB_DISABLE_XET` at import (order-sensitive); `intent_kb.py:196-197` precomputes vectors at import.
-- Other singletons/caches: `tool_router.py:381-391`, `model_registry.py:73`, `rerank.py:38-43`, `llm_providers/http.py:23-24`, `routing_observability.py:32-35`, `metrics.py:24-26`, `main.py:158-161`, `openai_compat.py:61`.
-- `chat.reset_runtime_state()` (`chat.py:38-45`) wipes ALL persisted data — a test helper in production code.
+### R-16 ⚠️ Module-level process state (narrowed 2026-07-14)
+Distinguish **intentional single-process design** from the **RAG concurrency defect**:
 
-### R-17 ⚠️⚠️ Missing process/convention documentation
-No `CLAUDE.md`, no `CONTRIBUTING.md`, no dev-environment guide, no coding-convention doc, no doc ownership/last-verified metadata. ADR README has a template but **no process** (when to write, numbering, supersession). Conventions that exist only in code: `_with_meta` twin-function pattern (six `try_direct_*` variants), emoji status markers, guardrail letters A/B/C/E with no legend (and no "D"), "router" meaning three different things (`tool_router`, `llm_router`, `_tool_router_action`).
+**Accepted under single-tenant + `--workers 1` (not multi-tenant debt):**
+- Process singletons/caches: tool-router backends (build locked), model/embed/rerank probes, httpx pool, metrics/routing counters, `confirmations._pending_writes` keyed by preview text (U-01 answered: one coach per instance), `openai_compat._MODEL_ID`.
+- In-memory RAG index **as process state** (scale out via container replicas with separate memory, not in-process workers).
+
+**Fixed — RAG generation consistency (was the real U-04 defect):**
+- Former in-place `list.clear()` / `.append()` during reindex could mix generations in one retrieve when overlapped with `asyncio.to_thread` scoring (observable mode: mixed `chunk_id` gens, not reliable RuntimeError).
+- Now: copy-on-write `_publish_index` + `_snapshot_index` under `_index_lock`; score outside the lock. Tests: `RagIndexConcurrencyTests` in `tests/test_concurrency.py`.
+
+**Documented, not refactored (no concrete production impact forcing change):**
+- Import-time `MemoryStore` / `SessionManager` (`chat.py`) and `KnowledgeStore` (`collections.py`) — tests redirect `MEMORY_DB_PATH` in `conftest` before import; lifestyle preference for lazy init, not a live bug under workers=1.
+- `chat.reset_runtime_state()` wipes DB + pending writes — **test helper**; safe if unused in request paths (grep: tests only). Do not call from production handlers.
+
+Embed probe cache lives in `app/core/health.py` (T-035), not `main.py`.
+
+### R-17 ⚠️ Partial — process docs landed in roadmap Phase 1
+`CLAUDE.md`, `CONVENTIONS.md`, `CONTRACTS.md`, `MODULE_MAP.md`, `WIRE_FORMATS.md`, `CONFIG.md`, `DEVELOPMENT.md`, and ADR-0012 process now exist. Remaining friction: some narrative docs still lag code; conventions that live mainly in code (`_with_meta` twins, emoji status markers, guardrail A/B/C/E, three meanings of “router”) still need care when editing hot paths.
 
 ### R-18 ⚠️⚠️ Test-harness traps
 - Running via `unittest discover` skips `tests/conftest.py` (which sets `DEBUG=true` and redirects `MEMORY_DB_PATH`, `conftest.py:16-30`) → auth fails closed, real DB touched. Warned only in `docs/OPERATIONS.md:135`.
@@ -115,14 +127,14 @@ No `CLAUDE.md`, no `CONTRIBUTING.md`, no dev-environment guide, no coding-conven
 
 ## 3. Unknowns (verify — never assume)
 
-| ID | Unknown | How to resolve |
-|----|---------|----------------|
-| U-01 | Is deployment single-tenant? (severity of global `_pending_writes`) | Ask the maintainer. Do not "fix" multi-tenancy without a decision. |
-| U-02 | Does anything call `embed_collection_chunks` (`app/knowledge/ingest.py:239`)? | `grep -rn "embed_collection_chunks" app/ scripts/ tests/` before touching. |
-| U-03 | Is SQLite `knowledge_chunks` ever read back for retrieval? | `grep -rn "knowledge_chunks" app/ scripts/` and inspect each hit. |
-| U-04 | Can concurrent requests mutate/read the unlocked module indices? (worker/thread model) | Inspect uvicorn invocation in `main.py` / Dockerfile; ask maintainer before adding locks. |
-| U-05 | Does the suite currently pass and meet the 75% floor? | Run the standard validation block (see roadmap README) before starting any task. |
-| U-06 | Do pyproject `[dependency-groups]` and `requirements*.txt` agree? | Diff them; treat requirements files as authoritative for CI/Docker. |
+| ID | Unknown | Status (2026-07-14) |
+|----|---------|---------------------|
+| U-01 | Is deployment single-tenant? (severity of global `_pending_writes`) | **Resolved:** single-tenant per instance (one API key, one SQLite CRM, `--workers 1`). Do not implement multi-tenancy without a product decision. |
+| U-02 | Does anything call `embed_collection_chunks`? | **Resolved (T-036):** no callers; function removed. |
+| U-03 | Is SQLite `knowledge_chunks` ever read back for retrieval? | **Resolved (T-036):** COUNT-only; retrieval uses in-memory indices. |
+| U-04 | Can concurrent requests mutate/read unlocked module indices? | **Resolved:** workers=1 by design; RAG in-place race fixed via copy-on-write publish + snapshot (`retriever.py`); see `tests/test_concurrency.py`. |
+| U-05 | Does the suite currently pass and meet the 75% floor? | **Resolved:** offline Test Execution Contract (ADR-0014) — suite green under pinned token backends. |
+| U-06 | Do pyproject `[dependency-groups]` and `requirements*.txt` agree? | **Resolved as non-debt:** intentional dual SoT; requirements authoritative for CI/Docker; overlapping floors match. |
 
 ---
 

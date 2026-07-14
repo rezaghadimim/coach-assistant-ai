@@ -113,7 +113,9 @@ uv pip compile requirements.txt -o requirements.lock --python-version 3.12
   idempotent per threshold boundary (an in-memory marker — one redundant
   re-summarization after a restart is the accepted worst case).
 - **Thread safety:** session get-or-create and the tool-router index build are
-  lock-guarded; this matters for threadpool paths even under one worker.
+  lock-guarded; RAG indices use copy-on-write publish (`_publish_index`) so a
+  retrieve snapshots one generation and scores outside the lock. This matters
+  for threadpool paths (`asyncio.to_thread`) even under one worker.
 
 ## Observability
 
