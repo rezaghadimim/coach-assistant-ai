@@ -20,7 +20,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Paths the checker cannot resolve confidently; each entry needs a comment
-# explaining why, and a matching note in docs/roadmap/STATUS.md.
+# explaining why (runtime-generated, gitignored, or submodule-only in CI).
 KNOWN_UNRESOLVED: dict[str, str] = {
     "data/coach_assistant.db": (
         "SQLite file matched by the *.db gitignore rule; created at runtime, "

@@ -59,17 +59,18 @@ Benchmarks and evaluations (`scripts/benchmark_*.py`, `scripts/eval_*.py`) are *
 .venv/bin/python -m mypy app/   # non-strict
 ```
 
-mypy currently `ignore_errors = true` for: `app.core.tools`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat`. `app.core.model_registry` was un-ignored in roadmap **T-040**.
+mypy currently `ignore_errors = true` for: `app.core.tools`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat`. `app.core.model_registry` is typed (un-ignored).
 
-## 5. Working a roadmap task
+## 5. Documentation map (token-efficient)
 
-From [`docs/roadmap/README.md`](roadmap/README.md) §1:
+| Path | Role |
+|------|------|
+| Root [`CLAUDE.md`](../CLAUDE.md) | Short AI session contract — start here |
+| [`MODULE_MAP.md`](MODULE_MAP.md), [`CONVENTIONS.md`](CONVENTIONS.md), [`CONTRACTS.md`](CONTRACTS.md), [`WIRE_FORMATS.md`](WIRE_FORMATS.md), [`CONFIG.md`](CONFIG.md) | Living technical contracts |
+| [`OPERATIONS.md`](OPERATIONS.md), [`TEST_EXECUTION.md`](TEST_EXECUTION.md) | Ops / offline test policy |
+| [`archive/`](archive/) | **Finished** audits/checklists/roadmap — do not read unless digging up history |
 
-1. Read `STATUS.md`; pick the first `TODO` whose dependencies are `DONE`.
-2. Open only that task file; read only the files it lists.
-3. Change only “Files allowed to change”; run its validation block.
-4. One commit `T-xxx: <title>`; update `STATUS.md` in the same commit.
-5. On uncertainty or unexpected failure: stop, revert, record notes in `STATUS.md`.
+The AI-execution roadmap is **complete** (archived under [`archive/roadmap/`](archive/roadmap/)). Do not open it for normal feature or fix work.
 
 ## 6. What lives where
 

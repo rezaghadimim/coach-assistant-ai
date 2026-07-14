@@ -25,18 +25,29 @@ Never use `unittest discover` — it skips `tests/conftest.py` (auth fails close
 - **Python:** **3.12 only** everywhere (local `.python-version`, CI, Docker, `requires-python`, ruff `py312`, mypy). CI installs `requirements-dev.txt`.
 - pyproject `[dependency-groups]` are **not** what CI/Docker install — edit `requirements*.txt` for deployable deps.
 - mypy `ignore_errors = true` for: `app.core.tools`, `app.rag.retriever`, `app.core.tool_router`, `app.api.chat`, `app.api.openai_compat` (`pyproject.toml`).
+- **Tenancy:** one coaching practice per deployment (one `API_KEY`, one SQLite). Scale with separate containers; uvicorn `--workers 1` by design.
+- **Deps:** requirements files are authoritative for CI/Docker (not pyproject dependency-groups).
 
 ## Hard rules
 
 1. `docs/` is documentation only. App data (tool cards, eval sets, knowledge) lives under `data/`.
-2. One commit per roadmap task; never edit files outside that task's "Files allowed to change".
-3. Magic strings and tool-name lists that must stay in sync are registered in `docs/CONTRACTS.md` (if this file does not exist yet, the corresponding roadmap task has not run).
-4. Module layering / import rules: `docs/MODULE_MAP.md` (if this file does not exist yet, the corresponding roadmap task has not run).
-5. OpenAI-compat wire formats: `docs/WIRE_FORMATS.md` (if this file does not exist yet, the corresponding roadmap task has not run).
-6. Do not invent APIs, env vars, or constants — verify from code or the docs above.
-7. Test execution contract: `docs/TEST_EXECUTION.md` (ADR-0014). Automated tests are offline by default; benchmarks/evals live under `scripts/`.
+2. Magic strings and tool-name lists that must stay in sync: `docs/CONTRACTS.md`.
+3. Module layering / import rules / process state: `docs/MODULE_MAP.md`.
+4. OpenAI-compat wire formats: `docs/WIRE_FORMATS.md`.
+5. Do not invent APIs, env vars, or constants — verify from code or the docs above.
+6. Test execution contract: `docs/TEST_EXECUTION.md` (ADR-0014). Automated tests are offline by default; benchmarks/evals live under `scripts/`.
+7. **Do not open `docs/archive/` or `docs/roadmap/`** (except the short redirect at `docs/roadmap/README.md`) unless the user explicitly asks for historical audit/roadmap context. Those trees are finished archives and waste tokens.
 
-## Roadmap pointer
+## Living docs (prefer these)
 
-Structured work items live in `docs/roadmap/`. Execution protocol: `docs/roadmap/README.md` §1.
-Progress ledger: `docs/roadmap/STATUS.md`. One task per session; pick the first `TODO` whose deps are `DONE`.
+| Doc | When to read |
+|-----|----------------|
+| `docs/MODULE_MAP.md` | Imports, singletons, layering |
+| `docs/CONVENTIONS.md` | Coding patterns |
+| `docs/CONTRACTS.md` | Must-match strings / tool names |
+| `docs/WIRE_FORMATS.md` | `/v1/chat/completions` shapes |
+| `docs/CONFIG.md` | Env vars |
+| `docs/DEVELOPMENT.md` | Setup / lint / test |
+| `docs/OPERATIONS.md` | Deploy / workers / ops |
+
+New product work: edit code + living docs above. Do **not** invent new `T-xxx` roadmap tasks unless the user asks.
