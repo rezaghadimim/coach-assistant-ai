@@ -6,12 +6,13 @@ import json
 import logging
 import time
 import uuid
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 
 from app.core.config import settings
 from app.core.llm_providers.http import get_client, post_with_retry
 from app.core.llm_providers.types import CompletionResult, ToolCall
 from app.core.observability import log_step
+from app.core.tool_json import parse_tool_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class OpenRouterProvider:
         tools: Optional[list[dict]] = None,
         temperature: Optional[float] = None,
         # format and num_predict are Ollama-specific; accepted here for interface compatibility.
-        format: Optional[dict] = None,
+        format: Optional[Union[dict, str]] = None,
         num_predict: Optional[int] = None,
     ) -> CompletionResult:
         payload = self._build_payload(
@@ -106,7 +107,14 @@ class OpenRouterProvider:
         for tc in raw_tool_calls:
             func = tc.get("function", {})
             raw_args = func.get("arguments", "{}")
-            arguments = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
+            arguments = parse_tool_arguments(raw_args)
+            if arguments is None:
+                # Malformed argument string: run the tool with no arguments so it
+                # errors usefully, rather than aborting the turn with a parse error.
+                log_step(logger, "llm.provider", "bad_tool_args",
+                         level=logging.WARNING, provider="openrouter",
+                         model=self._model, tool=func.get("name", ""))
+                arguments = {}
             tool_calls.append(
                 ToolCall(
                     id=tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",

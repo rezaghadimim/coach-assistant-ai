@@ -46,6 +46,17 @@ _OPENWEBUI_TASK_MARKERS = (
     '"tags"',
 )
 
+# Subset of task prompts whose reply Open WebUI parses as strict JSON. Lowercase:
+# matched against a lowercased message.
+_JSON_TASK_MARKERS = (
+    "json format",
+    "json object",
+    '"follow_ups"',
+    '"title"',
+    '"tags"',
+    "```json",
+)
+
 # Conservative denylist of clearly non-coaching requests. Tuned to avoid
 # false positives on coaching language (goals, stress, career, habits, etc.).
 _OFF_TOPIC_PATTERNS = (
@@ -80,6 +91,20 @@ def is_openwebui_task(message: str) -> bool:
     """Return True when the message is an Open WebUI auto-generated task prompt."""
     lowered = message.lower()
     return any(marker in lowered for marker in _OPENWEBUI_TASK_MARKERS)
+
+
+def expects_json_output(message: str) -> bool:
+    """Return True when an Open WebUI task prompt asks for a JSON reply.
+
+    Open WebUI parses these replies as strict JSON, so the model must be held to
+    valid JSON.  Not every task prompt is JSON (some builds ask for a plain-text
+    title or a search query), hence the constraint is applied only when the
+    prompt itself asks for JSON.
+    """
+    if not is_openwebui_task(message):
+        return False
+    lowered = message.lower()
+    return any(marker in lowered for marker in _JSON_TASK_MARKERS)
 
 
 def is_off_topic(message: str) -> bool:

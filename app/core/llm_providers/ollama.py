@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 
 from app.core.config import settings
 from app.core.llm_providers.http import get_client, post_with_retry
 from app.core.llm_providers.types import CompletionResult, ToolCall
 from app.core.observability import log_step
+from app.core.tool_json import parse_tool_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,8 @@ class OllamaProvider:
         tools: Optional[list[dict]] = None,
         temperature: Optional[float] = None,
         num_predict: Optional[int] = None,
-        format: Optional[dict] = None,
+        # Ollama accepts either "json" (generic JSON mode) or a JSON schema dict.
+        format: Optional[Union[dict, str]] = None,
     ) -> dict:
         payload: dict = {
             "model": settings.ollama_model,
@@ -54,7 +56,7 @@ class OllamaProvider:
         tools: Optional[list[dict]] = None,
         temperature: Optional[float] = None,
         num_predict: Optional[int] = None,
-        format: Optional[dict] = None,
+        format: Optional[Union[dict, str]] = None,
     ) -> CompletionResult:
         payload = self._build_payload(
             messages,
@@ -88,7 +90,15 @@ class OllamaProvider:
         for i, tc in enumerate(raw_tool_calls):
             func = tc.get("function", {})
             raw_args = func.get("arguments", {})
-            arguments = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
+            arguments = parse_tool_arguments(raw_args)
+            if arguments is None:
+                # Small models emit malformed argument strings often enough that
+                # raising here would abort the whole turn. Run the tool with no
+                # arguments instead: it errors usefully, the loop can recover.
+                log_step(logger, "llm.provider", "bad_tool_args",
+                         level=logging.WARNING, provider="ollama",
+                         model=settings.ollama_model, tool=func.get("name", ""))
+                arguments = {}
             tool_calls.append(
                 ToolCall(
                     # Ollama does not return a tool_call id; synthesise one.
@@ -119,10 +129,16 @@ class OllamaProvider:
         async with client.stream("POST", "/api/chat", json=payload) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():
-                if line:
+                if not line:
+                    continue
+                try:
                     chunk = json.loads(line)
-                    if content := chunk.get("message", {}).get("content"):
-                        yield content
+                except json.JSONDecodeError:
+                    # Partial or keep-alive line: skip it rather than killing the
+                    # stream mid-reply (matches the other providers' behaviour).
+                    continue
+                if content := chunk.get("message", {}).get("content"):
+                    yield content
 
     def tool_result_message(self, tool_call: ToolCall, result: str) -> dict:
         """Build the tool-result message in Ollama's expected format."""

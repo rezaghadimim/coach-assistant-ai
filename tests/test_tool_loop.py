@@ -11,6 +11,7 @@ is needed and the tool loop is exercised in isolation.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -50,10 +51,12 @@ class _ScriptedProvider:
         self.calls = 0
         self.executed_tools: list[str] = []
         self.tools_seen: list[object] = []
+        self.formats_seen: list[object] = []
 
     async def complete(self, messages, *, tools=None, temperature=None, **kwargs):
         self.calls += 1
         self.tools_seen.append(tools)
+        self.formats_seen.append(kwargs.get("format"))
         idx = min(self.calls - 1, len(self._script) - 1)
         return self._script[idx]
 
@@ -152,6 +155,48 @@ class ToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider.calls, 1)
         self.assertEqual(provider.executed_tools, [])
         self.assertEqual(provider.tools_seen, [None])
+
+    async def test_json_task_is_constrained_and_normalized(self) -> None:
+        # Open WebUI parses this reply as strict JSON. Unconstrained, a small
+        # model fences it and adds a preamble, and the UI reports a JSON error.
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            provider = _ScriptedProvider(
+                [_text_result(
+                    'Sure! Here is the JSON:\n```json\n{"title": "Ali\'s progress"}\n```'
+                )]
+            )
+            messages = [{
+                "role": "user",
+                "content": (
+                    "### Task:\nGenerate a concise, 3-5 word title.\n"
+                    '### Output:\nJSON format: { "title": "your concise title here" }'
+                ),
+            }]
+            reply = await _generate_with_tools(
+                messages, "system", TOOL_DEFINITIONS, store, provider=provider
+            )
+
+        # JSON mode requested from Ollama, and the reply is bare parseable JSON.
+        self.assertEqual(provider.formats_seen, ["json"])
+        self.assertEqual(json.loads(reply), {"title": "Ali's progress"})
+
+    async def test_non_json_task_is_left_unconstrained(self) -> None:
+        # Not every Open WebUI task wants JSON; forcing JSON mode would corrupt
+        # a plain-text task reply.
+        with tempfile.TemporaryDirectory() as tmp:
+            store = self._store(tmp)
+            provider = _ScriptedProvider([_text_result("Weekly check-in")])
+            messages = [{
+                "role": "user",
+                "content": "### Task:\nGenerate a concise, 3-5 word title.\n### Output:\nTitle only.",
+            }]
+            reply = await _generate_with_tools(
+                messages, "system", TOOL_DEFINITIONS, store, provider=provider
+            )
+
+        self.assertEqual(provider.formats_seen, [None])
+        self.assertEqual(reply, "Weekly check-in")
 
 
 if __name__ == "__main__":

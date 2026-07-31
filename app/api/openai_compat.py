@@ -109,6 +109,10 @@ def _llm_error_hint(exc: Exception, *, backend: str) -> Optional[str]:
                 pass
             return f"OpenRouter returned HTTP {exc.response.status_code}"
         return f"{backend_name} returned HTTP {exc.response.status_code}"
+    if isinstance(exc, json.JSONDecodeError):
+        # A truncated or non-JSON body from the model server. Say so rather than
+        # letting a parse failure read as a connectivity outage.
+        return f"{backend_name} returned invalid JSON"
     return None
 
 

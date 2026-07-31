@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -81,17 +80,17 @@ def _last_user_message(messages: list[dict]) -> str:
 
 
 def _sanitize_assistant_reply(content: str, *, last_user: str = "") -> str:
-    """Strip JSON wrappers some models emit instead of plain text."""
-    stripped = content.strip()
-    if not stripped.startswith("{"):
-        return content
+    """Strip JSON wrappers some models emit instead of plain text.
 
-    try:
-        data = json.loads(stripped)
-    except json.JSONDecodeError:
-        return content
+    Small models wrap the reply in a JSON envelope and often add a Markdown code
+    fence or a line of prose on top of it, so the envelope is recovered wherever
+    it is the whole reply, its start, or its end (see ``tool_json``).  Content
+    that is not such an envelope is returned untouched.
+    """
+    from app.core.tool_json import extract_json_object
 
-    if not isinstance(data, dict):
+    data = extract_json_object(content)
+    if data is None:
         return content
 
     for key in _JSON_WRAPPER_KEYS:
@@ -474,12 +473,25 @@ async def _generate_with_tools(
         # client DB tools from stale history (spurious reads, and stale
         # create_client previews after a confirmation). A single plain
         # completion — no tools — returns the raw JSON/text the UI expects.
+        from app.core.scope import expects_json_output
+        from app.core.tool_json import normalize_json_output
+
+        # Open WebUI parses title/tags/follow-up replies as strict JSON. Left
+        # unconstrained, a small model answers with a code fence, a prose
+        # preamble, or Python literals and the UI reports a JSON error, so ask
+        # Ollama for JSON mode and normalise whatever comes back (other backends
+        # ignore `format`, hence the second belt).
+        wants_json = bool(last_user) and expects_json_output(last_user)
         full_messages = [{"role": "system", "content": system_prompt}] + list(messages)
         result = await provider.complete(
-            full_messages, temperature=settings.temperature_tool
+            full_messages,
+            temperature=settings.temperature_tool,
+            format="json" if wants_json else None,
         )
-        log_step(logger, "llm", "final", reason="task_complete", iteration=0)
-        return result.content
+        content = normalize_json_output(result.content) if wants_json else result.content
+        log_step(logger, "llm", "final", reason="task_complete", iteration=0,
+                 json_task=wants_json)
+        return content
 
     if last_user and not is_task:
         direct_meta = (

@@ -74,3 +74,19 @@ Authoritative dict: `tests/isolation_support.py::TEST_ENV_OVERRIDES` (applied by
 | `OPENROUTER_BASE_URL` | `http://127.0.0.1:1` | Same |
 
 `MEMORY_DB_PATH` is set to a temp file in `conftest.py` (not in the dict above). `scripts/check_contracts.py` verifies the dict keys match this table.
+
+---
+
+## 5. Open WebUI task-prompt markers
+
+Substring lists in `app/core/scope.py`, matched against the **lowercased** message. They are
+coupled to Open WebUI's hidden task prompts, so an Open WebUI upgrade can silently drift them —
+they are *not* machine-checkable and are excluded from `scripts/check_contracts.py`.
+
+| List | Values | Role | Drift breaks |
+|------|--------|------|--------------|
+| `_OPENWEBUI_TASK_MARKERS` | `### task:`, `### output:`, `### chat history:`, `{{messages`, `"follow_ups"`, `"title"`, `"tags"` | Identifies a task prompt: skips the scope guard (`scope_guard`) and the tool loop (`llm.py` `is_task`) | Task prompts run the tool loop → spurious DB reads and stale write previews; or coaching messages misread as tasks |
+| `_JSON_TASK_MARKERS` | `json format`, `json object`, `"follow_ups"`, `"title"`, `"tags"`, ` ```json ` | Subset whose reply Open WebUI parses as strict JSON → `format="json"` + `normalize_json_output` (see `docs/WIRE_FORMATS.md` §8) | Too narrow: small models emit fenced/prose JSON and the UI reports a JSON error. Too broad: plain-text task replies get forced into JSON |
+
+`_JSON_TASK_MARKERS` is gated by `is_openwebui_task`, so a coach's ordinary message never
+triggers JSON mode.

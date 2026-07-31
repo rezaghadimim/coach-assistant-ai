@@ -110,3 +110,26 @@ The request handler returns `StreamingResponse` before generation finishes. `_st
 `effective_model_id()` (`:202-210`): known local IDs and cloud IDs are kept; **any other model string silently falls back to the local model id**.
 
 **DO NOT** turn unknown models into hard 404s without an Open WebUI compatibility check.
+
+---
+
+## 8. Open WebUI task replies must be strict JSON
+
+Open WebUI sends hidden *task* prompts (chat title, tags, follow-up suggestions) through the
+same endpoint and **parses the reply as strict JSON**. These bypass the tool loop entirely —
+one plain completion, no tools (`app/core/llm.py`, `is_task` branch).
+
+An 8B model left unconstrained answers with a code fence, a prose preamble
+("Here is the JSON:"), or Python literals (`True`/`None`) — all of which the UI reports as a
+JSON error. Two defences, both required:
+
+| Defence | Where | Applies to |
+|---------|-------|------------|
+| `format="json"` on the completion | `llm.py` `is_task` branch → `OllamaProvider._build_payload` | Ollama only — the other providers accept and ignore `format` |
+| `normalize_json_output()` on the reply | `app/core/tool_json.py` | Every backend; repairs fences / preamble / Python literals, returns the text unchanged when nothing parses |
+
+Gated by `scope.expects_json_output()` — task prompts that ask for **plain text** (some builds'
+title and search-query tasks) stay unconstrained, since JSON mode would corrupt them.
+
+**DO NOT** apply the JSON constraint to all task prompts, and **DO NOT** route task prompts
+through `_sanitize_assistant_reply` — the UI wants the raw object, not prose.

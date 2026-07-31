@@ -6,12 +6,13 @@ import json
 import logging
 import time
 import uuid
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 
 from app.core.config import settings
 from app.core.llm_providers.http import get_client, post_with_retry
 from app.core.llm_providers.types import CompletionResult, ToolCall
 from app.core.observability import log_step
+from app.core.tool_json import parse_tool_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,12 @@ class OpenAIProvider:
         tools: Optional[list[dict]] = None,
         temperature: Optional[float] = None,
         num_predict: Optional[int] = None,
-        # format is Ollama-specific JSON-mode; accepted here for interface compatibility.
-        format: Optional[dict] = None,
+        # format is Ollama-specific JSON-mode; accepted here for interface
+        # compatibility. Self-hosted servers vary in their support for
+        # response_format, so it is deliberately not forwarded — callers that
+        # need clean JSON from this backend post-process with
+        # ``tool_json.normalize_json_output``.
+        format: Optional[Union[dict, str]] = None,
     ) -> CompletionResult:
         payload = self._build_payload(
             messages, stream=False, tools=tools, temperature=temperature,
@@ -92,7 +97,14 @@ class OpenAIProvider:
         for tc in raw_tool_calls:
             func = tc.get("function", {})
             raw_args = func.get("arguments", "{}")
-            arguments = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
+            arguments = parse_tool_arguments(raw_args)
+            if arguments is None:
+                # Malformed argument string: run the tool with no arguments so it
+                # errors usefully, rather than aborting the turn with a parse error.
+                log_step(logger, "llm.provider", "bad_tool_args",
+                         level=logging.WARNING, provider="openai",
+                         model=self._model, tool=func.get("name", ""))
+                arguments = {}
             tool_calls.append(
                 ToolCall(
                     id=tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",

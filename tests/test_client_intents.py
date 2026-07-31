@@ -90,6 +90,25 @@ class ClientIntentTests(unittest.TestCase):
         self.assertIn("angles to explore", result)
         self.assertIn("What are the next steps?", result)
 
+    def test_sanitize_unwraps_fenced_json_envelope(self) -> None:
+        # Small models fence the envelope, which used to leak raw JSON to the coach.
+        raw = '```json\n{"response": "Let\'s start with one small win this week."}\n```'
+        self.assertEqual(
+            _sanitize_assistant_reply(raw),
+            "Let's start with one small win this week.",
+        )
+
+    def test_sanitize_unwraps_envelope_after_prose_preamble(self) -> None:
+        raw = 'Here is my reply:\n{"answer": "Ask Ali what success looks like."}'
+        self.assertEqual(
+            _sanitize_assistant_reply(raw),
+            "Ask Ali what success looks like.",
+        )
+
+    def test_sanitize_leaves_plain_prose_untouched(self) -> None:
+        raw = 'You could track it as {"mood": 5} each evening, then review on Friday.'
+        self.assertEqual(_sanitize_assistant_reply(raw), raw)
+
     def test_detect_client_mention_by_name(self) -> None:
         execute_tool(
             "create_client",

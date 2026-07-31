@@ -9,6 +9,7 @@ from app.api.chat import store
 from app.core.llm import _generate_with_tools
 from app.core.scope import (
     OFF_TOPIC_REFUSAL,
+    expects_json_output,
     is_off_topic,
     is_openwebui_task,
     scope_guard,
@@ -80,6 +81,29 @@ class OpenWebUITaskDetectionTests(unittest.TestCase):
 
     def test_normal_message_is_not_a_task(self) -> None:
         self.assertFalse(is_openwebui_task("I want to work on my confidence."))
+
+
+class JsonTaskDetectionTests(unittest.TestCase):
+    """Which task prompts get held to strict JSON (Open WebUI parses these)."""
+
+    def test_follow_up_task_expects_json(self) -> None:
+        self.assertTrue(expects_json_output(_FOLLOW_UP_TASK))
+
+    def test_title_task_expects_json(self) -> None:
+        self.assertTrue(expects_json_output(_TITLE_TASK))
+
+    def test_tags_task_expects_json(self) -> None:
+        self.assertTrue(expects_json_output('### Task:\nJSON format: { "tags": ["a"] }'))
+
+    def test_plain_text_task_does_not_expect_json(self) -> None:
+        # Older/plain task prompts want prose — forcing JSON mode would corrupt them.
+        self.assertFalse(
+            expects_json_output("### Task:\nGenerate a search query.\n### Output:\nQuery only.")
+        )
+
+    def test_normal_coaching_message_never_expects_json(self) -> None:
+        # Gated on is_openwebui_task: a coach asking about JSON is not a task.
+        self.assertFalse(expects_json_output("Can you give me that in JSON format?"))
 
 
 class ScopeGuardTests(unittest.TestCase):

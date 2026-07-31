@@ -79,7 +79,31 @@ Many `from app.core... import ...` calls sit inside functions for optional/heavy
 
 `MIGRATIONS` in `app/memory/store.py:88-95` is **append-only**. Never reorder or remove entries; each index is the schema version it upgrades *to*.
 
-## 9. Naming debt (do not imitate)
+## 9. Model JSON never raises
+
+Any JSON that came out of a model is untrusted text. The local 8B routinely emits code fences,
+prose preambles, Python literals (`True`/`None`), double-encoded `arguments`, the nested
+OpenAI `{"function": {...}}` shape, and output truncated at `num_predict`.
+
+Parse it through `app/core/tool_json.py` — never a bare `json.loads`:
+
+| Helper | Use for | Degrades to |
+|--------|---------|-------------|
+| `parse_tool_arguments` | provider tool-call `arguments` | `None` → caller logs `bad_tool_args` and runs with `{}` |
+| `parse_text_tool_call` | tool calls emitted as text | `None` |
+| `extract_json_object` | a JSON envelope wrapped in fences/prose | `None` |
+| `normalize_json_output` | Open WebUI task replies (`docs/WIRE_FORMATS.md` §8) | the original text |
+
+Rules:
+
+- **Providers must not raise on model JSON.** A parse error inside `complete()` surfaces to the
+  coach as "unable to reach the model" — a parse bug disguised as an outage.
+- **Guard every `json.loads` in a stream loop** — a partial or keep-alive frame must `continue`,
+  not kill the reply mid-generation.
+- Constrain the model where the backend supports it (Ollama `format=`: `"json"` or a schema, as
+  `llm_router._ROUTER_SCHEMA` does) *and* parse tolerantly. Other backends ignore `format`.
+
+## 10. Naming debt (do not imitate)
 
 - Prefer public `tokenize` / `tf_cosine` from `app.rag.retriever` (T-037). Remaining cross-module `_underscored` imports (`_pii_preserved`, `_resolve_client_id`, …) are deprecated — do not add new ones.
 - Rerank filenames: engine `app/core/rerank.py`; transports `rerank_tei.py` / `rerank_openai_compat.py`; RAG facade `app/rag/reranker.py`. Do not merge these names casually.
